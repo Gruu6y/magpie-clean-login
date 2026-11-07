@@ -446,3 +446,108 @@ test("the check routes require the page token", async () => {
   });
   expect(res.status).toBe(403);
 });
+
+test("POST /api/accounts/:provider/:key/check rejects with 409 renewal_running when a hosted renewal is active for that account", async () => {
+  const fakeTmp = mkdtempSync(join(tmpdir(), "clean-login-check-renewal-running-"));
+  const fakeData = join(fakeTmp, "data");
+  const fakeConfig = join(fakeTmp, "config");
+  const fakeEnv = {
+    ...process.env,
+    MAGPIE_CONFIG_DIR: fakeConfig,
+    MAGPIE_CLEAN_LOGIN_DATA: fakeData,
+  };
+  await mkdir(fakeConfig, { recursive: true });
+  await writeFile(
+    join(fakeConfig, "plugin-auth.json"),
+    JSON.stringify({
+      workbuddy: { type: "oauth", access: "SECRET", accountId: "signed-in" },
+      "workbuddy#other": { type: "oauth", access: "SECRET", accountId: "signed-in-2" },
+    }),
+  );
+  await writeAccountMeta(accountDir(fakeEnv, "workbuddy", "workbuddy"), {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy",
+    accountId: "signed-in",
+    uid: "u-1",
+    signedInAt: "2026-11-03T10:00:00.000Z",
+  });
+  await writeAccountMeta(accountDir(fakeEnv, "workbuddy", "workbuddy#other"), {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy#other",
+    accountId: "signed-in-2",
+    uid: "u-2",
+    signedInAt: "2026-11-03T10:00:00.000Z",
+  });
+
+  let runningAccount = { provider: "workbuddy", key: "workbuddy" };
+  const job = idleCheckJob("workbuddy", "workbuddy#other");
+  let starts = 0;
+  const fakeCheck = {
+    start: async () => {
+      starts += 1;
+      return job;
+    },
+    status: () => ({ job, browserOpen: false }),
+    cancel: async () => ({ cancelled: true, job }),
+    close: async () => {},
+  };
+
+  let fakeService;
+  try {
+    fakeService = await startServer({
+      port: 0,
+      env: fakeEnv,
+      dataDir: fakeData,
+      identityCheck: fakeCheck,
+      renewHosting: {
+        running: () => runningAccount,
+        viewOf: async () => ({ enabled: false }),
+        snapshot: async () => ({ accounts: [], running: runningAccount }),
+        start: () => {},
+        stop: () => {},
+        cancel: async () => {},
+      },
+      pluginScanner: {
+        get: () => ({ available: false, providers: [], scanned: false, stale: false, scanning: false, error: null }),
+        warm: () => {},
+      },
+    });
+
+    const html = await (await fetch(`http://127.0.0.1:${fakeService.port}/`)).text();
+    const fakeToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(html)?.[1];
+    const headers = { [TOKEN_HEADER]: fakeToken, "content-type": "application/json" };
+
+    // 1. Same account: must reject with 409 renewal_running
+    const conflictRes = await fetch(
+      `http://127.0.0.1:${fakeService.port}/api/accounts/workbuddy/workbuddy/check`,
+      {
+        method: "POST",
+        headers,
+        body: "{}",
+      },
+    );
+    expect(conflictRes.status).toBe(409);
+    const conflictBody = await conflictRes.json();
+    expect(conflictBody.error).toBe("renewal_running");
+    expect(conflictBody.message).toContain("hosted renewal is using this account's browser profile");
+    expect(starts).toBe(0);
+
+    // 2. Different account: must not be blocked by the renewal on workbuddy/workbuddy
+    const okRes = await fetch(
+      `http://127.0.0.1:${fakeService.port}/api/accounts/workbuddy/workbuddy%23other/check`,
+      {
+        method: "POST",
+        headers,
+        body: "{}",
+      },
+    );
+    expect(okRes.status).toBe(202);
+    expect((await okRes.json()).job).toEqual(job);
+    expect(starts).toBe(1);
+  } finally {
+    await fakeService?.close();
+    rmSync(fakeTmp, { recursive: true, force: true });
+  }
+});
