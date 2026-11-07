@@ -3,6 +3,11 @@
 // old version is invisible to users, so this gate fails when this branch
 // touches lib/, ui/, page/ or index.mjs without changing that string.
 //
+// It also rejects a version that is *lower* than the base: a branch cut before
+// main moved on can declare 0.1.63 while main is already at 0.1.68, and
+// "0.1.63 != 0.1.68" used to pass here while silently downgrading what users
+// are offered.
+//
 //   node scripts/check-version-bump.mjs [--base <git-ref>]
 //
 // The base ref comes from --base, then BASE_REF, then GITHUB_BASE_SHA, then
@@ -15,6 +20,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareVersions } from "./version-order.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RELEASE_PATTERNS = [/^lib\//, /^ui\//, /^page\//, /^index\.mjs$/];
@@ -144,19 +150,52 @@ function versionAt(commit) {
   }
 }
 
-const baseVersion = versionAt(compare);
+// Two different versions matter here, and conflating them was the bug:
+//   forkVersion — on the merge-base, i.e. what this branch started from. It
+//                 answers "did this branch change the version at all?".
+//   mainVersion — on the base tip, i.e. what users have right now. It answers
+//                 "is that change actually an update, or a downgrade?".
+// A branch opened while main was 0.1.62 that declares 0.1.63 is a bump against
+// its fork point but a downgrade once main has reached 0.1.68.
+const forkVersion = versionAt(compare);
+const mainVersion = versionAt(baseCommit) || forkVersion;
 
 if (!current) {
   console.error("[version-check] package.json has no version string; cannot release this change.");
   process.exit(2);
 }
 
-if (!baseVersion) {
+if (!forkVersion) {
   console.log(
     `[version-check] base commit ${compare.slice(0, 12)} has no package.json version; ` +
       "treating this as a first release and passing.",
   );
   process.exit(0);
+}
+
+// Only a branch that actually edits the version needs the ordering check.
+// A docs-only PR that leaves package.json at its fork-point value is fine even
+// when main has moved on: it has no version claim to make.
+if (current !== forkVersion) {
+  const order = compareVersions(current, mainVersion);
+  if (order !== null && order < 0) {
+    console.error(
+      `[version-check] FAIL: package.json version went backwards: main has ${mainVersion}, ` +
+        `this branch declares ${current}.`,
+    );
+    console.error(
+      "This branch was opened before main reached its current version. Rebase onto the " +
+        "current main and bump package.json to a version strictly greater than it. " +
+        "A version that is merely different from the fork point is not an update.",
+    );
+    process.exit(1);
+  }
+  if (order === null) {
+    console.warn(
+      `[version-check] cannot compare "${current}" and "${mainVersion}" as semver; ` +
+        "falling back to the plain changed/unchanged check.",
+    );
+  }
 }
 
 if (relevant.length === 0) {
@@ -167,17 +206,17 @@ if (relevant.length === 0) {
   process.exit(0);
 }
 
-if (current !== baseVersion) {
+if (current !== forkVersion) {
   console.log(
     `[version-check] OK: ${relevant.length} release-relevant file(s) changed; ` +
-      `package.json version ${baseVersion} -> ${current}.`,
+      `package.json version ${forkVersion} -> ${current} (main ${mainVersion}).`,
   );
   process.exit(0);
 }
 
 console.error(
   `[version-check] FAIL: release-relevant files changed but package.json version is still ${current} ` +
-    `(base ${compare.slice(0, 12)} has ${baseVersion}).`,
+    `(base ${compare.slice(0, 12)} has ${forkVersion}).`,
 );
 for (const file of relevant) console.error(`  changed: ${file}`);
 console.error("");
