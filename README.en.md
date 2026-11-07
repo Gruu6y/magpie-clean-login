@@ -180,6 +180,18 @@ For a second opinion, click **Check** on that row, then **Start check**. The plu
 - When a provider offers several paths (per-site sign-in, team edition, reusing a desktop session, pasting a key), you choose, and each path is labelled with its type before it starts.
 - **Report a problem** on a card opens a GitHub issue with the title and body already written; you only click **Create** ([how it works](docs/reporting.md)).
 
+**Hosted renewal (off by default)**
+
+- On the Accounts tab, press **Host renewal** on a row and then **Enable hosting**. Only that one account is hosted. **Everything is off by default**, installing the plugin enables nothing, and there is no "enable all".
+- Once enabled, Clean Login **takes over this account's renewal**: shortly **before** the credential expires it re-runs that account's own sign-in silently in the background -- the **same browser fingerprint** it was pinned with at sign-in (the same `identity.json` and the same persistent profile), through the **same exit** recorded at that login (a direct login stays direct), headless, with no window. The new credential goes back to magpie through exactly the same write-back path a manual sign-in uses.
+- **Renewing early is safe**: a hosted renewal is a complete sign-in (authorize, then callback) and **never touches the refresh token**, so there is no single-use token to race magpie for. The only shared resource is the credential slot in `plugin-auth.json`, written through magpie's own locked write-back. Once the credential is fresh, magpie's own at-expiry refresh has nothing to do; if magpie renews first, hosting reads the new expiry and moves its next attempt instead of renewing twice.
+- **The lead scales with the credential's lifetime**: an hourly token is renewed 15 minutes early, a daily one about 72 minutes early, and a fortnight- or month-long one **five days** early -- a long-lived sign-in is worth renewing early enough that a transient failure leaves days to retry instead of lapsing. A successful renewal records how long the new credential lives, and the next schedule uses that real lifetime.
+- Only one renewal runs at a time, and never alongside a sign-in you started yourself. Attempts are at least 30 minutes apart, with **no daily cap** -- a short-lived credential legitimately needs many renewals a day, and a cap would strangle exactly those accounts. The loop guards are the minimum gap, exponential backoff and switching off after repeated failures.
+- Repeated failures, or a sign-in that **needs an answer from you** (a captcha, a device code, a one-time code), **switch hosting off by itself** and write the reason in the dialog — enabling it again is your click. A renewal that comes back as a different account than the one this fingerprint is pinned to is never written back.
+- The dialog can **Renew now** (ignores the expiry clock, keeps every guard above), **Stop renewal**, **Disable hosting**, and shows the last 10 renewal records.
+
+![The hosted-renewal dialog: an enabled account, its credential expiry, the exit and fingerprint it uses, and the renewal record](assets/screenshot-hosting.png)
+
 **Exits and identity**
 
 - The proxy you pick when adding an account is used for the whole sign-in: the browser window, and the requests the plugin makes to mint links and exchange codes. **A SOCKS exit can only carry the browser window**, not the plugin's own requests — the runtime's proxy support is HTTP/HTTPS only.
@@ -246,7 +258,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 ## Privacy and where data lives
 
 - No telemetry and no account. The only network calls are the ones you start: proxy tests, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
-- Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalog is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`).
+- Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalog is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`). Hosted-renewal switches and recent records live in `renew-hosting.json` in that same directory; it holds switches, times and outcomes, never a credential.
 - The login browser unpacks to `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows (`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
 - Stored proxy passwords never reach the page and are never logged. The page token is per-process and exists only in the page the service serves.
 

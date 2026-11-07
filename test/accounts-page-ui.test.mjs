@@ -25,6 +25,8 @@ const buttonIds = [
   "account-check-cancel", "account-check-reexit", "account-check-details",
   "account-check-change-exit", "account-check-start", "account-check-again",
   "account-check-retry",
+  "account-hosting-close", "account-hosting-dismiss", "account-hosting-cancel",
+  "account-hosting-run", "account-hosting-toggle",
   "report-close", "report-cancel", "report-copy-body", "report-open",
 ];
 
@@ -58,6 +60,7 @@ test("the accounts tab and panel ship every control", () => {
   }
   expect(html).toContain('id="account-detail-dialog"');
   expect(html).toContain('id="account-check-dialog"');
+  expect(html).toContain('id="account-hosting-dialog"');
   expect(html).toContain('id="account-check-proxy"');
   expect(html).toContain('id="account-detail-note"');
   expect(html).toContain('id="toasts"');

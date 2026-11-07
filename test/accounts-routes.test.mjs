@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOKEN_HEADER, startServer } from "../lib/server.mjs";
 import { accountDir, readAccountMeta, writeAccountMeta } from "../lib/account-identity.mjs";
+import { offView } from "../lib/renew-hosting.mjs";
 
 const tmp = mkdtempSync(join(tmpdir(), "clean-login-accounts-routes-"));
 const dataDir = join(tmp, "data");
@@ -97,6 +98,7 @@ test("GET /api/accounts lists the ledger fields and the signed-in flag", async (
       signedInAt: "2026-11-03T10:00:00.000Z",
       signedIn: true,
       ...extras,
+      hosting: offView("workbuddy", "workbuddy"),
     },
     {
       provider: "workbuddy",
@@ -106,6 +108,7 @@ test("GET /api/accounts lists the ledger fields and the signed-in flag", async (
       signedInAt: "2026-11-02T09:00:00.000Z",
       signedIn: false,
       ...extras,
+      hosting: offView("workbuddy", "workbuddy#ab12"),
     },
   ]);
   // No path and no credential in the response.
@@ -262,4 +265,33 @@ test("an unreadable auth file reports signedIn=false and refuses the delete", as
   expect(res.status).toBe(503);
   expect((await res.json()).error).toBe("auth_unreadable");
   expect(existsSync(signedInDir)).toBe(true);
+});
+
+test("GET /api/accounts/hosting returns the overall snapshot", async () => {
+  const res = await api("GET", "/api/accounts/hosting");
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(Array.isArray(body.accounts)).toBe(true);
+  expect(body.running).toBeNull();
+});
+
+test("GET /api/accounts/:provider/:key/hosting inspects eligibility and reports reasons", async () => {
+  const res = await api("GET", "/api/accounts/workbuddy/workbuddy/hosting");
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.hosting.provider).toBe("workbuddy");
+  expect(body.hosting.enabled).toBe(false);
+  expect(body.eligible).toBe(false);
+  // An account with no expiry or unreadable auth reports why honestly.
+  expect(typeof body.reason?.code).toBe("string");
+});
+
+test("POST /api/accounts/:provider/:key/hosting rejects missing enabled field", async () => {
+  const res = await fetch(`http://127.0.0.1:${service.port}/api/accounts/workbuddy/workbuddy/hosting`, {
+    method: "POST",
+    headers: { [TOKEN_HEADER]: token, "content-type": "application/json" },
+    body: JSON.stringify({ notEnabled: true }),
+  });
+  expect(res.status).toBe(400);
+  expect((await res.json()).error).toBe("invalid_body");
 });

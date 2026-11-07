@@ -800,3 +800,49 @@ test("a sign-in with no proxy chosen does not inherit magpie's silently", async 
   // "" is the direct option: no proxy at all, not "whatever magpie would use".
   expect(seen).toEqual([""]);
 });
+
+test("a silent sign-in passes headless=true to launchBrowser", async () => {
+  const { state, controller } = await harness();
+  await controller.startSignIn({ provider: "workbuddy", silent: true });
+  expect(state.launched.headless).toBe(true);
+  expect(controller.status().silent).toBe(true);
+  await controller.whenSettled();
+  expect(controller.status().state).toBe("done");
+});
+
+test("a silent sign-in refuses a code method with not_hostable", async () => {
+  const methods = [
+    {
+      type: "oauth",
+      label: "Device code",
+      authorize: async () => ({
+        url: "https://provider/device",
+        instructions: "enter code",
+        method: "code",
+        callback: async () => success(),
+      }),
+    },
+  ];
+  const { controller } = await harness({ methods });
+  await expect(controller.startSignIn({ provider: "workbuddy", silent: true })).rejects.toMatchObject({
+    code: "not_hostable",
+  });
+});
+
+test("a silent sign-in refuses a non-browser category with not_hostable", async () => {
+  const methods = [
+    {
+      type: "oauth",
+      label: "Device login",
+      authorize: async () => ({
+        url: "https://provider/device",
+        instructions: "copy the device code to continue",
+        callback: async () => success(),
+      }),
+    },
+  ];
+  const { controller } = await harness({ methods });
+  await expect(controller.startSignIn({ provider: "workbuddy", silent: true })).rejects.toMatchObject({
+    code: "not_hostable",
+  });
+});

@@ -56,6 +56,9 @@ import {
   filterAccounts,
   formatCheckSummary,
   formatExit,
+  hostingStateLabel,
+  hostingTone,
+  normalizeHosting,
   sortAccounts,
 } from "./account-view.js";
 import {
@@ -408,6 +411,60 @@ const messages = {
     accountDetailHistoryEmpty: "Not checked yet. A check opens who.1ms.dog with this identity.",
     accountDetailHistoryLine: "{grade} · {time} · {exit} · {exposure} exposures",
     accountDetailDismiss: "Close",
+    accountHosting: "Renew hosting",
+    accountHostingTitle: "Renew this account in the background with the same fingerprint and the same exit it signed in with. Off by default.",
+    accountHostingOff: "Renew hosting: off",
+    accountHostingWatching: "Renew hosting: on",
+    accountHostingRunning: "Renew hosting: renewing…",
+    accountHostingPaused: "Renew hosting: paused",
+    accountHostingDialogTitle: "Renew hosting",
+    accountHostingDialogCopy: "Once enabled, Clean Login takes over this account's renewal: shortly before the credential expires it signs in again in the background, using the browser fingerprint pinned at this account's own sign-in and the same exit, then writes the new credential back to magpie. No window opens. Off by default, and only for this one account.",
+    accountHostingStateLabel: "Hosting",
+    accountHostingNextLabel: "Next attempt",
+    accountHostingNextNone: "The credential is still valid; it will be renewed shortly before it expires",
+    accountHostingNextOff: "Hosting is off, so nothing is scheduled",
+    accountHostingNextAt: "{time}",
+    accountHostingLastLabel: "Last renewal",
+    accountHostingLastNone: "No renewal yet",
+    accountHostingLastOk: "{time} · succeeded",
+    accountHostingLastFailed: "{time} · failed",
+    accountHostingLastCancelled: "{time} · cancelled",
+    accountHostingExitLabel: "Exit used",
+    accountHostingFingerprintLabel: "Fingerprint used",
+    accountHostingExpiresLabel: "Credential expires",
+    accountHostingExpiresUnknown: "Expiry not readable",
+    accountHostingEnable: "Enable hosting",
+    accountHostingDisable: "Disable hosting",
+    accountHostingRun: "Renew now",
+    accountHostingCancel: "Stop renewal",
+    accountHostingDismiss: "Close",
+    accountHostingBusy: "A sign-in or renewal is already in progress.",
+    accountHostingIneligible: "This account cannot enable hosting right now.",
+    accountHostingEnabledNotice: "Renew hosting is now on for this account.",
+    accountHostingDisabledNotice: "Renew hosting is now off for this account.",
+    accountHostingRunNotice: "A background renewal has started.",
+    accountHostingPausedNotice: "The renewal needs you, so hosting switched itself off: {reason}",
+    accountHostingGuardNote: "Only one renewal runs at a time, and never alongside a sign-in you started. Attempts are at least 30 minutes apart, with no daily cap, because a short-lived credential legitimately needs many renewals a day. If it keeps failing or needs you personally, hosting switches itself off and you have to enable it again.",
+    accountHostingHistoryTitle: "Renewal history",
+    accountHostingHistoryEmpty: "No renewals yet.",
+    accountHostingHistoryLine: "{time} · {outcome}",
+    accountHostingOutcomeOk: "succeeded",
+    accountHostingOutcomeError: "failed",
+    accountHostingOutcomeCancelled: "cancelled",
+    accountHostingReasonNotSignedIn: "This account is signed out. Sign in through magpie first.",
+    accountHostingReasonNotRenewable: "This is an API-key credential; there is no token to renew.",
+    accountHostingReasonNoExpiry: "This credential has no expiry, so there is nothing to host.",
+    accountHostingReasonIdentityMissing: "This account has no pinned fingerprint. Sign in through Clean Login once first.",
+    accountHostingReasonExitUnknown: "The exit this account signed in with was never recorded. Sign in again once.",
+    accountHostingReasonExitMissing: "The exit this account signed in with is no longer in the proxy list.",
+    accountHostingReasonNotHostable: "This provider's sign-in needs an answer from you (a captcha, a device code or a one-time code), so it cannot finish in the background.",
+    accountHostingReasonCallbackTimeout: "The background renewal never saw the sign-in finish. Sign in yourself once.",
+    accountHostingReasonIdentityMismatch: "The renewal came back as a different account than the one this fingerprint is pinned to, so nothing was written back.",
+    accountHostingReasonAccountNotFound: "No record of this account was found.",
+    accountHostingReasonNoBrowserMethod: "This provider has no sign-in method that can finish in a browser.",
+    accountHostingReasonMethodNotFound: "This provider's sign-in methods changed. Sign in again once.",
+    accountHostingReasonUnavailable: "The sign-in controller is unavailable right now.",
+    accountHostingReasonFailed: "The renewal failed: {message}",
     accountCheckFailedExit: "Exit: {exit}",
     accountCheckTitle: "Identity check",
     accountCheckCopy: "Opens who.1ms.dog with this account's own browser fingerprint and reads back the site's verdict.",
@@ -793,6 +850,60 @@ const messages = {
     accountDetailHistoryEmpty: "还没有检测过。检测会用这个身份打开 who.1ms.dog。",
     accountDetailHistoryLine: "{grade} · {time} · {exit} · {exposure} 处暴露",
     accountDetailDismiss: "关闭",
+    accountHosting: "托管续期",
+    accountHostingTitle: "用这个账号登录时的同一套指纹和同一条出口，在后台静默续期。默认关闭。",
+    accountHostingOff: "续期托管：关闭",
+    accountHostingWatching: "续期托管：已开通",
+    accountHostingRunning: "续期托管：续期中…",
+    accountHostingPaused: "续期托管：已暂停",
+    accountHostingDialogTitle: "续期托管",
+    accountHostingDialogCopy: "开通后，这个账号的续期交给干净登录接管：在凭据到期前，用它登录时固化的同一套浏览器指纹和同一条出口，在后台静默重新登录一次，把新凭据写回 magpie。不会弹出窗口。默认关闭，只对这一个账号生效。",
+    accountHostingStateLabel: "托管状态",
+    accountHostingNextLabel: "下次动作",
+    accountHostingNextNone: "凭据仍有效，到期前会自动续期",
+    accountHostingNextOff: "托管未开启，不会安排续期",
+    accountHostingNextAt: "{time}",
+    accountHostingLastLabel: "上次续期",
+    accountHostingLastNone: "还没有续期过",
+    accountHostingLastOk: "{time} · 成功",
+    accountHostingLastFailed: "{time} · 失败",
+    accountHostingLastCancelled: "{time} · 已取消",
+    accountHostingExitLabel: "使用的出口",
+    accountHostingFingerprintLabel: "使用的指纹",
+    accountHostingExpiresLabel: "凭据到期",
+    accountHostingExpiresUnknown: "读取不到到期时间",
+    accountHostingEnable: "开通托管",
+    accountHostingDisable: "关闭托管",
+    accountHostingRun: "立即续期",
+    accountHostingCancel: "停止续期",
+    accountHostingDismiss: "关闭",
+    accountHostingBusy: "已经有一个登录或续期在进行中。",
+    accountHostingIneligible: "这个账号现在不能开通托管。",
+    accountHostingEnabledNotice: "已为这个账号开通续期托管。",
+    accountHostingDisabledNotice: "已关闭这个账号的续期托管。",
+    accountHostingRunNotice: "已在后台开始一次续期。",
+    accountHostingPausedNotice: "续期需要你本人处理，托管已自动关闭：{reason}",
+    accountHostingGuardNote: "同一时刻只跑一个续期，也不会和你手动发起的登录同时进行。两次尝试至少间隔 30 分钟，不设每日上限——有效期短的凭据一天本来就要续很多次。反复失败或需要你本人操作时会自动关闭，要再开通得重新点一次。",
+    accountHostingHistoryTitle: "续期记录",
+    accountHostingHistoryEmpty: "还没有续期记录。",
+    accountHostingHistoryLine: "{time} · {outcome}",
+    accountHostingOutcomeOk: "成功",
+    accountHostingOutcomeError: "失败",
+    accountHostingOutcomeCancelled: "已取消",
+    accountHostingReasonNotSignedIn: "这个账号已经签出，先在 magpie 里重新登录。",
+    accountHostingReasonNotRenewable: "这是 API key 凭据，没有需要续期的令牌。",
+    accountHostingReasonNoExpiry: "这个凭据没有到期时间，不需要托管续期。",
+    accountHostingReasonIdentityMissing: "这个账号没有固化指纹，先通过干净登录登录一次。",
+    accountHostingReasonExitUnknown: "没有记录这个账号登录时用的出口，先重新登录一次。",
+    accountHostingReasonExitMissing: "登录时用的那条出口已经不在代理列表里了。",
+    accountHostingReasonNotHostable: "这个供应商的登录需要你本人回答（验证码、设备码或一次性代码），无法在后台完成。",
+    accountHostingReasonCallbackTimeout: "后台续期一直等不到登录完成，需要你本人登录一次。",
+    accountHostingReasonIdentityMismatch: "续期拿到的账号与这套指纹固化的账号不一致，已拒绝写回。",
+    accountHostingReasonAccountNotFound: "找不到这个账号的记录。",
+    accountHostingReasonNoBrowserMethod: "这个供应商没有可以在浏览器里完成的登录方式。",
+    accountHostingReasonMethodNotFound: "这个供应商的登录方式变了，先重新登录一次。",
+    accountHostingReasonUnavailable: "登录控制器暂时不可用。",
+    accountHostingReasonFailed: "续期失败：{message}",
     accountCheckFailedExit: "出口：{exit}",
     accountCheckTitle: "身份检测",
     accountCheckCopy: "会用这个账号自己的浏览器指纹打开 who.1ms.dog，并读回站点的判定。",
@@ -1178,6 +1289,60 @@ const messages = {
     accountDetailHistoryEmpty: "還沒有檢測過。檢測會用這個身分打開 who.1ms.dog。",
     accountDetailHistoryLine: "{grade} · {time} · {exit} · {exposure} 處暴露",
     accountDetailDismiss: "關閉",
+    accountHosting: "託管續期",
+    accountHostingTitle: "用這個帳號登入時的同一套指紋和同一條出口，在背景靜默續期。預設關閉。",
+    accountHostingOff: "續期託管：關閉",
+    accountHostingWatching: "續期託管：已開通",
+    accountHostingRunning: "續期託管：續期中…",
+    accountHostingPaused: "續期託管：已暫停",
+    accountHostingDialogTitle: "續期託管",
+    accountHostingDialogCopy: "開通後，這個帳號的續期交給乾淨登入接管：在憑證到期前，用它登入時固化的同一套瀏覽器指紋和同一條出口，在背景靜默重新登入一次，把新憑證寫回 magpie。不會彈出視窗。預設關閉，只對這一個帳號生效。",
+    accountHostingStateLabel: "託管狀態",
+    accountHostingNextLabel: "下次動作",
+    accountHostingNextNone: "憑證仍有效，到期前會自動續期",
+    accountHostingNextOff: "託管未開啟，不會安排續期",
+    accountHostingNextAt: "{time}",
+    accountHostingLastLabel: "上次續期",
+    accountHostingLastNone: "還沒有續期過",
+    accountHostingLastOk: "{time} · 成功",
+    accountHostingLastFailed: "{time} · 失敗",
+    accountHostingLastCancelled: "{time} · 已取消",
+    accountHostingExitLabel: "使用的出口",
+    accountHostingFingerprintLabel: "使用的指紋",
+    accountHostingExpiresLabel: "憑證到期",
+    accountHostingExpiresUnknown: "讀不到到期時間",
+    accountHostingEnable: "開通託管",
+    accountHostingDisable: "關閉託管",
+    accountHostingRun: "立即續期",
+    accountHostingCancel: "停止續期",
+    accountHostingDismiss: "關閉",
+    accountHostingBusy: "已經有一個登入或續期在進行中。",
+    accountHostingIneligible: "這個帳號現在不能開通託管。",
+    accountHostingEnabledNotice: "已為這個帳號開通續期託管。",
+    accountHostingDisabledNotice: "已關閉這個帳號的續期託管。",
+    accountHostingRunNotice: "已在背景開始一次續期。",
+    accountHostingPausedNotice: "續期需要你本人處理，託管已自動關閉：{reason}",
+    accountHostingGuardNote: "同一時刻只跑一個續期，也不會和你手動發起的登入同時進行。兩次嘗試至少間隔 30 分鐘，不設每日上限——有效期短的憑證一天本來就要續很多次。反覆失敗或需要你本人操作時會自動關閉，要再開通得重新點一次。",
+    accountHostingHistoryTitle: "續期記錄",
+    accountHostingHistoryEmpty: "還沒有續期記錄。",
+    accountHostingHistoryLine: "{time} · {outcome}",
+    accountHostingOutcomeOk: "成功",
+    accountHostingOutcomeError: "失敗",
+    accountHostingOutcomeCancelled: "已取消",
+    accountHostingReasonNotSignedIn: "這個帳號已經簽出，先在 magpie 裡重新登入。",
+    accountHostingReasonNotRenewable: "這是 API key 憑證，沒有需要續期的權杖。",
+    accountHostingReasonNoExpiry: "這個憑證沒有到期時間，不需要託管續期。",
+    accountHostingReasonIdentityMissing: "這個帳號沒有固化指紋，先透過乾淨登入登入一次。",
+    accountHostingReasonExitUnknown: "沒有記錄這個帳號登入時用的出口，先重新登入一次。",
+    accountHostingReasonExitMissing: "登入時用的那條出口已經不在代理清單裡了。",
+    accountHostingReasonNotHostable: "這個供應商的登入需要你本人回答（驗證碼、裝置碼或一次性代碼），無法在背景完成。",
+    accountHostingReasonCallbackTimeout: "背景續期一直等不到登入完成，需要你本人登入一次。",
+    accountHostingReasonIdentityMismatch: "續期拿到的帳號與這套指紋固化的帳號不一致，已拒絕寫回。",
+    accountHostingReasonAccountNotFound: "找不到這個帳號的記錄。",
+    accountHostingReasonNoBrowserMethod: "這個供應商沒有可以在瀏覽器裡完成的登入方式。",
+    accountHostingReasonMethodNotFound: "這個供應商的登入方式變了，先重新登入一次。",
+    accountHostingReasonUnavailable: "登入控制器暫時不可用。",
+    accountHostingReasonFailed: "續期失敗：{message}",
     accountCheckFailedExit: "出口：{exit}",
     accountCheckTitle: "身分檢測",
     accountCheckCopy: "會用這個帳號自己的瀏覽器指紋打開 who.1ms.dog，並讀回站點的判定。",
@@ -1563,6 +1728,60 @@ const messages = {
     accountDetailHistoryEmpty: "まだ判定していません。判定ではこの身分で who.1ms.dog を開きます。",
     accountDetailHistoryLine: "{grade} · {time} · {exit} · {exposure} 箇所の露出",
     accountDetailDismiss: "閉じる",
+    accountHosting: "更新ホスティング",
+    accountHostingTitle: "このアカウントがログインした時と同じフィンガープリントと同じ出口で、バックグラウンドで静かに更新します。デフォルトはオフ。",
+    accountHostingOff: "更新ホスティング：オフ",
+    accountHostingWatching: "更新ホスティング：オン",
+    accountHostingRunning: "更新ホスティング：更新中…",
+    accountHostingPaused: "更新ホスティング：一時停止",
+    accountHostingDialogTitle: "更新ホスティング",
+    accountHostingDialogCopy: "オンにすると、このアカウントの更新は Clean Login が引き受けます。認証情報の期限切れ前に、このアカウントの固定されたブラウザフィンガープリントとログイン時の出口を使ってバックグラウンドで再ログインし、新しい認証情報を magpie に書き戻します。ウィンドウは開きません。デフォルトはオフで、このアカウントだけに適用されます。",
+    accountHostingStateLabel: "ホスティング",
+    accountHostingNextLabel: "次の動作",
+    accountHostingNextNone: "認証情報は有効です。期限切れ前に自動で更新されます",
+    accountHostingNextOff: "託管がOFFのため、予定されません",
+    accountHostingNextAt: "{time}",
+    accountHostingLastLabel: "前回の更新",
+    accountHostingLastNone: "まだ更新していません",
+    accountHostingLastOk: "{time} · 成功",
+    accountHostingLastFailed: "{time} · 失敗",
+    accountHostingLastCancelled: "{time} · キャンセル",
+    accountHostingExitLabel: "使用する出口",
+    accountHostingFingerprintLabel: "使用するフィンガープリント",
+    accountHostingExpiresLabel: "認証情報の期限",
+    accountHostingExpiresUnknown: "期限を読み取れません",
+    accountHostingEnable: "ホスティングをオン",
+    accountHostingDisable: "ホスティングをオフ",
+    accountHostingRun: "今すぐ更新",
+    accountHostingCancel: "更新を停止",
+    accountHostingDismiss: "閉じる",
+    accountHostingBusy: "ログインまたは更新がすでに進行中です。",
+    accountHostingIneligible: "このアカウントは現在ホスティングをオンにできません。",
+    accountHostingEnabledNotice: "このアカウントの更新ホスティングをオンにしました。",
+    accountHostingDisabledNotice: "このアカウントの更新ホスティングをオフにしました。",
+    accountHostingRunNotice: "バックグラウンドで更新を開始しました。",
+    accountHostingPausedNotice: "更新にはあなたの操作が必要なため、ホスティングは自動的にオフになりました：{reason}",
+    accountHostingGuardNote: "一度に実行される更新は1つだけで、手動のログインとも同時に動きません。試行は最低30分開けます。1日の上限はありません。有効期限の短い認証情報は1日に何度も更新が必要なためです。失敗が続いたりあなたの操作が必要になると自動的にオフになり、再度オンにするにはもう一度クリックが必要です。",
+    accountHostingHistoryTitle: "更新履歴",
+    accountHostingHistoryEmpty: "まだ更新履歴がありません。",
+    accountHostingHistoryLine: "{time} · {outcome}",
+    accountHostingOutcomeOk: "成功",
+    accountHostingOutcomeError: "失敗",
+    accountHostingOutcomeCancelled: "キャンセル",
+    accountHostingReasonNotSignedIn: "このアカウントはサインアウトしています。まず magpie でログインしてください。",
+    accountHostingReasonNotRenewable: "これは API キー認証情報で、更新するトークンがありません。",
+    accountHostingReasonNoExpiry: "この認証情報に期限がないため、ホスティングは不要です。",
+    accountHostingReasonIdentityMissing: "このアカウントには固定フィンガープリントがありません。まず Clean Login でログインしてください。",
+    accountHostingReasonExitUnknown: "このアカウントがログインした出口が記録されていません。もう一度ログインしてください。",
+    accountHostingReasonExitMissing: "ログイン時の出口がプロキシ一覧にもうありません。",
+    accountHostingReasonNotHostable: "このプロバイダーのログインはあなた自身の回答（キャプチャ、デバイスコード、ワンタイムコード）が必要なため、バックグラウンドでは完了できません。",
+    accountHostingReasonCallbackTimeout: "バックグラウンド更新はログイン完了を確認できませんでした。一度ご自身でログインしてください。",
+    accountHostingReasonIdentityMismatch: "更新で得られたアカウントがこのフィンガープリントに固定されたアカウントと異なるため、書き戻しを拒否しました。",
+    accountHostingReasonAccountNotFound: "このアカウントの記録が見つかりません。",
+    accountHostingReasonNoBrowserMethod: "このプロバイダーにはブラウザで完了できるログイン方法がありません。",
+    accountHostingReasonMethodNotFound: "このプロバイダーのログイン方法が変わりました。もう一度ログインしてください。",
+    accountHostingReasonUnavailable: "ログインコントローラーが一時的に利用できません。",
+    accountHostingReasonFailed: "更新に失敗しました：{message}",
     accountCheckFailedExit: "出口：{exit}",
     accountCheckTitle: "身元判定",
     accountCheckCopy: "このアカウント固有のブラウザー指紋で who.1ms.dog を開き、サイトの判定を読み取ります。",
@@ -1713,6 +1932,12 @@ let accountCheckTimer = null;
 let accountCheckTicker = null;
 let accountDetailContext = null;
 let noteSaving = false;
+// The hosting dialog polls only while it is open, and only for the one account
+// it was opened for. Nothing polls on the user's behalf in the background.
+let accountHostingContext = null;
+let accountHostingTimer = null;
+let accountHostingBusy = false;
+const ACCOUNT_HOSTING_POLL_MS = 1500;
 const ACCOUNT_CHECK_POLL_MS = 800;
 const ACCOUNT_CHECK_VISUAL_MS = 90_000;
 const NOTE_MAX_LENGTH = 200;
@@ -1955,6 +2180,16 @@ function applyText() {
   byId("account-detail-check").textContent = text.accountCheckStart;
   byId("account-detail-note-save").textContent = text.accountDetailNoteSave;
   byId("account-detail-close").setAttribute("aria-label", text.accountDetailDismiss);
+  // --- account hosting dialog ---
+  byId("account-hosting-title").textContent = text.accountHostingDialogTitle;
+  byId("account-hosting-copy").textContent = text.accountHostingDialogCopy;
+  byId("account-hosting-guard").textContent = text.accountHostingGuardNote;
+  byId("account-hosting-history-title").textContent = text.accountHostingHistoryTitle;
+  byId("account-hosting-dismiss").textContent = text.accountHostingDismiss;
+  byId("account-hosting-close").setAttribute("aria-label", text.accountHostingDismiss);
+  byId("account-hosting-toggle").textContent = text.accountHostingEnable;
+  byId("account-hosting-run").textContent = text.accountHostingRun;
+  byId("account-hosting-cancel").textContent = text.accountHostingCancel;
   // --- account check dialog ---
   byId("account-check-title").textContent = text.accountCheckTitle;
   byId("account-check-close").setAttribute("aria-label", text.accountCheckDismiss);
@@ -4969,6 +5204,18 @@ function accountRow(account) {
   status.className = `proxy-status${view.signedIn ? " ok" : ""}`;
   status.textContent = view.signedIn ? text.accountSignedIn : text.accountSignedOut;
   statusCell.append(status);
+  // Hosted renewal is off until the user turns it on for this one account, so
+  // the row says which it is instead of leaving people to guess whether
+  // anything is watching the credential.
+  const hostingLine = document.createElement("small");
+  hostingLine.className = `account-hosting-line is-${hostingTone(view.hosting)}`;
+  hostingLine.textContent = hostingStateLabel(view.hosting, {
+    off: text.accountHostingOff,
+    watching: text.accountHostingWatching,
+    running: text.accountHostingRunning,
+    paused: text.accountHostingPaused,
+  });
+  statusCell.append(hostingLine);
 
   const actions = accountCell("proxy-actions account-cell-actions", text.accountColActions);
   const busy = Boolean(accountCheckContext?.active);
@@ -4996,6 +5243,9 @@ function accountRow(account) {
   checkButton.disabled = busy;
   if (busy) checkButton.title = text.accountCheckBusy;
   actions.append(checkButton);
+  const hostingButton = miniButton(text.accountHosting, () => openAccountHosting(account));
+  hostingButton.title = text.accountHostingTitle;
+  actions.append(hostingButton);
   actions.append(miniButton(text.accountDetail, () => openAccountDetail(account)));
   if (!view.signedIn) {
     const clear = miniButton(text.accountClear, () => askClearIdentity(account), true);
@@ -5162,6 +5412,313 @@ function closeAccountDetail() {
 function cleanupAccountDetail() {
   accountDetailContext = null;
   setDetailError("");
+}
+
+// --- account hosting dialog -----------------------------------------------
+//
+// One dialog per account. It reads the stored policy plus whether enabling is
+// even possible, and every action is one explicit POST for this one account.
+// There is no bulk switch and nothing enables itself: the only way hosting
+// turns on is the user clicking the button below.
+
+const HOSTING_REASON_KEYS = {
+  not_signed_in: "accountHostingReasonNotSignedIn",
+  not_renewable: "accountHostingReasonNotRenewable",
+  no_expiry: "accountHostingReasonNoExpiry",
+  identity_missing: "accountHostingReasonIdentityMissing",
+  exit_unknown: "accountHostingReasonExitUnknown",
+  exit_missing: "accountHostingReasonExitMissing",
+  not_hostable: "accountHostingReasonNotHostable",
+  callback_timeout: "accountHostingReasonCallbackTimeout",
+  identity_mismatch: "accountHostingReasonIdentityMismatch",
+  account_not_found: "accountHostingReasonAccountNotFound",
+  no_browser_method: "accountHostingReasonNoBrowserMethod",
+  method_not_found: "accountHostingReasonMethodNotFound",
+  unavailable: "accountHostingReasonUnavailable",
+};
+
+// A known reason gets the page's own wording; an unknown one still shows the
+// service's message rather than a blank line, so nothing fails silently.
+function hostingReasonText(code, message) {
+  const key = HOSTING_REASON_KEYS[code];
+  if (key && text[key]) return text[key];
+  return text.accountHostingReasonFailed.replace("{message}", message || code || "");
+}
+
+function accountHostingPath(provider, key) {
+  return `api/accounts/${encodeURIComponent(provider)}/${encodeURIComponent(key)}/hosting`;
+}
+
+function setHostingError(message) {
+  const node = byId("account-hosting-error");
+  node.textContent = message || "";
+  node.hidden = !message;
+}
+
+function setHostingStatus(message) {
+  const node = byId("account-hosting-status");
+  node.textContent = message || "";
+  node.hidden = !message;
+}
+
+function hostingOutcomeText(outcome) {
+  if (outcome === "ok") return text.accountHostingOutcomeOk;
+  if (outcome === "cancelled") return text.accountHostingOutcomeCancelled;
+  return text.accountHostingOutcomeError;
+}
+
+function renderHostingFacts(view, inspect) {
+  const hosting = normalizeHosting(inspect?.hosting);
+  const facts = byId("account-hosting-facts");
+  facts.textContent = "";
+  const last = hosting.lastAt
+    ? (hosting.lastOutcome === "ok"
+        ? text.accountHostingLastOk
+        : hosting.lastOutcome === "cancelled"
+          ? text.accountHostingLastCancelled
+          : text.accountHostingLastFailed
+      ).replace("{time}", formatTime(hosting.lastAt))
+    : text.accountHostingLastNone;
+  for (const [label, value] of [
+    [text.accountHostingStateLabel, hostingStateLabel(hosting, {
+      off: text.accountHostingOff,
+      watching: text.accountHostingWatching,
+      running: text.accountHostingRunning,
+      paused: text.accountHostingPaused,
+    })],
+    [text.accountHostingExpiresLabel, hosting.expiresAt ? formatTime(hosting.expiresAt) : text.accountHostingExpiresUnknown],
+    [text.accountHostingNextLabel, hosting.nextDueAt
+      ? text.accountHostingNextAt.replace("{time}", formatTime(hosting.nextDueAt))
+      : hosting.enabled
+        ? text.accountHostingNextNone
+        : text.accountHostingNextOff],
+    [text.accountHostingLastLabel, last],
+    [text.accountHostingExitLabel, formatExit(view.lastLogin, text.accountExitDirect)],
+    [text.accountHostingFingerprintLabel, view.fingerprint.id || text.accountFingerprintNone],
+  ]) {
+    const wrap = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = label;
+    const dd = document.createElement("dd");
+    dd.textContent = value;
+    wrap.append(dt, dd);
+    facts.append(wrap);
+  }
+}
+
+function renderHostingHistory(history) {
+  const list = byId("account-hosting-history");
+  list.textContent = "";
+  if (!history.length) {
+    const none = document.createElement("p");
+    none.className = "identity-empty";
+    none.textContent = text.accountHostingHistoryEmpty;
+    list.append(none);
+    return;
+  }
+  for (const item of history) {
+    const row = document.createElement("div");
+    row.className = "identity-row";
+    const mark = document.createElement("span");
+    mark.className = `proxy-score ${item.outcome === "ok" ? "good" : item.outcome === "cancelled" ? "none" : "bad"}`;
+    mark.textContent = item.outcome === "ok" ? "✓" : item.outcome === "cancelled" ? "—" : "!";
+    const meta = document.createElement("span");
+    meta.className = "identity-meta";
+    meta.textContent = text.accountHostingHistoryLine
+      .replace("{time}", formatTime(item.at))
+      .replace("{outcome}", hostingOutcomeText(item.outcome));
+    row.append(mark, meta);
+    if (item.outcome !== "ok" && (item.code || item.message)) {
+      const why = document.createElement("small");
+      why.className = "identity-meta";
+      why.textContent = hostingReasonText(item.code, item.message);
+      row.append(why);
+    }
+    list.append(row);
+  }
+}
+
+function renderAccountHosting() {
+  const context = accountHostingContext;
+  if (!context) return;
+  const account = accountIdentities.find(
+    (item) => item?.provider === context.provider && item?.key === context.key,
+  );
+  const view = account ? accountDisplay(account) : null;
+  const inspect = context.inspect;
+  const hosting = normalizeHosting(inspect?.hosting);
+  if (view) renderHostingFacts(view, inspect);
+  renderHostingHistory(hosting.history);
+
+  const ineligible = byId("account-hosting-ineligible");
+  if (!inspect?.eligible && inspect?.reason) {
+    ineligible.textContent = `${text.accountHostingIneligible} ${hostingReasonText(inspect.reason.code, inspect.reason.message)}`;
+    ineligible.hidden = false;
+  } else {
+    ineligible.textContent = "";
+    ineligible.hidden = true;
+  }
+
+  const runningHere = Boolean(
+    inspect?.running &&
+    inspect.running.provider === context.provider &&
+    inspect.running.key === context.key,
+  );
+  const toggle = byId("account-hosting-toggle");
+  toggle.textContent = hosting.enabled ? text.accountHostingDisable : text.accountHostingEnable;
+  // Enabling needs the service to say it is possible; disabling is always
+  // allowed, even for an account that has since signed out.
+  toggle.disabled = accountHostingBusy || (!hosting.enabled && !inspect?.eligible);
+  const run = byId("account-hosting-run");
+  run.hidden = !hosting.enabled;
+  run.textContent = text.accountHostingRun;
+  run.disabled = accountHostingBusy || runningHere || Boolean(inspect?.running);
+  const cancel = byId("account-hosting-cancel");
+  cancel.hidden = !runningHere;
+  cancel.textContent = text.accountHostingCancel;
+  cancel.disabled = accountHostingBusy;
+}
+
+// Poll only while the dialog is open. When a renewal finishes, the table is
+// re-read so the row's hosting line matches what the dialog just showed.
+async function refreshAccountHosting() {
+  const context = accountHostingContext;
+  if (!context) return;
+  const wasRunning = context.inspect?.hosting?.state === "running";
+  try {
+    const data = await api(accountHostingPath(context.provider, context.key));
+    if (accountHostingContext !== context) return;
+    context.inspect = data;
+    setHostingError("");
+    renderAccountHosting();
+    if (wasRunning && data?.hosting?.state !== "running") {
+      await loadAccountIdentities();
+    }
+  } catch (error) {
+    if (accountHostingContext !== context) return;
+    setHostingError(serverErrorText(error));
+  }
+}
+
+function scheduleHostingPoll() {
+  if (accountHostingTimer) clearTimeout(accountHostingTimer);
+  accountHostingTimer = setTimeout(async () => {
+    accountHostingTimer = null;
+    if (!accountHostingContext) return;
+    await refreshAccountHosting();
+    if (accountHostingContext) scheduleHostingPoll();
+  }, ACCOUNT_HOSTING_POLL_MS);
+}
+
+function openAccountHosting(account) {
+  const dialog = byId("account-hosting-dialog");
+  const view = accountDisplay(account);
+  accountHostingContext = { provider: view.provider, key: view.key, inspect: null };
+  accountHostingBusy = false;
+  byId("account-hosting-title").textContent = text.accountHostingDialogTitle;
+  byId("account-hosting-copy").textContent = text.accountHostingDialogCopy;
+  byId("account-hosting-account").textContent = `${view.name} · ${view.providerLabel} · ${view.key}`;
+  byId("account-hosting-guard").textContent = text.accountHostingGuardNote;
+  setHostingError("");
+  setHostingStatus("");
+  renderAccountHosting();
+  if (!dialog.open) dialog.showModal();
+  void refreshAccountHosting().then(() => {
+    if (accountHostingContext) scheduleHostingPoll();
+  });
+}
+
+function closeAccountHosting() {
+  const dialog = byId("account-hosting-dialog");
+  if (dialog.open) dialog.close();
+}
+
+function cleanupAccountHosting() {
+  accountHostingContext = null;
+  accountHostingBusy = false;
+  if (accountHostingTimer) {
+    clearTimeout(accountHostingTimer);
+    accountHostingTimer = null;
+  }
+  setHostingError("");
+  setHostingStatus("");
+  // The row may have changed while the dialog was open.
+  void loadAccountIdentities();
+}
+
+// One explicit POST for one account. `enabled` is always a real boolean, so a
+// stray or empty body can never flip a policy.
+async function setAccountHostingEnabled(enabled) {
+  const context = accountHostingContext;
+  if (!context || accountHostingBusy) return;
+  accountHostingBusy = true;
+  setHostingError("");
+  setHostingStatus("");
+  renderAccountHosting();
+  try {
+    await api(accountHostingPath(context.provider, context.key), {
+      method: "POST",
+      body: { enabled },
+    });
+    if (accountHostingContext !== context) return;
+    setHostingStatus(enabled ? text.accountHostingEnabledNotice : text.accountHostingDisabledNotice);
+    await refreshAccountHosting();
+    await loadAccountIdentities();
+  } catch (error) {
+    if (accountHostingContext !== context) return;
+    setHostingError(serverErrorText(error));
+  } finally {
+    if (accountHostingContext === context) {
+      accountHostingBusy = false;
+      renderAccountHosting();
+    }
+  }
+}
+
+async function runAccountHosting() {
+  const context = accountHostingContext;
+  if (!context || accountHostingBusy) return;
+  accountHostingBusy = true;
+  setHostingError("");
+  setHostingStatus("");
+  renderAccountHosting();
+  try {
+    await api(`${accountHostingPath(context.provider, context.key)}/run`, { method: "POST" });
+    if (accountHostingContext !== context) return;
+    setHostingStatus(text.accountHostingRunNotice);
+    await refreshAccountHosting();
+    await loadAccountIdentities();
+  } catch (error) {
+    if (accountHostingContext !== context) return;
+    setHostingError(serverErrorText(error));
+  } finally {
+    if (accountHostingContext === context) {
+      accountHostingBusy = false;
+      renderAccountHosting();
+    }
+  }
+}
+
+async function cancelAccountHosting() {
+  const context = accountHostingContext;
+  if (!context || accountHostingBusy) return;
+  accountHostingBusy = true;
+  setHostingError("");
+  renderAccountHosting();
+  try {
+    await api(`${accountHostingPath(context.provider, context.key)}/cancel`, { method: "POST" });
+    if (accountHostingContext !== context) return;
+    await refreshAccountHosting();
+    await loadAccountIdentities();
+  } catch (error) {
+    if (accountHostingContext !== context) return;
+    setHostingError(serverErrorText(error));
+  } finally {
+    if (accountHostingContext === context) {
+      accountHostingBusy = false;
+      renderAccountHosting();
+    }
+  }
 }
 
 async function saveAccountNote() {
@@ -5698,6 +6255,17 @@ byId("account-detail-dismiss").addEventListener("click", closeAccountDetail);
 byId("account-detail-check").addEventListener("click", openCheckFromDetail);
 byId("account-detail-note-save").addEventListener("click", saveAccountNote);
 byId("account-detail-dialog").addEventListener("close", cleanupAccountDetail);
+byId("account-hosting-close").addEventListener("click", closeAccountHosting);
+byId("account-hosting-dismiss").addEventListener("click", closeAccountHosting);
+byId("account-hosting-dialog").addEventListener("close", cleanupAccountHosting);
+byId("account-hosting-toggle").addEventListener("click", () => {
+  // Read the button's own label back into the boolean, so the click can only
+  // ever ask for the opposite of what the dialog is currently showing.
+  const enabled = byId("account-hosting-toggle").textContent === text.accountHostingDisable;
+  void setAccountHostingEnabled(!enabled);
+});
+byId("account-hosting-run").addEventListener("click", () => void runAccountHosting());
+byId("account-hosting-cancel").addEventListener("click", () => void cancelAccountHosting());
 byId("account-check-close").addEventListener("click", closeAccountCheck);
 byId("account-check-dismiss").addEventListener("click", closeAccountCheck);
 byId("account-check-start").addEventListener("click", startAccountCheck);

@@ -527,6 +527,35 @@
     </div>
   </dialog>
 
+  <!-- Hosted renewal. Off by default: nothing here enables itself, and the
+       enable button acts on exactly the one account the dialog was opened for.
+       Every control is type="button": magpie's sandbox has no allow-forms. -->
+  <dialog id="account-hosting-dialog" class="dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="account-hosting-title">Renew hosting</h3>
+        <p id="account-hosting-copy"></p>
+      </div>
+      <button class="dialog-close" id="account-hosting-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="dialog-body">
+      <p class="report-card-line" id="account-hosting-account"></p>
+      <dl class="setup-facts" id="account-hosting-facts"></dl>
+      <p class="setup-note" id="account-hosting-guard"></p>
+      <p class="setup-note" id="account-hosting-ineligible" role="alert" hidden></p>
+      <p class="form-error" id="account-hosting-error" role="alert" hidden></p>
+      <p class="setup-note" id="account-hosting-status" role="status" hidden></p>
+      <p class="setup-note account-detail-history-title" id="account-hosting-history-title">Renewal history</p>
+      <div class="identity-list" id="account-hosting-history"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="button" id="account-hosting-dismiss" type="button">Close</button>
+      <button class="button" id="account-hosting-cancel" type="button" hidden>Stop renewal</button>
+      <button class="button" id="account-hosting-run" type="button" hidden>Renew now</button>
+      <button class="button primary" id="account-hosting-toggle" type="button">Enable hosting</button>
+    </div>
+  </dialog>
+
   <!-- Reporting a provider card. The body is written by the service, so the
        page only collects an optional note; nothing here reads an account.
        Every control is type="button": magpie's sandbox has no allow-forms, so

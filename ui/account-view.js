@@ -30,6 +30,7 @@ export function accountView(account) {
     : checks[0] || null;
   const note = typeof value.note === "string" ? value.note : "";
   const unverified = Boolean(value.unverified);
+  const hosting = normalizeHosting(value.hosting);
 
   return {
     name,
@@ -45,7 +46,83 @@ export function accountView(account) {
     checks,
     note,
     unverified,
+    hosting,
   };
+}
+
+// Hosted renewal is off until the user turns it on for one account, so a
+// missing or malformed policy always reads as "off" -- never as enabled.
+export function normalizeHosting(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  const enabled = raw.enabled === true;
+  const pausedReason = typeof raw.pausedReason === "string" && raw.pausedReason ? raw.pausedReason : null;
+  // "paused" only means something for an account that was enabled and then
+  // stopped itself; an account the user switched off is simply "off".
+  const state = !enabled
+    ? (pausedReason ? "paused" : "off")
+    : raw.state === "running" ? "running" : "watching";
+  // The service keeps hosting timestamps as epoch milliseconds, while the
+  // ledger's own dates are ISO strings. Both are real times, so both are kept
+  // and normalised to ISO here; dropping the numbers would make every enabled
+  // account read as "no expiry" and "never renewed".
+  const stamp = (input) => {
+    if (typeof input === "string" && input) return input;
+    if (typeof input === "number" && Number.isFinite(input) && input > 0) {
+      const date = new Date(input);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+    return null;
+  };
+  const history = Array.isArray(raw.history)
+    ? raw.history
+        .filter((item) => item && typeof item === "object")
+        .map((item) => ({
+          at: stamp(item.at),
+          outcome: typeof item.outcome === "string" ? item.outcome : "",
+          code: typeof item.code === "string" ? item.code : null,
+          message: typeof item.message === "string" ? item.message : "",
+        }))
+    : [];
+  return {
+    enabled,
+    state,
+    enabledAt: stamp(raw.enabledAt),
+    updatedAt: stamp(raw.updatedAt),
+    nextDueAt: stamp(raw.nextDueAt),
+    lastAt: stamp(raw.lastAt),
+    lastOutcome: typeof raw.lastOutcome === "string" ? raw.lastOutcome : null,
+    lastCode: typeof raw.lastCode === "string" ? raw.lastCode : null,
+    lastMessage: typeof raw.lastMessage === "string" ? raw.lastMessage : "",
+    failStreak: Number.isFinite(raw.failStreak) && raw.failStreak > 0 ? Math.floor(raw.failStreak) : 0,
+    pausedReason,
+    expiresAt: stamp(raw.expiresAt),
+    history,
+  };
+}
+
+// The one line the accounts table shows under the signed-in badge. Pure so the
+// wording rules can be tested without a DOM; the page supplies its own strings.
+export function hostingStateLabel(hosting, labels = {}) {
+  const value = normalizeHosting(hosting);
+  const text = {
+    off: "续期托管：关闭",
+    watching: "续期托管：已开通",
+    running: "续期托管：续期中…",
+    paused: "续期托管：已暂停",
+    ...labels,
+  };
+  return text[value.state] ?? text.off;
+}
+
+// Tone for that line: a renewal in flight is active, a self-paused policy needs
+// attention, an enabled one is good, and "off" stays neutral -- it is the
+// default, not a problem.
+export function hostingTone(hosting) {
+  const state = normalizeHosting(hosting).state;
+  if (state === "running") return "active";
+  if (state === "paused") return "warn";
+  if (state === "watching") return "good";
+  return "none";
 }
 
 export function formatExit(login, directText = "直连") {
