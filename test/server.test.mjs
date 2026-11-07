@@ -817,3 +817,31 @@ test("boot times out a hanging providers:list and still navigates", async () => 
     error: "providers:list timed out",
   });
 });
+
+test("GET and POST /api/market/install validate and dispatch", async () => {
+  // GET with no state
+  const getInitial = await fetch(`http://127.0.0.1:${port}/api/market/install`, {
+    headers: { [tokenHeader]: token },
+  });
+  expect(getInitial.status).toBe(200);
+  const initialBody = await getInitial.json();
+  expect(initialBody).toEqual({ install: null });
+
+  // POST without package is 400
+  const postEmpty = await fetch(`http://127.0.0.1:${port}/api/market/install`, {
+    method: "POST",
+    headers: { [tokenHeader]: token, "content-type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  expect(postEmpty.status).toBe(400);
+
+  // POST with package not in market is 400
+  const postUnknown = await fetch(`http://127.0.0.1:${port}/api/market/install`, {
+    method: "POST",
+    headers: { [tokenHeader]: token, "content-type": "application/json" },
+    body: JSON.stringify({ package: "malicious-pkg" }),
+  });
+  expect(postUnknown.status).toBe(400);
+  const unknownBody = await postUnknown.json();
+  expect(unknownBody.error).toBe("not_in_market");
+});
