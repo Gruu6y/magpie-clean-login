@@ -609,6 +609,15 @@ main { flex: 1; }
 .provider-mark.tone-blue { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); border-color: var(--blue); }
 .provider-mark.tone-green { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); border-color: var(--green); }
 .provider-mark.tone-clay { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); border-color: var(--red); }
+/* A provider's own mark fills the same tile the letter used to. The tile's
+   hairline stays, so a coloured logo is still one item in a column of marks. */
+.provider-mark.has-logo { padding: 5px; border-color: var(--line); color: var(--ink); }
+.provider-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
+.provider-logo.glyph {
+  background: currentColor;
+  -webkit-mask: var(--logo) center / contain no-repeat;
+  mask: var(--logo) center / contain no-repeat;
+}
 .provider-origin {
   flex: 0 0 auto;
   margin-left: auto;
