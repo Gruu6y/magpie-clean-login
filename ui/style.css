@@ -282,6 +282,29 @@ main { flex: 1; }
 .section-head p { margin: 8px 0 0; max-width: 640px; color: var(--muted); font-size: 13.5px; }
 .section-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 
+/* Probe target. One compact select beside Add Proxy: the generic exit check
+   stays the default, and a provider entry measures the host that account will
+   really talk to. Hidden until the service reports at least one target. */
+.test-target { display: flex; flex-direction: column; gap: 5px; min-width: 200px; max-width: 280px; }
+.test-target[hidden] { display: none; }
+.test-target-label {
+  color: var(--muted);
+  font: 600 9px/1.4 var(--mono);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.test-target-select {
+  width: 100%;
+  max-width: 280px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--paper-3);
+  color: var(--ink);
+  font: 12px/1.4 var(--mono);
+  text-overflow: ellipsis;
+}
+
 /* Provider search. The field sits in the section head so it stays put while
    the grids below it are re-rendered on every keystroke. */
 .search-field { display: flex; flex-direction: column; gap: 5px; min-width: 232px; }
@@ -989,6 +1012,15 @@ main { flex: 1; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.proxy-status-target {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font: 500 10px/1.4 var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .proxy-checked { color: var(--muted); font: 500 10.5px/1.5 var(--mono); letter-spacing: 0.04em; }
 .proxy-score-cell { min-width: 0; }
 .proxy-score {
@@ -1452,8 +1484,10 @@ main { flex: 1; }
   .tab + .tab { margin-left: 6px; }
   .panel { padding-top: 22px; }
   .section-head { flex-wrap: wrap; gap: 12px; }
-  .section-actions { width: 100%; }
+  .section-actions { width: 100%; flex-wrap: wrap; }
   .section-actions .button { width: 100%; }
+  .test-target { flex: 1 0 100%; width: 100%; max-width: none; min-width: 0; }
+  .test-target-select { max-width: none; }
   .search-field { width: 100%; min-width: 0; }
   .proxy-filters { align-items: stretch; }
   .filter-actions { margin-left: 0; width: 100%; justify-content: space-between; }

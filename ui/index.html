@@ -139,6 +139,10 @@
             <p id="proxies-copy">Each account signs in and makes requests through the proxy you choose.</p>
           </div>
           <div class="section-actions">
+            <label class="test-target" id="proxy-test-target-field" for="proxy-test-target" hidden>
+              <span class="test-target-label" id="test-target-label">Test target</span>
+              <select class="test-target-select" id="proxy-test-target"></select>
+            </label>
             <button class="button primary" id="add-proxy" type="button">
               <span aria-hidden="true">+</span>
               <span id="add-proxy-label">Add Proxy</span>
@@ -324,6 +328,7 @@
             </div>
           </div>
         </div>
+        <p class="field-hint" id="proxy-test-target-note" hidden></p>
         <p class="form-error" id="proxy-form-error" role="alert" hidden></p>
         <div class="proxy-test-result" id="proxy-test-result" role="status" hidden></div>
       </div>

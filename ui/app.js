@@ -11,6 +11,15 @@ import {
   statusView,
 } from "./proxy-state.js";
 import { distinctKeywords, distinctRegions, filterProxies } from "./proxy-filter.js";
+import {
+  EMPTY_TARGETS,
+  findTarget,
+  normalizeProxyTargets,
+  proxyForTarget,
+  resolveTargetId,
+  targetOptionLabel,
+  withProbeResult,
+} from "./proxy-target.js";
 import { isScoreActive, isScoreSettled, scoreView } from "./proxy-score.js";
 import {
   PLUGIN_SCAN_POLL_INTERVAL_MS,
@@ -194,6 +203,9 @@ const messages = {
     proxiesEmptyTitle: "No proxy IPs yet",
     proxiesEmptyCopy: "Add a proxy to give providers a clean exit.",
     addProxy: "Add Proxy",
+    testTargetLabel: "Test target",
+    testTargetGeneric: "Generic (exit check)",
+    testTargetNote: "Latency is measured to {target} · {host}",
     connecting: "Connecting…",
     ready: "Local service connected",
     failed: "Local service unavailable",
@@ -563,6 +575,9 @@ const messages = {
     proxiesEmptyTitle: "还没有代理 IP",
     proxiesEmptyCopy: "添加代理，为供应商提供干净的出口。",
     addProxy: "添加代理",
+    testTargetLabel: "测速目标",
+    testTargetGeneric: "通用（出口检测）",
+    testTargetNote: "延迟测到 {target} · {host}",
     connecting: "正在连接…",
     ready: "本地服务已连接",
     failed: "本地服务不可用",
@@ -932,6 +947,9 @@ const messages = {
     proxiesEmptyTitle: "還沒有代理 IP",
     proxiesEmptyCopy: "新增代理，為供應商提供乾淨的出口。",
     addProxy: "新增代理",
+    testTargetLabel: "測速目標",
+    testTargetGeneric: "通用（出口檢測）",
+    testTargetNote: "延遲測到 {target} · {host}",
     connecting: "正在連線…",
     ready: "本機服務已連線",
     failed: "本機服務無法使用",
@@ -1301,6 +1319,9 @@ const messages = {
     proxiesEmptyTitle: "プロキシ IP がありません",
     proxiesEmptyCopy: "プロキシを追加して、プロバイダーにクリーンな出口を用意します。",
     addProxy: "プロキシを追加",
+    testTargetLabel: "測定先",
+    testTargetGeneric: "汎用（出口確認）",
+    testTargetNote: "{target} · {host} への遅延を測定",
     connecting: "接続中…",
     ready: "ローカルサービスに接続しました",
     failed: "ローカルサービスを利用できません",
@@ -1584,6 +1605,14 @@ const byId = (id) => document.getElementById(id);
 
 let proxies = [];
 const rowTests = new Map();
+// Probe targets come from GET /api/proxy-targets. The empty id is the generic
+// exit check, which is also the default: with no target chosen every test
+// behaves exactly as it did before this picker existed.
+let proxyTargets = EMPTY_TARGETS;
+let selectedTestTarget = "";
+let proxyTargetGeneration = 0;
+const PROXY_TARGET_RETRY_MAX = 8;
+const PROXY_TARGET_RETRY_MS = 1500;
 // Filter state is per document and never persisted: magpie mounts the page in
 // an opaque-origin sandbox frame where web storage is not available.
 const proxyFilter = { regions: new Set(), keywords: new Set(), minLatency: "", maxLatency: "" };
@@ -1762,6 +1791,7 @@ function applyText() {
   byId("proxies-empty-title").textContent = text.proxiesEmptyTitle;
   byId("proxies-empty-copy").textContent = text.proxiesEmptyCopy;
   byId("add-proxy-label").textContent = text.addProxy;
+  byId("test-target-label").textContent = text.testTargetLabel;
   byId("add-proxy-empty").textContent = text.addProxy;
   byId("retry").textContent = text.retry;
   byId("col-name").textContent = text.colName;
@@ -2125,6 +2155,20 @@ function proxyRow(proxy) {
     reason.textContent = testErrorText(proxy);
     statusCell.append(reason);
   }
+  // The measured target is a separate, ellipsized line. Keeping it out of
+  // the status line preserves the original row layout and stops the longer
+  // label from colliding with the neighbouring "last checked" column.
+  if (proxy.latencyTarget?.id) {
+    const target = document.createElement("small");
+    target.className = "proxy-status-target";
+    target.textContent = proxy.latencyTarget.id;
+    const detail = proxy.latencyTarget.host
+      ? `${proxy.latencyTarget.id} · ${proxy.latencyTarget.host}`
+      : proxy.latencyTarget.id;
+    status.title = detail;
+    target.title = detail;
+    statusCell.append(target);
+  }
 
   const checked = document.createElement("div");
   checked.className = "proxy-checked";
@@ -2151,6 +2195,87 @@ function proxyRow(proxy) {
   return row;
 }
 
+// --- probe targets -------------------------------------------------------
+// The service publishes the generic exit endpoint plus one entry per provider
+// whose API base magpie declared. A failed read keeps the generic default: the
+// picker stays hidden and every test keeps its historical behaviour. The first
+// read can arrive while the plugin scan is still in flight, so retry a bounded
+// number of times before accepting an empty catalogue.
+
+function currentTestTarget() {
+  return resolveTargetId(selectedTestTarget, proxyTargets);
+}
+
+// The sign-in card measures the provider it belongs to when that provider has a
+// declared host. A card without one keeps the generic exit check.
+function signInTarget() {
+  const provider = signInContext?.provider;
+  return provider ? resolveTargetId(provider, proxyTargets) : "";
+}
+
+function loadProxyTargets() {
+  const generation = ++proxyTargetGeneration;
+  const attempt = async (count) => {
+    if (generation !== proxyTargetGeneration) return;
+    let payload = null;
+    try {
+      payload = await api("api/proxy-targets");
+    } catch {
+      return;
+    }
+    if (generation !== proxyTargetGeneration) return;
+    proxyTargets = normalizeProxyTargets(payload);
+    selectedTestTarget = resolveTargetId(selectedTestTarget, proxyTargets);
+    renderTestTargetOptions();
+    renderProxies();
+    renderSignInProxies();
+    if (payload?.scanning && count < PROXY_TARGET_RETRY_MAX && proxyTargets.targets.length === 0) {
+      setTimeout(() => attempt(count + 1), PROXY_TARGET_RETRY_MS);
+    }
+  };
+  return attempt(0);
+}
+
+function renderTestTargetOptions() {
+  const field = byId("proxy-test-target-field");
+  const select = byId("proxy-test-target");
+  const targets = proxyTargets.targets;
+  field.hidden = targets.length === 0;
+  select.setAttribute("aria-label", text.testTargetLabel);
+  const previous = select.value;
+  select.textContent = "";
+  const generic = document.createElement("option");
+  generic.value = "";
+  generic.textContent = text.testTargetGeneric;
+  select.append(generic);
+  for (const target of targets) {
+    const option = document.createElement("option");
+    option.value = target.id;
+    option.textContent = targetOptionLabel(target);
+    option.title = target.url || target.host;
+    select.append(option);
+  }
+  select.value = targets.some((target) => target.id === previous) ? previous : selectedTestTarget;
+  selectedTestTarget = select.value || "";
+  renderTargetNote();
+}
+
+// The dialog states which host its Test button is measuring. With the generic
+// target selected there is nothing to explain, so the note stays hidden.
+function renderTargetNote() {
+  const note = byId("proxy-test-target-note");
+  const target = findTarget(proxyTargets, currentTestTarget());
+  if (!target) {
+    note.textContent = "";
+    note.hidden = true;
+    return;
+  }
+  note.textContent = text.testTargetNote
+    .replace("{target}", target.name || target.id)
+    .replace("{host}", target.host);
+  note.hidden = false;
+}
+
 function renderProxies() {
   const list = byId("proxies-list");
   const empty = byId("proxies-empty");
@@ -2167,6 +2292,13 @@ function renderProxies() {
     return;
   }
   renderFilterChips();
+  const target = currentTestTarget();
+  // With a provider selected, the latency filter and the status number use
+  // that provider's own measurement. The generic default leaves both the
+  // records and the original filter call untouched.
+  proxyFilter.latencyOf = target
+    ? (proxy) => proxyForTarget(proxy, target, proxyTargets).latency
+    : null;
   const visible = filterProxies(proxies, proxyFilter);
   byId("filter-count").textContent = text.filterCount
     .replace("{shown}", String(visible.length))
@@ -2177,7 +2309,9 @@ function renderProxies() {
     note.textContent = text.filterNoMatch;
     list.append(note);
   } else {
-    for (const proxy of visible) list.append(proxyRow(proxy));
+    for (const proxy of visible) {
+      list.append(proxyRow(proxyForTarget(proxy, target, proxyTargets)));
+    }
   }
   renderScoreBar();
 }
@@ -2983,7 +3117,7 @@ function renderSignInProxies() {
     // Name, address and probe latency/status only; never the password (the API
     // omits it and the page never sees it).
     option.textContent = formatSignInProxyOption(
-      proxy,
+      proxyForTarget(proxy, signInTarget(), proxyTargets),
       text,
       signInTestingProxies.has(proxy.id) || rowTests.has(proxy.id),
     );
@@ -3005,6 +3139,7 @@ function selectedSignInProxy() {
 // the user's choice.
 async function refreshSignInProxies() {
   const context = signInContext;
+  const target = signInTarget();
   cancelSignInProxyTests();
   const tokenForSweep = signInProxyGuard.begin();
   const controller = new AbortController();
@@ -3035,6 +3170,7 @@ async function refreshSignInProxies() {
     (proxy, { signal }) =>
       api(`api/proxies/${encodeURIComponent(proxy.id)}/test`, {
         method: "POST",
+        ...(target ? { body: { provider: target } } : {}),
         signal,
       }),
     {
@@ -3043,14 +3179,18 @@ async function refreshSignInProxies() {
         if (!signInProxyGuard.isCurrent(tokenForSweep) || signInContext !== context) return;
         signInTestingProxies.delete(proxy.id);
         if (data?.proxy) {
-          replaceProxy(data.proxy);
+          replaceProxy(withProbeResult(data.proxy, data.result));
         } else if (data?.result) {
           const current = proxies.find((item) => item.id === proxy.id);
           if (current) {
+            Object.assign(current, withProbeResult(current, data.result));
             current.status = data.result.ok ? "ok" : "error";
-            current.latency = Number.isFinite(data.result.latency)
-              ? Math.round(data.result.latency)
-              : null;
+            // Keep the row's generic number intact when this was a two-leg
+            // probe; the provider number already went into latencyByProvider.
+            const stored = data.result.target?.kind === "provider" && Number.isFinite(data.result.exitLatency)
+              ? data.result.exitLatency
+              : data.result.latency;
+            current.latency = Number.isFinite(stored) ? Math.round(stored) : null;
             current.errorCode = data.result.ok ? "" : data.result.errorCode || "unknown";
             current.error = data.result.ok ? "" : data.result.error || "";
           }
@@ -3619,7 +3759,12 @@ async function runPluginScanPoll() {
     plugins: { ...(merged.providerSources.plugins || {}), ...(merged.pluginScan || {}) },
   };
   applyProviderSources(view);
-  if (shouldPollPluginScan(view.plugins)) schedulePluginScanPoll();
+  const stillScanning = shouldPollPluginScan(view.plugins);
+  // The target catalogue is populated by the same plugin scan. Re-read it on
+  // the first poll and once the scan settles, so a slow scan does not leave the
+  // picker permanently empty.
+  if (poll.attempts === 1 || !stillScanning) loadProxyTargets();
+  if (stillScanning) schedulePluginScanPoll();
   else stopPluginScanPolling();
 }
 
@@ -3955,6 +4100,7 @@ async function load() {
       providerSources = null;
     }
     render({ ...data, providerSources });
+    loadProxyTargets();
     // The first provider-sources read starts the installed-plugin scan and
     // answers while it is still running; follow it so the cards gain their add
     // entries without a manual page reload.
@@ -4001,8 +4147,10 @@ async function testRowProxy(id) {
   rowTests.set(id, { guard, controller });
   renderProxies();
   try {
+    const target = currentTestTarget();
     const data = await api(`api/proxies/${encodeURIComponent(id)}/test`, {
       method: "POST",
+      ...(target ? { body: { provider: target } } : {}),
       signal: controller.signal,
     });
     const active = rowTests.get(id);
@@ -4152,6 +4300,7 @@ function openProxyDialog(proxy = null) {
     hint.hidden = true;
   }
   setDialogBusy(false);
+  renderTargetNote();
   dialog.showModal();
   byId("proxy-name").focus();
 }
@@ -4196,16 +4345,19 @@ async function testDialogProxy() {
   const tokenForTest = guard.begin();
   const controller = new AbortController();
   context.testAbort = controller;
+  const payload = payloadFor(values);
+  const target = currentTestTarget();
+  if (target) payload.provider = target;
   try {
     const data = context.mode === "edit"
       ? await api(`api/proxies/${encodeURIComponent(context.id)}/test`, {
           method: "POST",
-          body: payloadFor(values),
+          body: payload,
           signal: controller.signal,
         })
       : await api("api/proxies/test", {
           method: "POST",
-          body: payloadFor(values),
+          body: payload,
           signal: controller.signal,
         });
     if (dialogContext !== context || !guard.isCurrent(tokenForTest) || !byId("proxy-dialog").open) {
@@ -5100,6 +5252,11 @@ document.addEventListener("visibilitychange", () => {
   if (pluginScanPoll && !pluginScanPoll.timer && !pluginScanPoll.inflight) schedulePluginScanPoll();
 });
 byId("filter-reset").addEventListener("click", resetProxyFilters);
+byId("proxy-test-target").addEventListener("change", () => {
+  selectedTestTarget = byId("proxy-test-target").value || "";
+  renderTargetNote();
+  renderProxies();
+});
 byId("filter-latency-min").addEventListener("input", () => {
   proxyFilter.minLatency = byId("filter-latency-min").value;
   renderProxies();
