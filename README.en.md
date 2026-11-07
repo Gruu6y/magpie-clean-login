@@ -30,7 +30,7 @@
 
 ## Why
 
-- **One account, one machine.** Profiles, cookies and fingerprints are never shared, so two accounts of the same provider never look like the same browser. Signing out keeps the identity; signing back in reuses it.
+- **One account, one machine.** Profiles, cookies and fingerprints are never shared, so two accounts of the same provider never look like the same browser. Signing out keeps the identity; signing back in reuses it. When a genuinely new machine is what you want, use **Renew fingerprint** on the account row.
 - **The exit you picked really is the exit.** The login browser *and* the plugin's own requests both go through the chosen proxy. Choosing **Direct** means direct — it does not silently fall back to magpie's global proxy.
 - **No provider list to maintain.** Clean Login reads the provider plugins you already installed and the magpie market catalogue, and offers an entry wherever a plugin exposes a sign-in. Add a provider to magpie and it shows up here.
 
@@ -140,6 +140,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 | A sign-in failed with `no_url` or `method_input_required` | The plugin asked for a value (a phone number, a site, a key) that the dialog did not collect. Fill the field and retry; if it keeps failing, use **Report a problem** on the card. |
 | Proxy test fails | The test makes a real connection through that exit and never falls back to a direct one. Check the host, port, credentials and whether the exit allows the target. |
 | A signed-in account looks like a new machine | Check its pinned fingerprint on **Accounts**. Signing back in reuses the same identity; deleting the account data removes it. |
+| You want an account to really be a new machine | Use **Renew fingerprint** on its signed-in row in **Accounts**: it signs the same account in again on a freshly drawn fingerprint and deletes the old browser profile. The account and its credential stay. An ordinary "Sign in again" reuses the old fingerprint. |
 | Something else | Open an [issue](https://github.com/Gruu6y/magpie-clean-login/issues) with what you expected, what happened, and which provider or proxy was involved. A screenshot of the message is worth a lot. Please never paste real tokens or proxy passwords into an issue. |
 
 ## Privacy and where your data lives
