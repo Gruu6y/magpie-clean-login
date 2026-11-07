@@ -10,7 +10,9 @@ import {
   SIGNIN_FLOW_MARKER,
   accountDir,
   accountProfileDir,
+  ensureIdentity,
   readAccountMeta,
+  readIdentity,
   writeAccountMeta,
 } from "../lib/account-identity.mjs";
 import { SignInBrowserError } from "../lib/browser-launcher.mjs";
@@ -208,6 +210,35 @@ test("a repeated account gets a fresh pre-allocated key but writes to the existi
   // marker did not outlive the sign-in.
   expect(existsSync(join(accountDir(env, "workbuddy", "workbuddy"), "identity.json"))).toBe(true);
   expect(existsSync(join(accountDir(env, "workbuddy", "workbuddy"), SIGNIN_FLOW_MARKER))).toBe(false);
+  expect(existsSync(accountDir(env, "workbuddy", started.key))).toBe(false);
+  // The pin travelled; it was not thrown away. `pinDiscarded` is what tells the
+  // page the difference between these two outcomes.
+  expect(flow.pinDiscarded).toBe(false);
+  expect(flow.rotated).toBe(false);
+});
+
+test("a sign-in onto an account that already owns a pin says the draw was discarded", async () => {
+  // magpie holds the credential under `workbuddy`, and clean-login already has
+  // a directory for it with its own machine. Signing in "as a new account"
+  // draws a second pin, the write-back recognises the credential, and the
+  // account's own pin wins. That is the invariant -- but the user asked for a
+  // new fingerprint, so the flow has to admit it did not get one.
+  const entries = { workbuddy: { accountId: "me" } };
+  const { env, controller } = await harness({ entries });
+  const owned = accountDir(env, "workbuddy", "workbuddy");
+  await ensureIdentity(owned, { generate: async () => ({ tag: "already-owned" }) });
+
+  const started = await controller.startSignIn({ provider: "workbuddy" });
+  expect(started.key).not.toBe("workbuddy");
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.state).toBe("done");
+  expect(flow.accountKey).toBe("workbuddy");
+  expect(flow.identityCreated).toBe(true);
+  expect(flow.pinDiscarded).toBe(true);
+  expect(flow.rotated).toBe(false);
+  // The account kept the machine it already had.
+  expect(await readIdentity(owned)).toEqual({ tag: "already-owned" });
   expect(existsSync(accountDir(env, "workbuddy", started.key))).toBe(false);
 });
 

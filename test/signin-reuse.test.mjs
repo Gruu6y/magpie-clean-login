@@ -4,14 +4,16 @@
 // and the client are injected, so no browser is started and no network is
 // touched.
 import { afterEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   IDENTITY_FILE,
   accountDir,
+  accountProfileDir,
   readAccountMeta,
+  readIdentity,
   writeAccountMeta,
 } from "../lib/account-identity.mjs";
 import { SignInFlowError, createSignInFlow } from "../lib/signin-flow.mjs";
@@ -75,9 +77,14 @@ async function seedRetired(env, provider, key, { identity = { tag: "pinned" }, m
   return dir;
 }
 
-async function harness({ entries = {}, callback = async () => success() } = {}) {
+async function harness({
+  entries = {},
+  callback = async () => success(),
+  identityGenerator = async () => ({ tag: "must-not-be-called" }),
+} = {}) {
   const { dir, env } = await tempEnv();
   const calls = [];
+  const launched = { args: null };
   const client = {
     auth: {
       set: async (input) => {
@@ -91,12 +98,15 @@ async function harness({ entries = {}, callback = async () => success() } = {}) 
     readKeys: () => new Set(Object.keys(entries)),
     readEntries: () => entries,
     random: fixedRandom,
-    identityGenerator: async () => ({ tag: "must-not-be-called" }),
+    identityGenerator,
     loadProvider: async () => ({ methods: [browserMethod(callback)] }),
-    launchBrowser: async () => ({ pid: 1, close: async () => {} }),
+    launchBrowser: async (args) => {
+      launched.args = args;
+      return { pid: 1, close: async () => {} };
+    },
     resolveExecutable: async () => "/fake/browser",
   });
-  return { dir, env, calls, controller };
+  return { dir, env, calls, launched, controller };
 }
 
 test("a claimed identity keeps its key and its pin byte for byte", async () => {
@@ -209,4 +219,127 @@ test("the claim error is a SignInFlowError so the route can report its status", 
     .catch((caught) => caught);
   expect(error).toBeInstanceOf(SignInFlowError);
   expect(error.status).toBe(400);
+});
+
+// ---------------------------------------------------------------------------
+// Asking the same identity for a new machine.
+//
+// A claim reads the pin; a rotation replaces it. This is the only way a user
+// holding a live credential can get a second fingerprint, because the account
+// delete route refuses while magpie still holds that credential.
+// ---------------------------------------------------------------------------
+
+async function seedProfile(dir) {
+  const profile = accountProfileDir(dir);
+  await mkdir(profile, { recursive: true });
+  await writeFile(join(profile, "cookies.sqlite"), "the old session");
+  return profile;
+}
+
+test("a rotation draws a new pin for the same key and opens on a clean profile", async () => {
+  const { env, calls, launched, controller } = await harness({
+    identityGenerator: async () => ({ tag: "second-machine" }),
+  });
+  const key = "workbuddy#retired";
+  const dir = await seedRetired(env, "workbuddy", key, { identity: { tag: "first-machine" } });
+  const profile = await seedProfile(dir);
+  const before = readFileSync(join(dir, IDENTITY_FILE), "utf8");
+
+  const started = await controller.startSignIn({
+    provider: "workbuddy",
+    account: { key, rotate: true },
+  });
+  expect(started.key).toBe(key);
+
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.state).toBe("done");
+  expect(flow.claimed).toBe(true);
+  expect(flow.rotated).toBe(true);
+  expect(flow.identityCreated).toBe(true);
+  // Nothing was discarded: the rotation happened on the key the account
+  // already owns, so the write-back had no directory to move.
+  expect(flow.pinDiscarded).toBe(false);
+  expect(flow.accountKey).toBe(key);
+
+  // The pin on disk is the new one, and the browser really opened on it.
+  expect(readFileSync(join(dir, IDENTITY_FILE), "utf8")).not.toBe(before);
+  expect(await readIdentity(dir)).toEqual({ tag: "second-machine" });
+  expect(launched.args.identity).toEqual({ tag: "second-machine" });
+  expect(launched.args.profileDir).toBe(profile);
+  expect(existsSync(join(profile, "cookies.sqlite"))).toBe(false);
+
+  // The credential was refreshed onto the same account, not a second one.
+  expect(calls.map((call) => call.path.id)).toEqual([key]);
+  const meta = await readAccountMeta(dir);
+  expect(meta.accountId).toBe("me");
+  expect(meta.uid).toBe("u-1");
+});
+
+test("a claim without rotate still keeps the pin byte for byte", async () => {
+  const { env, controller } = await harness({
+    identityGenerator: async () => {
+      throw new Error("a plain claim must not draw");
+    },
+  });
+  const key = "workbuddy#retired";
+  const dir = await seedRetired(env, "workbuddy", key);
+  const before = readFileSync(join(dir, IDENTITY_FILE), "utf8");
+  await controller.startSignIn({ provider: "workbuddy", account: { key, rotate: false } });
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.rotated).toBe(false);
+  expect(flow.identityCreated).toBe(false);
+  expect(readFileSync(join(dir, IDENTITY_FILE), "utf8")).toBe(before);
+});
+
+test("a rotation without an account key is refused", async () => {
+  const { controller } = await harness();
+  // Without a key there is no account whose machine is being replaced; drawing
+  // twice into a provisional directory would only look like a rotation.
+  await expect(
+    controller.startSignIn({ provider: "workbuddy", account: { rotate: true } }),
+  ).rejects.toMatchObject({ code: "rotate_needs_account", status: 400 });
+  expect(controller.status()).toBeNull();
+});
+
+test("rotate on a key with no ledger is refused before anything is drawn", async () => {
+  const { controller } = await harness({
+    identityGenerator: async () => {
+      throw new Error("must not draw for an unproven key");
+    },
+  });
+  await expect(
+    controller.startSignIn({
+      provider: "workbuddy",
+      account: { key: "workbuddy#ghost", rotate: true },
+    }),
+  ).rejects.toMatchObject({ code: "retired_missing", status: 400 });
+  expect(controller.status()).toBeNull();
+});
+
+test("rotate on another provider's ledger is refused", async () => {
+  const { env, controller } = await harness();
+  const key = "workbuddy#foreign";
+  const dir = await seedRetired(env, "workbuddy", key, { meta: { provider: "someone-else" } });
+  const before = readFileSync(join(dir, IDENTITY_FILE), "utf8");
+  await expect(
+    controller.startSignIn({ provider: "workbuddy", account: { key, rotate: true } }),
+  ).rejects.toMatchObject({ code: "retired_missing", status: 400 });
+  expect(readFileSync(join(dir, IDENTITY_FILE), "utf8")).toBe(before);
+});
+
+test("only a boolean true asks for a rotation", async () => {
+  const { env, controller } = await harness({
+    identityGenerator: async () => {
+      throw new Error("a truthy non-boolean must not draw");
+    },
+  });
+  const key = "workbuddy#retired";
+  const dir = await seedRetired(env, "workbuddy", key);
+  const before = readFileSync(join(dir, IDENTITY_FILE), "utf8");
+  await controller.startSignIn({ provider: "workbuddy", account: { key, rotate: "yes" } });
+  await controller.whenSettled();
+  expect(controller.status().rotated).toBe(false);
+  expect(readFileSync(join(dir, IDENTITY_FILE), "utf8")).toBe(before);
 });

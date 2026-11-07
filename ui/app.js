@@ -173,8 +173,11 @@ const messages = {
     signInAccountKey: "Account key",
     signInAccountLabel: "Continue with an existing identity",
     signInAccountHint: "This identity keeps its own browser fingerprint. Continuing reuses it instead of drawing a new one.",
+    signInRotateHint: "A new browser fingerprint is drawn for this identity and its old profile is deleted. The account and its credential stay the same.",
     signInAccountNew: "New account (new fingerprint)",
     signInDone: "Signed in. The credential was written to magpie.",
+    signInDoneRotated: "Signed in on a new fingerprint. The credential was written to magpie.",
+    signInDoneKeptPin: "Signed in. This account already had a kept fingerprint, so that one was reused and the fingerprint drawn for this sign-in was discarded. To replace it, use “Renew fingerprint” on the account row.",
     signInCancelled: "The sign-in was cancelled.",
     signInBusy: "A sign-in is already in progress.",
     identitiesLastSignedIn: "Last signed in {time}",
@@ -369,6 +372,8 @@ const messages = {
     accountCheckExposure: "{count} places may expose you",
     accountRelogin: "Sign in again",
     accountReloginTitle: "Reuse this account's kept fingerprint instead of drawing a new one.",
+    accountRotate: "Renew fingerprint",
+    accountRotateTitle: "Sign this account in again on a new browser fingerprint. Its old profile is deleted; the account and its credential stay.",
     accountCheck: "Check",
     accountDetail: "Details",
     accountClear: "Clear identity",
@@ -554,8 +559,11 @@ const messages = {
     signInAccountKey: "账号键",
     signInAccountLabel: "沿用已有身份继续登录",
     signInAccountHint: "该身份保留自己的浏览器指纹。沿用时会重用该指纹，而不是重新生成。",
+    signInRotateHint: "将为这个身份生成新的浏览器指纹，并删除它旧的配置目录。账号与凭据本身不变。",
     signInAccountNew: "新账号（新的指纹）",
     signInDone: "登录完成，凭据已写入 magpie。",
+    signInDoneRotated: "登录完成，已换用新的指纹，凭据已写入 magpie。",
+    signInDoneKeptPin: "登录完成。该账号已有保留的指纹，因此沿用了旧指纹，本次新生成的指纹被丢弃。要真正更换，请在账号行点「更换指纹」。",
     signInCancelled: "登录已取消。",
     signInBusy: "已有登录正在进行。",
     identitiesLastSignedIn: "上次登录于 {time}",
@@ -749,6 +757,8 @@ const messages = {
     accountCheckExposure: "{count} 处可能暴露你",
     accountRelogin: "重新登录",
     accountReloginTitle: "沿用这个账号保留的指纹重新登录，不会生成新的身份。",
+    accountRotate: "更换指纹",
+    accountRotateTitle: "让这个账号以新的浏览器指纹重新登录。旧配置目录会被删除，账号与凭据保持不变。",
     accountCheck: "检测",
     accountDetail: "详情",
     accountClear: "清除身份",
@@ -934,8 +944,11 @@ const messages = {
     signInAccountKey: "帳號金鑰",
     signInAccountLabel: "沿用現有身分繼續登入",
     signInAccountHint: "這個身分保留自己的瀏覽器指紋。沿用時會重用該指紋，而不是重新產生。",
+    signInRotateHint: "將為這個身分產生新的瀏覽器指紋，並刪除它舊的設定檔。帳號與憑證本身不變。",
     signInAccountNew: "新帳號（新的指紋）",
     signInDone: "登入完成，憑證已寫入 magpie。",
+    signInDoneRotated: "登入完成，已換用新的指紋，憑證已寫入 magpie。",
+    signInDoneKeptPin: "登入完成。該帳號已有保留的指紋，因此沿用了舊指紋，本次新產生的指紋被捨棄。要真正更換，請在帳號列點「更換指紋」。",
     signInCancelled: "登入已取消。",
     signInBusy: "已有登入正在進行。",
     identitiesLastSignedIn: "上次登入於 {time}",
@@ -1129,6 +1142,8 @@ const messages = {
     accountCheckExposure: "{count} 處可能暴露你",
     accountRelogin: "重新登入",
     accountReloginTitle: "沿用這個帳號保留的指紋重新登入，不會產生新的身分。",
+    accountRotate: "更換指紋",
+    accountRotateTitle: "讓這個帳號以新的瀏覽器指紋重新登入。舊設定檔會被刪除，帳號與憑證保持不變。",
     accountCheck: "檢測",
     accountDetail: "詳情",
     accountClear: "清除身分",
@@ -1314,8 +1329,11 @@ const messages = {
     signInAccountKey: "アカウントキー",
     signInAccountLabel: "既存のIDでログインを継続",
     signInAccountHint: "このIDは独自のブラウザ指紋を保持します。継続すると新しい指紋ではなく同じ指紋が使われます。",
+    signInRotateHint: "このIDに新しいブラウザ指紋を生成し、古いプロファイルを削除します。アカウントと認証情報は変わりません。",
     signInAccountNew: "新しいアカウント（新しい指紋）",
     signInDone: "ログインが完了し、認証情報を magpie に書き込みました。",
+    signInDoneRotated: "新しい指紋でログインし、認証情報を magpie に書き込みました。",
+    signInDoneKeptPin: "ログインは完了しました。このアカウントには保持された指紋があったため、そちらを再利用し、今回生成した指紋は破棄されました。置き換えるにはアカウント行の「指紋を更新」を使ってください。",,
     signInCancelled: "ログインをキャンセルしました。",
     signInBusy: "すでにログインが進行中です。",
     identitiesLastSignedIn: "最終ログイン {time}",
@@ -1509,6 +1527,8 @@ const messages = {
     accountCheckExposure: "{count} 箇所で情報が漏れる可能性",
     accountRelogin: "再ログイン",
     accountReloginTitle: "このアカウントの保持された指紋を再利用し、新しい身分は生成しません。",
+    accountRotate: "指紋を更新",
+    accountRotateTitle: "このアカウントを新しいブラウザ指紋で再ログインします。古いプロファイルは削除され、アカウントと認証情報は残ります。",,
     accountCheck: "判定",
     accountDetail: "詳細",
     accountClear: "身分を消去",
@@ -3356,7 +3376,14 @@ function renderSignIn() {
   statusState.textContent = signInStateLabel(state);
 
   if (state === "done") {
-    statusDetail.textContent = text.signInDone;
+    // Three different outcomes, and the user asked for one of them. Saying
+    // "signed in" for all three is how a discarded fingerprint used to look
+    // exactly like a renewed one.
+    statusDetail.textContent = flow?.rotated
+      ? text.signInDoneRotated
+      : flow?.pinDiscarded
+        ? text.signInDoneKeptPin
+        : text.signInDone;
     statusDetail.hidden = false;
   } else if (state === "error") {
     statusDetail.textContent = serverErrorText(flow?.error);
@@ -3655,6 +3682,7 @@ function renderSignInAccounts(provider) {
   const options = retiredAccounts(accountIdentities, provider);
   const previous = select.value;
   select.textContent = "";
+  select.disabled = false;
   // The picker only appears when there is a real choice to make.
   if (!options.length) {
     field.hidden = true;
@@ -3684,7 +3712,14 @@ function renderSignInAccounts(provider) {
     : defaultAccountKey(accountIdentities, provider);
   field.hidden = false;
   hint.hidden = false;
-  hint.textContent = text.signInAccountHint;
+  hint.textContent = signInIdentityHint();
+}
+
+// Continuing an identity reuses its machine; renewing one replaces it. The
+// hint has to say which of the two this dialog is about to do, because the
+// difference is the whole point of the choice.
+function signInIdentityHint() {
+  return signInContext?.rotate === true ? text.signInRotateHint : text.signInAccountHint;
 }
 
 // The identity the user picked, or null for a fresh account.
@@ -3718,6 +3753,11 @@ function openSignInDialog(provider, options = {}) {
     card: provider,
     name: provider.name || provider.signInProvider,
     preselectAccountKey: typeof options.accountKey === "string" ? options.accountKey : "",
+    // The account row's "renew fingerprint" action asks for a new machine for
+    // an identity that is still signed in -- the one case where no door
+    // existed, because clearing an identity is refused while magpie holds the
+    // credential.
+    rotate: options.rotate === true,
     flow: null,
     busy: false,
   };
@@ -3761,9 +3801,14 @@ function renderSignInPreselection() {
     select.append(option);
   }
   select.value = key;
+  // A renewal is about THIS account. Letting the picker fall back to "new
+  // account" would send no key at all, and the service would rightly drop the
+  // rotation -- leaving a dialog that promised a new machine for an identity
+  // it is no longer signing in to.
+  select.disabled = signInContext?.rotate === true;
   field.hidden = false;
   hint.hidden = false;
-  hint.textContent = text.signInAccountHint;
+  hint.textContent = signInIdentityHint();
 }
 
 // A provider magpie signs in itself (a built-in such as Antigravity) has no
@@ -3824,6 +3869,7 @@ async function startSignIn() {
             selectedSignInMethod(),
             selectedSignInAccount(),
             selectedSignInInputs(),
+            context.rotate === true,
           ),
         });
     if (signInContext !== context) return;
@@ -4934,6 +4980,17 @@ function accountRow(account) {
     relogin.className = "mini-button primary";
     relogin.title = text.accountReloginTitle;
     actions.append(relogin);
+  }
+  if (view.signedIn) {
+    // A signed-in account cannot use "clear identity" -- the service refuses
+    // while magpie holds the credential -- so before this it had no way to ask
+    // for a new machine at all. Renewing signs the same account in again on a
+    // freshly drawn pin, in place, so the write-back has nothing to reconcile.
+    const rotate = miniButton(text.accountRotate, () => {
+      openSignInDialog(view.provider, { accountKey: view.key, rotate: true });
+    });
+    rotate.title = text.accountRotateTitle;
+    actions.append(rotate);
   }
   const checkButton = miniButton(text.accountCheck, () => openAccountCheck(account));
   checkButton.disabled = busy;

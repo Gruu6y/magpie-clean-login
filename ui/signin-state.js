@@ -172,13 +172,21 @@ export function signInInputs(values) {
   }
   return Object.keys(inputs).length > 0 ? inputs : null;
 }
-export function signInPayload(provider, proxy, methodLabel = null, account = null, inputs = null) {
+export function signInPayload(
+  provider,
+  proxy,
+  methodLabel = null,
+  account = null,
+  inputs = null,
+  rotate = false,
+) {
   const payload = { provider: String(provider || ""), proxy: signInProxy(proxy) };
   const label = signInMethodLabel(methodLabel);
   if (label) payload.methodLabel = label;
-  // An existing identity to continue. Only the account key travels; the
-  // service looks the directory up and verifies its ledger.
-  const claim = signInAccount(account);
+  // An existing identity to continue, optionally on a new fingerprint. Only the
+  // account key and that one boolean travel; the service looks the directory up
+  // and verifies its ledger.
+  const claim = signInAccount(account, rotate);
   if (claim) payload.account = claim;
   // The answers the chosen method asked for (a team's site, an enterprise VPC
   // instance or domain, a Personal Access Token). They travel once, with the
