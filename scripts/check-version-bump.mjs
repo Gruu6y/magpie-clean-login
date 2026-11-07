@@ -6,7 +6,7 @@
 // It also rejects a version that is *lower* than the base: a branch cut before
 // main moved on can declare 0.1.63 while main is already at 0.1.68, and
 // "0.1.63 != 0.1.68" used to pass here while silently downgrading what users
-// are offered.
+// are offered. Equal to main is rejected too -- that number is already released.
 //
 //   node scripts/check-version-bump.mjs [--base <git-ref>]
 //
@@ -187,6 +187,24 @@ if (current !== forkVersion) {
       "This branch was opened before main reached its current version. Rebase onto the " +
         "current main and bump package.json to a version strictly greater than it. " +
         "A version that is merely different from the fork point is not an update.",
+    );
+    process.exit(1);
+  }
+  // Equality is its own failure, not a smaller version of the one above. A
+  // number main already released has been seen by magpie: merging this branch
+  // would leave users on it with no update at all, and the release script would
+  // then refuse to tag v${current} a second time. That is the shape four real
+  // branches hit -- each declared the next patch from its own fork point, while
+  // main had already shipped it. "Greater than main", not "different from the
+  // fork", is the rule that catches it.
+  if (order === 0) {
+    console.error(
+      `[version-check] FAIL: main has already released ${current}; this branch declares the ` +
+        "same version, so merging it would ship nothing to anyone already on it.",
+    );
+    console.error(
+      "Rebase onto the current main and declare a version strictly greater than it, e.g. " +
+        `the next patch after ${mainVersion}.`,
     );
     process.exit(1);
   }
