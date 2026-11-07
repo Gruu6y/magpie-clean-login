@@ -72,6 +72,15 @@ const proxyTester = async (_proxy, options) => {
       checkedAt: "2026-11-08T01:00:00.000Z",
     };
   }
+  if (probeOutcome === "exit-fail") {
+    return {
+      ok: false,
+      error: "The test endpoint could not be reached through this proxy.",
+      errorCode: "proxy_tunnel",
+      latency: null,
+      checkedAt: "2026-11-08T01:00:00.000Z",
+    };
+  }
   return {
     ok: true,
     exitIp: "203.0.113.20",
@@ -279,5 +288,45 @@ test("a failed provider leg keeps the row's exit IP and region", async () => {
   // failed: the exit lookup still succeeded and returned the same address.
   expect(failed.data.proxy.exitIp).toBe("203.0.113.20");
   expect(failed.data.proxy.region).toBe("Proxyland");
+  probeOutcome = "ok";
+});
+
+test("a failed exit leg never writes the provider round trip into the row", async () => {
+  calls = [];
+  probeOutcome = "exit-fail";
+  const created = await newProxy();
+  const response = await post(`/api/proxies/${encodeURIComponent(created.id)}/test`, {
+    provider: "qoder-cn",
+  });
+  expect(response.status).toBe(200);
+  // The provider leg answered, so the card is usable and the provider number
+  // is recorded against that provider.
+  expect(response.data.ok).toBe(true);
+  expect(response.data.result.latency).toBe(233);
+  expect(response.data.result.exitLatency).toBeNull();
+  expect(response.data.result.exitIp).toBe("");
+  // The row's own `latency` keeps its historical meaning: it is the exit
+  // measurement, and this test produced none. Borrowing 233 would show a
+  // provider number as the exit number the moment the picker goes back to
+  // Generic.
+  expect(response.data.proxy.latency).toBeNull();
+  expect(response.data.proxy.latencyByProvider["qoder-cn"].ms).toBe(233);
+  probeOutcome = "ok";
+});
+
+test("a fresh proxy keeps the exit IP when only the provider leg fails", async () => {
+  calls = [];
+  probeOutcome = "fail";
+  const created = await newProxy();
+  const response = await post(`/api/proxies/${encodeURIComponent(created.id)}/test`, {
+    provider: "qoder-cn",
+  });
+  expect(response.status).toBe(200);
+  expect(response.data.ok).toBe(false);
+  expect(response.data.proxy.status).toBe("error");
+  // The exit leg succeeded on a row that had no exit IP yet. That answer is
+  // still worth keeping, even though the provider leg is the one that failed.
+  expect(response.data.proxy.exitIp).toBe("203.0.113.20");
+  expect(response.data.proxy.region).toBe("Proxyland");
   probeOutcome = "ok";
 });

@@ -3187,10 +3187,18 @@ async function refreshSignInProxies() {
             current.status = data.result.ok ? "ok" : "error";
             // Keep the row's generic number intact when this was a two-leg
             // probe; the provider number already went into latencyByProvider.
-            const stored = data.result.target?.kind === "provider" && Number.isFinite(data.result.exitLatency)
-              ? data.result.exitLatency
+            // A two-leg probe whose exit leg failed has no exit number, so it
+            // keeps what the row already showed instead of borrowing the
+            // provider's round trip.
+            const providerLeg = data.result.target?.kind === "provider";
+            const stored = providerLeg
+              ? (Number.isFinite(data.result.exitLatency) ? data.result.exitLatency : null)
               : data.result.latency;
-            current.latency = Number.isFinite(stored) ? Math.round(stored) : null;
+            current.latency = Number.isFinite(stored)
+              ? Math.round(stored)
+              : providerLeg && Number.isFinite(current.latency)
+                ? current.latency
+                : null;
             current.errorCode = data.result.ok ? "" : data.result.errorCode || "unknown";
             current.error = data.result.ok ? "" : data.result.error || "";
           }

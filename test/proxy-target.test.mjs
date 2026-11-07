@@ -56,6 +56,37 @@ test("parseApiOrigin accepts only credential-free https origins", () => {
   expect(parseApiOrigin(42)).toBeNull();
 });
 
+test("parseApiOrigin refuses loopback, link-local and private hosts", () => {
+  // A provider's API is a public origin. Anything that would make the proxy
+  // tunnel to this machine, a link-local address or a private network is
+  // dropped instead of being offered as a clickable target.
+  for (const value of [
+    "https://localhost",
+    "https://api.localhost",
+    "https://127.0.0.1",
+    "https://127.0.0.1:8443",
+    "https://127.9.9.9",
+    "https://0.0.0.0",
+    "https://10.0.0.5",
+    "https://172.16.0.1",
+    "https://172.31.255.255",
+    "https://192.168.1.1",
+    "https://169.254.169.254",
+    "https://[::1]",
+    "https://[fe80::1]",
+    "https://[fd00::1]",
+  ]) {
+    expect(parseApiOrigin(value)).toBeNull();
+  }
+  // Public addresses next door to those ranges stay usable.
+  expect(parseApiOrigin("https://172.32.0.1").host).toBe("172.32.0.1");
+  expect(parseApiOrigin("https://172.15.0.1").host).toBe("172.15.0.1");
+  expect(parseApiOrigin("https://169.253.0.1").host).toBe("169.253.0.1");
+  // A hostname that merely starts with the same letters is not an IPv6 literal.
+  expect(parseApiOrigin("https://fc2.com").host).toBe("fc2.com");
+  expect(parseApiOrigin("https://fdic.example.com").host).toBe("fdic.example.com");
+});
+
 test("providerTargets offers only distinct ids with a usable API host", () => {
   expect(providerTargets(PROVIDERS)).toEqual([
     { id: "qoder", name: "Qoder", host: "api3.qoder.sh", url: "https://api3.qoder.sh/" },
