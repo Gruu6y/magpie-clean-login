@@ -699,7 +699,18 @@ main { flex: 1; }
 .provider-method-note { width: 100%; margin: 0; color: var(--faint); font-size: 11px; }.provider-source-line { margin: 0; color: var(--faint); font: 500 10px/1.5 var(--mono); letter-spacing: 0.04em; }
 .provider-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 2px; }
 .provider-add { flex: 1 1 auto; }
+.provider-install { flex: 1 1 auto; }
 .provider-report { flex: 0 0 auto; }
+/* The install result stays on its own line under the buttons: the card keeps
+   its height while a child installs, and a failure is still readable after the
+   cards are merged again. */
+.provider-install-note {
+  margin: 6px 0 0;
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 
 .report-card-line { margin: 0; color: var(--muted); font-size: 13px; }
 .report-draft {

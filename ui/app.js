@@ -116,6 +116,10 @@ const messages = {
     providerPluginsFailed: "Installed plugin scan failed: {error}",
     providerPluginsScanTimedOut: "The installed-plugin scan is still running. Reload the page to see its result.",
     addAccount: "Add account",
+    installPlugin: "Install plugin",
+    installingPlugin: "Installing…",
+    installPluginFailed: "Install failed",
+    installPluginTimeout: "The install did not finish in time. Try again, or report the problem.",
     providerOriginPlugin: "Plugin",
     providerOriginMagpie: "magpie built-in",
     providerOriginCatalog: "Not installed",
@@ -490,6 +494,10 @@ const messages = {
     providerPluginsFailed: "已安装插件扫描失败：{error}",
     providerPluginsScanTimedOut: "已安装插件扫描仍在进行。刷新页面以查看结果。",
     addAccount: "添加账号",
+    installPlugin: "安装插件",
+    installingPlugin: "安装中…",
+    installPluginFailed: "安装失败",
+    installPluginTimeout: "安装未在预期时间内完成。可以再试一次，或把问题报告给我们。",
     providerOriginPlugin: "第三方插件",
     providerOriginMagpie: "magpie 自带",
     providerOriginCatalog: "未安装",
@@ -863,6 +871,10 @@ const messages = {
     providerPluginsFailed: "已安裝外掛掃描失敗：{error}",
     providerPluginsScanTimedOut: "已安裝外掛掃描仍在進行。重新整理頁面以查看結果。",
     addAccount: "新增帳號",
+    installPlugin: "安裝外掛",
+    installingPlugin: "安裝中…",
+    installPluginFailed: "安裝失敗",
+    installPluginTimeout: "安裝未在預期時間內完成。可以再試一次，或將問題回報給我們。",
     providerOriginPlugin: "第三方外掛",
     providerOriginMagpie: "magpie 自帶",
     providerOriginCatalog: "未安裝",
@@ -1236,6 +1248,10 @@ const messages = {
     providerPluginsFailed: "インストール済みプラグインのスキャンに失敗しました：{error}",
     providerPluginsScanTimedOut: "インストール済みプラグインのスキャンはまだ実行中です。ページを再読み込みすると結果が表示されます。",
     addAccount: "アカウントを追加",
+    installPlugin: "プラグインをインストール",
+    installingPlugin: "インストール中…",
+    installPluginFailed: "インストール失敗",
+    installPluginTimeout: "指定した時間内にインストールが終わりませんでした。もう一度試すか、問題を報告してください。",
     providerOriginPlugin: "プラグイン",
     providerOriginMagpie: "magpie 内蔵",
     providerOriginCatalog: "未インストール",
@@ -2796,6 +2812,22 @@ function providerCard(provider) {
     add.addEventListener("click", () => openSignInDialog(provider));
     actions.append(add);
   }
+  // A market card is the one place this page can turn "not installed" into a
+  // real control: the service runs magpie's own `plugin add` for the package
+  // the market lists. The click is the user's decision, the package name comes
+  // from magpie's market file, and the service re-checks both.
+  const installPackage = marketInstallPackage(provider);
+  if (installPackage) {
+    const install = document.createElement("button");
+    install.type = "button";
+    install.className = "button primary provider-install";
+    install.dataset.pluginPackage = installPackage;
+    install.textContent = text.installPlugin;
+    install.addEventListener("click", () => {
+      runMarketInstall(installPackage);
+    });
+    actions.append(install);
+  }
   // Reporting is offered on every card, including the ones that offer no way in
   // at all: a card with nothing to click is exactly the one worth reporting.
   const report = document.createElement("button");
@@ -2806,8 +2838,163 @@ function providerCard(provider) {
   report.addEventListener("click", () => openReportDialog(provider));
   actions.append(report);
   card.append(actions);
+  if (installPackage) {
+    const installNote = document.createElement("p");
+    installNote.className = "provider-install-note";
+    installNote.hidden = true;
+    card.append(installNote);
+  }
 
   return card;
+}
+
+// --- installing a plugin magpie's market lists ----------------------------
+//
+// The page cannot install anything: magpie's own API answers only magpie's
+// window, and a plugin page runs in a sandbox with `connect-src 'none'`. The
+// local service can, and magpie ships a supported command for it, so the
+// button means exactly `magpie plugin add <package>` — the same thing the user
+// could type, with the market's own package name and nothing else.
+//
+// The install is watched, not awaited. A successful add restarts the plugin
+// host, which is what serves this very page, so the child is detached and the
+// page asks the service for its state on a timer. When the package shows up in
+// magpie's registry the cards are merged again with a forced plugin scan: the
+// card stops being a market entry and becomes a normal one with its methods and
+// its add-account button.
+
+const MARKET_INSTALL_POLL_MS = 1_500;
+// magpie gives one install five minutes; the page stops waiting a little after
+// that and says so rather than spinning forever on a child it cannot see.
+const MARKET_INSTALL_WAIT_MS = 6 * 60 * 1_000;
+let marketInstallTimer = 0;
+
+function marketInstallPackage(provider) {
+  return provider && provider.presence === "catalog" ? provider.pluginPackage || "" : "";
+}
+
+// Cards are rebuilt on every merge, so controls are always looked up live by
+// their package name instead of held in a variable a re-render detached.
+function marketInstallControls(pkg) {
+  for (const button of document.querySelectorAll(".provider-install")) {
+    if (button.dataset.pluginPackage !== pkg) continue;
+    const card = button.closest(".provider-card");
+    return { button, note: card ? card.querySelector(".provider-install-note") : null };
+  }
+  return null;
+}
+
+function setMarketInstalling(pkg) {
+  const controls = marketInstallControls(pkg);
+  if (!controls) return;
+  controls.button.disabled = true;
+  controls.button.textContent = text.installingPlugin;
+  if (controls.note) {
+    controls.note.hidden = true;
+    controls.note.textContent = "";
+  }
+}
+
+function setMarketInstallFailure(pkg, message) {
+  const controls = marketInstallControls(pkg);
+  if (!controls) return;
+  controls.button.disabled = false;
+  controls.button.textContent = text.installPlugin;
+  if (controls.note) {
+    controls.note.textContent = message || text.installPluginFailed;
+    controls.note.hidden = false;
+  }
+}
+
+function marketInstallFailureText(state) {
+  const detail = String(state?.logTail || state?.reason || "").trim();
+  return detail ? `${text.installPluginFailed}: ${detail}` : text.installPluginFailed;
+}
+
+function stopMarketInstallPoll() {
+  if (marketInstallTimer) window.clearTimeout(marketInstallTimer);
+  marketInstallTimer = 0;
+}
+
+async function runMarketInstall(pkg) {
+  setMarketInstalling(pkg);
+  let install = null;
+  try {
+    const data = await api("api/market/install", { method: "POST", body: { package: pkg } });
+    install = data?.install || null;
+  } catch (error) {
+    setMarketInstallFailure(pkg, serverErrorText(error));
+    return;
+  }
+  if (install && install.state === "failed") {
+    setMarketInstallFailure(pkg, marketInstallFailureText(install));
+    return;
+  }
+  if (install && install.state === "done") {
+    await refreshAfterMarketInstall();
+    return;
+  }
+  pollMarketInstall(pkg, Date.now());
+}
+
+function pollMarketInstall(pkg, startedAt) {
+  stopMarketInstallPoll();
+  marketInstallTimer = window.setTimeout(async () => {
+    marketInstallTimer = 0;
+    let install = null;
+    try {
+      const data = await api("api/market/install");
+      install = data?.install || null;
+    } catch {
+      install = null;
+    }
+    // The service no longer reports this package (it installed something else,
+    // or it restarted): re-reading the cards is the honest answer either way.
+    if (!install || install.package !== pkg) {
+      await refreshAfterMarketInstall();
+      return;
+    }
+    if (install.state === "done") {
+      await refreshAfterMarketInstall();
+      return;
+    }
+    if (install.state === "failed") {
+      setMarketInstallFailure(pkg, marketInstallFailureText(install));
+      return;
+    }
+    if (Date.now() - startedAt > MARKET_INSTALL_WAIT_MS) {
+      setMarketInstallFailure(pkg, text.installPluginTimeout);
+      return;
+    }
+    pollMarketInstall(pkg, startedAt);
+  }, MARKET_INSTALL_POLL_MS);
+}
+
+async function refreshAfterMarketInstall() {
+  stopMarketInstallPoll();
+  try {
+    const merged = await api("api/provider-sources", {
+      method: "POST",
+      // The plugin scan cache may be a minute old and the click just changed
+      // what is on disk; ask for a fresh scan instead of waiting it out.
+      body: { magpie: magpiePayloadFromHash(), refresh: true },
+    });
+    if (merged && merged.providerSources) {
+      const view = {
+        ...merged.providerSources,
+        plugins: { ...(merged.providerSources.plugins || {}), ...(merged.pluginScan || {}) },
+      };
+      applyProviderSources(view);
+      // The scan usually answers while still running; this is the same bounded
+      // follow-up the page uses after its own first read.
+      startPluginScanPolling();
+      loadProxyTargets();
+      return;
+    }
+  } catch {
+    // fall through to a full reload below
+  }
+  await load();
 }
 
 // --- reporting a card ------------------------------------------------------
