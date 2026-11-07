@@ -8,6 +8,8 @@ const html = readFileSync(join(root, "ui", "index.html"), "utf8");
 const css = readFileSync(join(root, "ui", "style.css"), "utf8");
 const app = readFileSync(join(root, "ui", "app.js"), "utf8");
 
+const LANGS = ["en", "zh-Hans", "zh-Hant", "ja"];
+
 describe("the user guide tab and in-page manual", () => {
   test("static files exist and the module ships in the package", () => {
     expect(existsSync(join(root, "ui", "guide-content.js"))).toBe(true);
@@ -53,11 +55,11 @@ describe("the user guide tab and in-page manual", () => {
     const langs = ["en", "zh-Hans", "zh-Hant", "ja"];
     expect(Object.keys(GUIDE).sort()).toEqual([...langs].sort());
 
-    const expectedNumbers = ["01", "02", "03", "04", "05", "06", "07", "08"];
+    const expectedNumbers = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"];
 
     for (const lang of langs) {
       const sections = GUIDE[lang];
-      expect(sections.length).toBe(8);
+      expect(sections.length).toBe(10);
       expect(sections.map((s) => s.n)).toEqual(expectedNumbers);
 
       for (const section of sections) {
@@ -107,16 +109,63 @@ describe("the user guide tab and in-page manual", () => {
     };
 
     for (const [lang, want] of Object.entries(verbatim)) {
-      const section = GUIDE[lang].find((s) => s.n === "06");
+      const section = GUIDE[lang].find((s) => s.n === "07");
       const note = section.blocks.find((b) => b.t === "note");
       expect(note?.text).toBe(want);
 
-      // Section 03 explicitly names Claude Trust Score and ip.net.coffee.
-      const proxySection = GUIDE[lang].find((s) => s.n === "03");
+      // Section 04 explicitly names Claude Trust Score and ip.net.coffee.
+      const proxySection = GUIDE[lang].find((s) => s.n === "04");
       const proxyNote = proxySection.blocks.find((b) => b.t === "note");
       expect(proxyNote?.text).toContain("ip.net.coffee");
       expect(proxyNote?.text).toContain("Claude Trust Score");
     }
+  });
+
+  test("section 01 states why the plugin exists and keeps its boundary", () => {
+    // The reason the plugin exists at all: magpie does not hide multi-account
+    // use, so a provider can link accounts through sign-in and renewal. The
+    // manual says that plainly and then says what the plugin will not do.
+    const boundary = {
+      en: ["one account, one fingerprint, one exit", "does not bypass verification", "does not register accounts"],
+      "zh-Hans": ["一个账号、一个指纹、一个出口", "不绕过任何验证", "不替你注册账号"],
+      "zh-Hant": ["一個帳號、一個指紋、一個出口", "不繞過任何驗證", "不替你註冊帳號"],
+      ja: ["1 アカウント = 1 指紋 = 1 出口", "認証の回避も", "アカウントの登録も行いません"],
+    };
+
+    for (const [lang, phrases] of Object.entries(boundary)) {
+      const section = GUIDE[lang].find((s) => s.n === "01");
+      expect(section).toBeDefined();
+      expect(section.lead).toContain("magpie");
+      const prose = [section.lead, ...section.blocks.flatMap((b) => (b.t === "terms" ? b.items.map((i) => `${i.k}${i.v}`) : b.items || b.text || ""))].join("\n");
+      for (const phrase of phrases) {
+        expect(prose).toContain(phrase);
+      }
+    }
+  });
+
+  test("section 08 points a stuck beginner at the shipped command line", () => {
+    for (const lang of Object.keys(GUIDE)) {
+      const section = GUIDE[lang].find((s) => s.n === "08");
+      expect(section).toBeDefined();
+      const prose = [section.lead, ...section.blocks.flatMap((b) => b.items || b.text || "")].join("\n");
+      // The real entry point, not a promise of one.
+      expect(prose).toContain("clean-login.mjs");
+      expect(prose).toContain("--wait");
+      expect(prose.toLowerCase()).toContain("agent");
+    }
+  });
+
+  test("the guide intro counts the sections it actually renders", () => {
+    // A number in the intro is a claim about the manual. It went stale once
+    // when sections were added, so the count is derived from GUIDE, not typed.
+    const spoken = { en: ["ten", 10], "zh-Hans": ["十节", 10], "zh-Hant": ["十節", 10], ja: ["10 項目", 10] };
+    const copies = [...app.matchAll(/guideCopy: "([^"]+)"/g)].map((m) => m[1]);
+    expect(copies.length).toBe(4);
+    LANGS.forEach((lang, index) => {
+      const [word, number] = spoken[lang];
+      expect(GUIDE[lang].length).toBe(number);
+      expect(copies[index]).toContain(word);
+    });
   });
 
   test("hosts in the manual are written without schemes to stay safe in a sandboxed page", () => {

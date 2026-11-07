@@ -22,6 +22,19 @@
 const en = [
   {
     n: "01",
+    title: "Why this plugin exists",
+    lead: "magpie's maintainers do not want to fight providers, so nothing in magpie hides the fact that one machine signs into many accounts. Without this plugin, the flows that touch a provider most often — signing in, renewing a credential — hand that provider everything it needs to link them.",
+    blocks: [
+      { t: "ul", items: [
+        "An ordinary sign-in runs from one browser profile: one canvas hash, one font list, one WebGL renderer, one exit IP.",
+        "Renewals repeat the pattern. Every token refresh comes out of the same fingerprint, so the provider's risk system sees one household rather than separate customers.",
+        "Clean Login puts each sign-in into its own isolated browser, pins the fingerprint to that account, and sends the request out through the exit you chose for it.",
+      ] },
+      { t: "note", text: "That is the whole idea: one account, one fingerprint, one exit. What a provider then does with its own service is still its decision — this plugin does not bypass verification, and it does not register accounts for you." },
+    ],
+  },
+  {
+    n: "02",
     title: "What this plugin does",
     lead: "Clean Login moves signing in into its own isolated browser: every account keeps one fixed browser fingerprint, you choose the exit it signs in through, and the credentials are written straight into magpie when you are done.",
     blocks: [
@@ -34,7 +47,7 @@ const en = [
     ],
   },
   {
-    n: "02",
+    n: "03",
     title: "First run: prepare the login browser",
     lead: "Signing in never uses your everyday browser. Before the first sign-in, open the Providers tab and press Prepare browser once on the Login browser setup card at the top.",
     blocks: [
@@ -47,7 +60,7 @@ const en = [
     ],
   },
   {
-    n: "03",
+    n: "04",
     title: "Add a proxy IP (only if you want a different exit)",
     lead: "If an account should sign in from a particular network exit, add that exit on the Proxy IPs tab first. If you do not need one, skip this step and pick No proxy (direct) when signing in.",
     blocks: [
@@ -69,7 +82,7 @@ const en = [
     ],
   },
   {
-    n: "04",
+    n: "05",
     title: "Sign in to a provider",
     lead: "Back on the Providers tab, find the service you want and press Add account on its card.",
     blocks: [
@@ -89,7 +102,7 @@ const en = [
     ],
   },
   {
-    n: "05",
+    n: "06",
     title: "Reading the Accounts tab: one account, one fingerprint",
     lead: "Accounts you signed in appear on the Accounts tab. Each one keeps a fixed browser fingerprint tied to its own profile directory.",
     blocks: [
@@ -103,7 +116,7 @@ const en = [
     ],
   },
   {
-    n: "06",
+    n: "07",
     title: "Is this identity clean? Run an identity check",
     lead: "Press Check on an account row. Clean Login opens the third-party site who.1ms.dog using that account's own fingerprint and reads the site's verdict back.",
     blocks: [
@@ -127,7 +140,20 @@ const en = [
     ],
   },
   {
-    n: "07",
+    n: "08",
+    title: "Not sure how to start? Ask your agent",
+    lead: "This is not only a web page. The plugin ships a command line and an agent endpoint, so an agent you already talk to can drive it for you.",
+    blocks: [
+      { t: "ol", items: [
+        "Say what you want in plain words — for example: use the clean-login command line to see which providers can sign in, then sign one account in through a home proxy.",
+        "Your agent runs bun bin/clean-login.mjs agent for a one-call summary of the whole service, or providers, proxies and accounts to look at a single view. help lists every command.",
+        "Slow jobs take a --wait flag, so the agent gets a finished answer instead of sitting in a polling loop.",
+      ] },
+      { t: "note", text: "The agent endpoint is local and uses the same page token the browser uses. It never prints credentials, and it can only read what your own machine can already read." },
+    ],
+  },
+  {
+    n: "09",
     title: "When something gets stuck",
     blocks: [
       { t: "terms", items: [
@@ -142,7 +168,7 @@ const en = [
     ],
   },
   {
-    n: "08",
+    n: "10",
     title: "Where your data lives",
     blocks: [
       { t: "ul", items: [
@@ -158,6 +184,19 @@ const en = [
 const zhHans = [
   {
     n: "01",
+    title: "为什么要开发这个插件",
+    lead: "magpie 的维护者不愿意和供应商对着干，所以 magpie 里没有任何东西会去遮掩「同一台机器登录了很多账号」。不用本插件，那些最常接触供应商的流程——登录、凭据续期——等于把关联线索直接交给供应商。",
+    blocks: [
+      { t: "ul", items: [
+        "普通登录用的是同一个浏览器配置：同一个 canvas 指纹、同一套字体、同一个显卡渲染器、同一个出口 IP。",
+        "续期也是同样的套路。每个账号的令牌都从同一个指纹刷出来，供应商的风控看到的是同一台机器上的一家人，而不是各自独立的客户。",
+        "干净登录把每一次登录都关进独立的隔离浏览器，指纹按账号固定，请求走你为它选好的那个出口。",
+      ] },
+      { t: "note", text: "诀窍就是这么一件事：一个账号、一个指纹、一个出口。供应商怎么用它的服务仍然由它决定——本插件不绕过任何验证，也不替你注册账号。" },
+    ],
+  },
+  {
+    n: "02",
     title: "这个插件帮你做什么",
     lead: "干净登录把「登录」这件事单独关进一个隔离浏览器里：每个账号有自己固定的浏览器指纹，登录走哪个出口由你指定，登录完成后凭据直接写进 magpie。",
     blocks: [
@@ -170,7 +209,7 @@ const zhHans = [
     ],
   },
   {
-    n: "02",
+    n: "03",
     title: "第一次使用：先准备登录浏览器",
     lead: "登录不会用你日常那个浏览器。第一次登录前，打开「供应商」页，在顶部的「登录浏览器设置」卡片上点一次「准备浏览器」。",
     blocks: [
@@ -183,7 +222,7 @@ const zhHans = [
     ],
   },
   {
-    n: "03",
+    n: "04",
     title: "加一个代理 IP（想换出口时才需要）",
     lead: "如果你希望某个账号从指定的网络出口登录，先在「代理 IP」页把这条出口加进来。不需要换出口的话可以跳过这一步，登录时选「不使用代理（直连）」。",
     blocks: [
@@ -205,7 +244,7 @@ const zhHans = [
     ],
   },
   {
-    n: "04",
+    n: "05",
     title: "给供应商添加账号",
     lead: "回到「供应商」页，找到你要登录的服务，点卡片上的「添加账号」。",
     blocks: [
@@ -225,7 +264,7 @@ const zhHans = [
     ],
   },
   {
-    n: "05",
+    n: "06",
     title: "看懂「账号」页：一个账号，一个指纹",
     lead: "登录成功的账号会出现在「账号」页。每个账号都保留一个固定的浏览器指纹，和它自己的配置目录绑在一起。",
     blocks: [
@@ -239,7 +278,7 @@ const zhHans = [
     ],
   },
   {
-    n: "06",
+    n: "07",
     title: "这个身份干不干净？做一次身份检测",
     lead: "在账号那一行点「检测」。干净登录会用这个账号自己的指纹打开第三方站点 who.1ms.dog，把站点的判定读回来。",
     blocks: [
@@ -263,7 +302,20 @@ const zhHans = [
     ],
   },
   {
-    n: "07",
+    n: "08",
+    title: "不会用？没关系，问你的 agent",
+    lead: "这个插件不只是一个网页。它自带命令行和 agent 接口，你平时已经在对话的那个 agent 可以直接替你操作。",
+    blocks: [
+      { t: "ol", items: [
+        "用大白话告诉你的 agent 想干什么，比如：用 clean-login 的命令行看看哪些供应商能登录，再挑一个账号走家宽代理登进去。",
+        "它会跑 bun bin/clean-login.mjs agent 一次拿到整个服务的摘要，或者用 providers、proxies、accounts 只看其中一面，全部命令看 help。",
+        "耗时的任务带 --wait，agent 拿到的是跑完的结果，不是一串轮询。",
+      ] },
+      { t: "note", text: "agent 接口在本机，用的还是页面那一份 token。它不会打印任何凭据，也只能读你这台机器本来就读得到的东西。" },
+    ],
+  },
+  {
+    n: "09",
     title: "卡住了怎么办",
     blocks: [
       { t: "terms", items: [
@@ -278,7 +330,7 @@ const zhHans = [
     ],
   },
   {
-    n: "08",
+    n: "10",
     title: "你的数据放在哪里",
     blocks: [
       { t: "ul", items: [
@@ -294,6 +346,19 @@ const zhHans = [
 const zhHant = [
   {
     n: "01",
+    title: "為什麼要開發這個外掛",
+    lead: "magpie 的維護者不願意和供應商對著幹，所以 magpie 裡沒有任何東西會去遮掩「同一台機器登入了很多帳號」。不用本外掛，那些最常接觸供應商的流程——登入、憑證續期——等於把關聯線索直接交給供應商。",
+    blocks: [
+      { t: "ul", items: [
+        "一般登入用的是同一個瀏覽器設定：同一個 canvas 指紋、同一套字型、同一個 WebGL 轉譯器、同一個出口 IP。",
+        "續期也是同樣的套路。每個帳號的權杖都從同一個指紋刷出來，供應商的風控看到的是同一台機器上的一家人，而不是各自獨立的客戶。",
+        "乾淨登入把每一次登入都關進獨立的隔離瀏覽器，指紋依帳號固定，請求走你為它選好的那個出口。",
+      ] },
+      { t: "note", text: "訣竅就是這麼一件事：一個帳號、一個指紋、一個出口。供應商怎麼用它自己的服務仍然由它決定——本外掛不繞過任何驗證，也不替你註冊帳號。" },
+    ],
+  },
+  {
+    n: "02",
     title: "這個外掛幫你做什麼",
     lead: "乾淨登入把「登入」這件事單獨關進一個隔離瀏覽器裡：每個帳號有自己固定的瀏覽器指紋，登入走哪個出口由你指定，登入完成後憑據直接寫進 magpie。",
     blocks: [
@@ -306,7 +371,7 @@ const zhHant = [
     ],
   },
   {
-    n: "02",
+    n: "03",
     title: "第一次使用：先準備登入瀏覽器",
     lead: "登入不會用你日常那個瀏覽器。第一次登入前，打開「供應商」頁，在頂部的「登入瀏覽器設定」卡片上點一次「準備瀏覽器」。",
     blocks: [
@@ -319,7 +384,7 @@ const zhHant = [
     ],
   },
   {
-    n: "03",
+    n: "04",
     title: "加一個代理 IP（想換出口時才需要）",
     lead: "如果你希望某個帳號從指定的網路出口登入，先在「代理 IP」頁把這條出口加進來。不需要換出口的話可以跳過這一步，登入時選「不使用代理（直連）」。",
     blocks: [
@@ -341,7 +406,7 @@ const zhHant = [
     ],
   },
   {
-    n: "04",
+    n: "05",
     title: "為供應商新增帳號",
     lead: "回到「供應商」頁，找到你要登入的服務，點卡片上的「新增帳號」。",
     blocks: [
@@ -361,7 +426,7 @@ const zhHant = [
     ],
   },
   {
-    n: "05",
+    n: "06",
     title: "看懂「帳號」頁：一個帳號，一個指紋",
     lead: "登入成功的帳號會出現在「帳號」頁。每個帳號都保留一個固定的瀏覽器指紋，和它自己的設定目錄綁在一起。",
     blocks: [
@@ -375,7 +440,7 @@ const zhHant = [
     ],
   },
   {
-    n: "06",
+    n: "07",
     title: "這個身分乾不乾淨？做一次身分檢測",
     lead: "在帳號那一列點「檢測」。乾淨登入會用這個帳號自己的指紋打開第三方網站 who.1ms.dog，把網站的判定讀回來。",
     blocks: [
@@ -399,7 +464,20 @@ const zhHant = [
     ],
   },
   {
-    n: "07",
+    n: "08",
+    title: "不會用？沒關係，問你的 agent",
+    lead: "這個外掛不只是一個網頁。它自帶命令列和 agent 介面，你平時已經在對話的那個 agent 可以直接替你操作。",
+    blocks: [
+      { t: "ol", items: [
+        "用大白話告訴你的 agent 想做什麼，例如：用 clean-login 的命令列看看哪些供應商能登入，再挑一個帳號走家寬代理登進去。",
+        "它會跑 bun bin/clean-login.mjs agent 一次拿到整個服務的摘要，或用 providers、proxies、accounts 只看其中一面，全部命令看 help。",
+        "耗時的任務帶 --wait，agent 拿到的是跑完的結果，不是一串輪詢。",
+      ] },
+      { t: "note", text: "agent 介面在本機，用的還是頁面那一份 token。它不會列印任何憑證，也只能讀你這台機器本來就讀得到的東西。" },
+    ],
+  },
+  {
+    n: "09",
     title: "卡住了怎麼辦",
     blocks: [
       { t: "terms", items: [
@@ -414,7 +492,7 @@ const zhHant = [
     ],
   },
   {
-    n: "08",
+    n: "10",
     title: "你的資料放在哪裡",
     blocks: [
       { t: "ul", items: [
@@ -430,6 +508,19 @@ const zhHant = [
 const ja = [
   {
     n: "01",
+    title: "なぜこのプラグインを作ったのか",
+    lead: "magpie のメンテナーはプロバイダーと対抗することを望んでいません。そのため magpie には、1 台のマシンで多くのアカウントにログインしている事実を隠す仕組みがありません。このプラグインを使わなければ、プロバイダーと最も頻繁に接する処理——ログインや認証情報の更新——が、その関連付けに必要な情報をそのまま差し出すことになります。",
+    blocks: [
+      { t: "ul", items: [
+        "通常のログインは 1 つのブラウザープロファイルで行われます。同じ canvas ハッシュ、同じフォント一覧、同じ WebGL レンダラー、同じ出口 IP です。",
+        "トークンの更新も同じ流れを繰り返します。すべてのアカウントの認証情報が同じ指紋から送り出されるため、プロバイダーのリスク管理には別々の顧客ではなく、同じマシンの一集団として映ります。",
+        "クリーンログインは各ログインを独立した隔離ブラウザーに閉じ込め、指紋をそのアカウントに固定し、指定した出口からリクエストを送信します。",
+      ] },
+      { t: "note", text: "考え方はこの一点だけです。1 アカウント = 1 指紋 = 1 出口。そのうえでプロバイダーが自分のサービスをどう扱うかは、あくまでプロバイダーの判断です。このプラグインは認証の回避も、アカウントの登録も行いません。" },
+    ],
+  },
+  {
+    n: "02",
     title: "このプラグインができること",
     lead: "Clean Login はログインを専用の隔離ブラウザーに閉じ込めます。アカウントごとに固定のブラウザ指紋を持ち、どの出口からログインするかはあなたが選び、完了すると認証情報がそのまま magpie に書き込まれます。",
     blocks: [
@@ -442,7 +533,7 @@ const ja = [
     ],
   },
   {
-    n: "02",
+    n: "03",
     title: "初回: ログイン用ブラウザーを準備する",
     lead: "ログインに普段のブラウザーは使いません。最初のログインの前に「プロバイダー」タブを開き、上部の「ログイン用ブラウザーの準備」カードで「ブラウザーを準備」を一度押してください。",
     blocks: [
@@ -455,7 +546,7 @@ const ja = [
     ],
   },
   {
-    n: "03",
+    n: "04",
     title: "プロキシ IP を追加する（出口を変えたいときだけ）",
     lead: "特定のネットワーク出口からログインさせたい場合は、まず「プロキシ IP」タブでその出口を追加します。変える必要がなければこの手順は飛ばし、ログイン時に「プロキシを使用しない（直接接続）」を選んでください。",
     blocks: [
@@ -477,7 +568,7 @@ const ja = [
     ],
   },
   {
-    n: "04",
+    n: "05",
     title: "プロバイダーにアカウントを追加する",
     lead: "「プロバイダー」タブに戻り、ログインしたいサービスを見つけて、カードの「アカウントを追加」を押します。",
     blocks: [
@@ -497,7 +588,7 @@ const ja = [
     ],
   },
   {
-    n: "05",
+    n: "06",
     title: "「アカウント」タブの見方: 1 アカウント 1 指紋",
     lead: "ログインに成功したアカウントは「アカウント」タブに並びます。それぞれが専用のプロファイルディレクトリに結びついた固定のブラウザ指紋を保持します。",
     blocks: [
@@ -511,7 +602,7 @@ const ja = [
     ],
   },
   {
-    n: "06",
+    n: "07",
     title: "この身分はクリーンか: 身元判定を行う",
     lead: "アカウントの行で「判定」を押します。Clean Login はそのアカウント自身の指紋でサードパーティサイト who.1ms.dog を開き、サイトの判定を読み戻します。",
     blocks: [
@@ -535,7 +626,20 @@ const ja = [
     ],
   },
   {
-    n: "07",
+    n: "08",
+    title: "使い方が分からなければ、あなたの agent へ",
+    lead: "これは Web ページだけではありません。プラグインにはコマンドラインと agent 用エンドポイントが入っているので、すでに会話している agent が代わりに操作できます。",
+    blocks: [
+      { t: "ol", items: [
+        "やりたいことを普通の言葉で伝えてください。たとえば「clean-login のコマンドラインでログイン可能なプロバイダーを確認して、1 つのアカウントを住宅用プロキシからログインさせて」という具合です。",
+        "agent は bun bin/clean-login.mjs agent でサービス全体の要約を一度に取得します。providers、proxies、accounts で 1 つの画面だけを見ることもでき、help に全コマンドが並んでいます。",
+        "時間のかかる処理には --wait があるため、agent はポーリングを待つのではなく、完了した答えを受け取ります。",
+      ] },
+      { t: "note", text: "agent 用エンドポイントはローカルのもので、ブラウザーと同じページトークンを使います。認証情報を表示することはなく、あなたのマシンがすでに読める情報だけを読みます。" },
+    ],
+  },
+  {
+    n: "09",
     title: "詰まったとき",
     blocks: [
       { t: "terms", items: [
@@ -550,7 +654,7 @@ const ja = [
     ],
   },
   {
-    n: "08",
+    n: "10",
     title: "データの保存先",
     blocks: [
       { t: "ul", items: [
