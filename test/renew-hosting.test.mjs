@@ -350,7 +350,32 @@ test("an identity mismatch pauses hosting instead of retrying", async () => {
   }
 });
 
-test("a transient failure backs off, and the second one pauses", async () => {
+test("a transient failure while the credential is still valid keeps hosting on", async () => {
+  // A month-long credential must not be abandoned because a proxy hiccuped
+  // twice on day five: the window is days wide, so it keeps retrying.
+  const ctx = await setup({
+    expiresAt: BASE + 30 * DAY,
+    signIn: fakeSignIn({ state: "error", error: { code: "network", message: "boom" } }),
+    backoffBaseMs: 1000,
+    maxFailures: 2,
+  });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const view = await ctx.hosting.viewOf(PROVIDER, KEY);
+    expect(view.enabled).toBe(true);
+    expect(view.pausedReason).toBeNull();
+    expect(view.failStreak).toBe(2);
+    expect(view.nextDueAt).toBe(BASE + 2000);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("a transient failure after the credential expired backs off, and the second one pauses", async () => {
   const ctx = await setup({
     signIn: fakeSignIn({ state: "error", error: { code: "network", message: "boom" } }),
     backoffBaseMs: 1000,
@@ -665,6 +690,18 @@ test("a month-long credential with six days left is left alone", async () => {
     await ctx.hosting.enable(PROVIDER, KEY);
     const result = await ctx.hosting.tick();
     expect(result.ran).toBe(false);
+    expect(ctx.signIn.calls).toEqual([]);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("an identity check and a renewal never share one browser profile", async () => {
+  const ctx = await setup({ identityCheck: { status: () => ({ browserOpen: true }) } });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    const result = await ctx.hosting.tick();
+    expect(result).toEqual({ ran: false, reason: "check_busy" });
     expect(ctx.signIn.calls).toEqual([]);
   } finally {
     cleanup(ctx);

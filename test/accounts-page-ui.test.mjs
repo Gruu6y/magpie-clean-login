@@ -27,6 +27,7 @@ const buttonIds = [
   "account-check-retry",
   "account-hosting-close", "account-hosting-dismiss", "account-hosting-cancel",
   "account-hosting-run", "account-hosting-toggle",
+  "hosting-alert-open", "hosting-alert-dismiss",
   "report-close", "report-cancel", "report-copy-body", "report-open",
 ];
 
@@ -194,4 +195,20 @@ test("every new string exists in all four language tables", () => {
   expect(tables.length).toBe(4);
   for (const table of tables) expect(table).toEqual(tables[0]);
   expect(tables[0].size).toBeGreaterThan(280);
+});
+
+test("a paused hosted renewal raises a page-wide banner", () => {
+  // The one thing the page must say without being asked: hosting switched
+  // itself off, so this account will not be renewed again until someone looks.
+  expect(html).toContain('id="hosting-alert"');
+  expect(html).toContain('id="hosting-alert-text"');
+  expect(html).toContain('role="status"');
+  expect(app).toContain("function renderHostingAlert()");
+  expect(app).toContain("renderHostingAlert();");
+  expect(app).toContain("text.hostingAlertText.replace(");
+  for (const key of ["hostingAlertText", "hostingAlertOpen", "hostingAlertDismiss"]) {
+    expect((app.match(new RegExp(key + ":", "g")) || []).length).toBe(4);
+  }
+  expect(css).toContain(".hosting-alert");
+  expect(css).toContain(".hosting-alert-text");
 });

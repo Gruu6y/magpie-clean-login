@@ -1288,6 +1288,33 @@ main { flex: 1; }
 .account-hosting-line.is-warn { color: var(--amber); }
 .account-hosting-line.is-active { color: var(--amber); animation: pulse 1.4s infinite; }
 
+/* A hosted renewal that switched itself off. It sits above every tab, because
+   the account will not be renewed again until someone looks at it. */
+.hosting-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  background: var(--paper-2);
+}
+
+.hosting-alert-text {
+  margin: 0;
+  font: 500 12px/1.6 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.hosting-alert-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .account-toolbar {
   display: flex;
   flex-wrap: wrap;
