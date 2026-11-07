@@ -105,7 +105,7 @@ Four steps and you have one cleanly signed-in account. About five minutes, most 
 At the top of the providers page there is a **Login browser setup** block. Click **Prepare browser** and let it finish.
 
 - The download is about **170 MB**, verified against a pinned sha256, fetched once.
-- When it is done the block reads **Ready** — that is the state in the first screenshot.
+- When it is done the block reads **Ready**. The first screenshot shows the badge as **Not installed**: the images were generated against an empty browser root, which is exactly what a first run looks like.
 - If it fails you can retry; nothing else is affected.
 
 This installs a **separate browser**, not the one you use every day. Every sign-in happens inside it, so your normal browser stays untouched.
@@ -167,7 +167,7 @@ For a second opinion, click **Check** on that row, then **Start check**. The plu
 
 ![The Guide tab: the first of ten in-page sections, explaining why this plugin exists](assets/screenshot-guide.png)
 
-> **About these screenshots:** all four are rendered by this repository's current code in a real Chrome — nothing hand-drawn, nothing composited, no page element substituted. The **account and proxy records are demo data**, using documentation-reserved IPs (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`) and invented account names, because publishing the author's real accounts, exits and credentials in a public repository would be a leak. The provider cards, logos, browser-setup state and interface text are real. The generator is [`scripts/shoot-readme-screenshots.mjs`](scripts/shoot-readme-screenshots.mjs); run `bun scripts/shoot-readme-screenshots.mjs` to reproduce all four.
+> **About these screenshots:** all four are rendered by this repository's current code in a real Chrome — nothing hand-drawn, nothing composited, no page element substituted. Four things in them are demo data, because the alternative would put the generating machine's details in a public repository: the **account and proxy records** use documentation-reserved IPs (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`) and invented account names, and the **install path and free-disk figure in the login-browser panel** are neutral values (`C:\Users\Public\…` and a round 256 GB) rather than this machine's OS account name and how full its drive is. The badge state, the download size and the required space are computed by the shipped code. The provider cards, logos and interface text are real. The generator is [`scripts/shoot-readme-screenshots.mjs`](scripts/shoot-readme-screenshots.mjs); run `bun scripts/shoot-readme-screenshots.mjs` to reproduce all four.
 
 <a id="features"></a>
 

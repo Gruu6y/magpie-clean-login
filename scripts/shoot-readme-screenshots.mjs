@@ -7,11 +7,12 @@
 // and a real Chrome rendering the page at 2x. Nothing is drawn by hand and no
 // markup is substituted.
 //
-// What is synthetic: the account ledgers and the proxy rows. They use the
-// documentation-reserved ranges (203.0.113.x / 198.51.100.x / 192.0.2.x) and
-// invented account names, because publishing a real user's accounts, exits or
-// credentials in a public README would be a leak. The README says so beside
-// the images.
+// What is synthetic: the account ledgers, the proxy rows, and the two numbers
+// the login-browser panel reads off the machine. They use the documentation-
+// reserved ranges (203.0.113.x / 198.51.100.x / 192.0.2.x), invented account
+// names, a machine-neutral install path and a round free-disk figure, because
+// a public README must not carry the generating machine's OS account name or
+// how much space its drive has left. The README says so beside the images.
 //
 // The probe seam is injected for the same reason: a real probe would dial a
 // real proxy. Everything downstream of the seam -- storage, projection,
@@ -21,10 +22,11 @@
 // otherwise the usual Windows install locations are tried.
 import { existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { startServer } from "../lib/server.mjs";
+import { createEnvironmentManager } from "../lib/browser-environment.mjs";
 import { writeAccountMeta, IDENTITY_FILE, safeSegment } from "../lib/account-identity.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,6 +63,32 @@ const env = {
   MAGPIE_CACHE_DIR: join(tmp, "cache"),
   NODE_ENV: "production",
 };
+
+// The login-browser panel shows the install path and the free space on that
+// volume. Pointed at the real cache, those two strings would put this machine's
+// OS account name (C:\Users\<name>\...) and how full its drive is into a public
+// image. So the panel is driven through the operator seam the shipped code
+// already offers -- an explicit browser root and a supplied free-byte figure --
+// and the root is a shared, machine-neutral location that exists on every
+// Windows install and is writable by design.
+//
+// A fresh directory means the panel reads as NOT prepared, which is what a
+// first-time reader actually sees, so nothing about the state is invented: an
+// empty browser root genuinely is not installed. Override with
+// MAGPIE_CLEAN_LOGIN_BROWSER_DIR if you want a path of your own in the image.
+const neutralBase = resolve(process.platform === "win32" ? "C:/Users/Public" : "/tmp");
+const browserRoot = process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR
+  ? resolve(process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR)
+  : join(neutralBase, "clean-login-readme-demo", "camoufox");
+// resolve() puts Windows paths in backslashes, so compare in one form.
+const inside = (path) => path === neutralBase || path.startsWith(neutralBase + sep);
+if (!inside(browserRoot) && !process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR) {
+  throw new Error(`refusing a browser root outside the neutral base: ${browserRoot}`);
+}
+// A round 256 GiB: plausible, and not this machine's actual free space.
+const NEUTRAL_FREE_BYTES = 256 * 1024 ** 3;
+mkdirSync(browserRoot, { recursive: true });
+const environment = createEnvironmentManager({ env, root: browserRoot, freeBytes: NEUTRAL_FREE_BYTES });
 
 // Provider ids, names and API hosts are the real ones this plugin reads from an
 // installed magpie; only the account and proxy records below are invented.
@@ -116,6 +144,7 @@ const service = await startServer({
   proxyEndpoint: "https://ipinfo.io/json",
   proxyTimeoutMs: 500,
   proxyTester,
+  environment,
   pluginScanner: scanner,
 });
 
@@ -236,11 +265,26 @@ try {
   const counts = await page.evaluate(() => ({
     tabs: document.querySelectorAll(".tab").length,
     guideSections: document.querySelectorAll(".guide-section").length,
+    // What the browser panel actually renders, so a leak shows up in the
+    // printed result rather than only in the pixels.
+    environment: {
+      badge: document.querySelector("#environment-badge")?.textContent || "",
+      location: document.querySelector("#environment-location-value")?.textContent || "",
+      disk: document.querySelector("#environment-disk-value")?.textContent || "",
+    },
   }));
-  console.log(JSON.stringify({ lang, theme, chrome, shots, counts }, null, 2));
+  const secrets = [/Administrator/i, /C:\\Users\\(?!Public)/i, /\/home\/(?!www)/];
+  const leaked = secrets.filter((pattern) => pattern.test(counts.environment.location));
+  if (leaked.length) {
+    throw new Error(`the browser panel would publish a machine-specific path: ${counts.environment.location}`);
+  }
+  console.log(JSON.stringify({ lang, theme, chrome, shots, counts, browserRoot }, null, 2));
   await page.close();
 } finally {
   if (browser) await browser.close();
   await service.close();
   rmSync(tmp, { recursive: true, force: true });
+  if (!process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR) {
+    rmSync(join(neutralBase, "clean-login-readme-demo"), { recursive: true, force: true });
+  }
 }
