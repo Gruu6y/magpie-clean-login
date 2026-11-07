@@ -18,6 +18,7 @@ import {
   userIcon,
   userIconType,
 } from "../lib/provider-icons.mjs";
+import { NOTICES } from "../scripts/build-icons.mjs";
 import { listProviders } from "../lib/provider-registry.mjs";
 
 const root = join(import.meta.dirname, "..");
@@ -194,6 +195,19 @@ describe("the shelf itself", () => {
       if (expected) expect(entry.kind, name).toBe("picture");
       else expect(["picture", "mark"], name).toContain(entry.kind);
     }
+  });
+
+  test("the notice asks for something; it does not claim we already comply", () => {
+    const notice = readFileSync(join(root, "assets", "icons", "NOTICES.md"), "utf8");
+    const flat = notice.replace(/\s+/g, " ");
+    // "must stay" is a requirement on whoever displays a mark. "stays" reads as
+    // a claim that every mark here is already inside its owner's terms, and
+    // nobody has checked that.
+    expect(flat).toContain("Displaying a mark must stay inside the terms");
+    expect(flat).not.toContain("Displaying a mark stays inside");
+    // The file is written by the builder. If the two drift, a rebuild would
+    // quietly put the old wording back.
+    expect(notice).toBe(NOTICES);
   });
 
   test("where the shelf came from is written down, and can be checked", () => {
