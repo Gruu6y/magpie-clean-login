@@ -1,9 +1,9 @@
 // A provider card wears magpie's own mark for that provider. Nothing here
-// draws a logo: the names come from magpie's tables and the files come from
-// simple-icons, vendored by `scripts/build-icons.mjs`. Every rule below keeps
-// those two from drifting into a brand nobody chose.
+// draws a logo: the names come from magpie's tables and the files come out of
+// the installed magpie binary, read by `scripts/build-icons.mjs`. Every rule
+// below keeps those two from drifting into a brand nobody chose.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -150,6 +150,25 @@ describe("the shelf itself", () => {
       // A name becomes a URL segment, so it may carry magpie's hyphens and
       // nothing that could walk out of the folder.
       expect(name).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    }
+    // The other direction. A file the list does not know about is a file no
+    // card can ask for, and a listed name the folder does not hold is a card
+    // that quietly loses its mark: the same mistake, so both fail.
+    const onDisk = readdirSync(join(root, "assets", "icons"))
+      .filter((file) => /\.(?:svg|png)$/.test(file))
+      .sort();
+    expect(onDisk).toEqual(Object.values(list.icons).map((entry) => entry.file).sort());
+  });
+
+  test("the two marks a content guess dropped are on the shelf", () => {
+    // Carving the binary by `<svg ... </svg>` lost exactly these two: one wraps
+    // a base64 png, one is a tile, and both read as the UI artwork around them.
+    // The builder follows magpie's own embed records now, so they stay.
+    for (const name of ["liveagent-color", "openmausbot"]) {
+      const entry = list.icons[name];
+      expect(entry, name).toBeObject();
+      expect(entry.kind, name).toBe("picture");
+      expect(entry.bytes, name).toBeGreaterThan(1000);
     }
   });
 

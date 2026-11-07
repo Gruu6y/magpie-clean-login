@@ -148,6 +148,94 @@ export function readBinary(path, icons = null, folder = "assets/icons") {
   return { commit: revision, builtAt, obtained: `the installed magpie binary ${basename(path)}` };
 }
 
+// Reading the icons out of the installed binary, by its own table rather than
+// by guessing where a picture starts. Go's embed.FS keeps one record per file -
+// {name, data, hash} - and both strings point into the image: the name into the
+// `assets/icons/...` text, the data into the bytes. Following those pointers is
+// the difference between a shelf of 195 and a shelf of 193: two of these files
+// (liveagent-color.svg wraps a base64 png, openmausbot.svg is a tile) look
+// enough like the surrounding UI artwork that carving by `<svg ... </svg>`
+// dropped them without a word. A name that cannot be resolved stops the build.
+export function readEmbeddedIcons(path, folder = "assets/icons") {
+  const exe = readFileSync(path);
+  if (exe.toString("ascii", 0, 2) !== "MZ") throw new Error(`${path}: not a Windows binary; use --src with a magpie work tree`);
+  const pe = exe.readUInt32LE(0x3c);
+  if (exe.toString("ascii", pe, pe + 2) !== "PE") throw new Error(`${path}: no PE header`);
+  const count = exe.readUInt16LE(pe + 6);
+  const optSize = exe.readUInt16LE(pe + 20);
+  const opt = pe + 24;
+  const base = exe.readUInt16LE(opt) === 0x20b ? exe.readBigUInt64LE(opt + 24) : BigInt(exe.readUInt32LE(opt + 28));
+  const sections = [];
+  for (let i = 0; i < count; i += 1) {
+    const at = opt + optSize + i * 40;
+    sections.push({ va: exe.readUInt32LE(at + 12), vsize: exe.readUInt32LE(at + 8), raw: exe.readUInt32LE(at + 20), rawSize: exe.readUInt32LE(at + 16) });
+  }
+  const toVA = (off) => {
+    for (const s of sections) if (off >= s.raw && off < s.raw + s.rawSize) return base + BigInt(s.va + off - s.raw);
+    return null;
+  };
+  const toOffset = (va) => {
+    const rva = va - base;
+    for (const s of sections) if (rva >= BigInt(s.va) && rva < BigInt(s.va + s.vsize)) return s.raw + Number(rva - BigInt(s.va));
+    return null;
+  };
+  const text = exe.toString("latin1");
+  const names = new Map();
+  const pattern = new RegExp(`${folder}/([A-Za-z0-9][A-Za-z0-9._-]*\\.(?:svg|png))`, "g");
+  for (const match of text.matchAll(pattern)) if (!names.has(match[1])) names.set(match[1], { at: match.index, length: match[0].length });
+  if (!names.size) throw new Error(`${path}: no ${folder}/ names to read`);
+  const files = [];
+  const unresolved = [];
+  for (const [name, info] of names) {
+    const va = toVA(info.at);
+    const needle = Buffer.alloc(16);
+    if (va !== null) {
+      needle.writeBigUInt64LE(va, 0);
+      needle.writeBigUInt64LE(BigInt(info.length), 8);
+    }
+    let at = va === null ? -1 : exe.indexOf(needle);
+    const second = at === -1 ? -1 : exe.indexOf(needle, at + 1);
+    if (at === -1 || second !== -1) {
+      unresolved.push(name);
+      continue;
+    }
+    const dataPtr = exe.readBigUInt64LE(at + 16);
+    const length = Number(exe.readBigUInt64LE(at + 24));
+    const start = toOffset(dataPtr);
+    if (start === null || length <= 0 || start + length > exe.length) {
+      unresolved.push(name);
+      continue;
+    }
+    files.push({ file: name, raw: exe.subarray(start, start + length) });
+  }
+  if (unresolved.length) {
+    throw new Error(`${path}: ${unresolved.length} of ${names.size} icon(s) have no readable embed record: ${unresolved.slice(0, 5).join(", ")}`);
+  }
+  return files.sort((a, b) => (a.file < b.file ? -1 : 1));
+}
+
+// A shelf written straight out of the binary, with nothing guessed in between.
+export function extract({ binary, out = TARGET, path = "assets/icons", version = "" }) {
+  const files = readEmbeddedIcons(binary, path);
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  for (const entry of files) writeFileSync(join(out, entry.file), entry.raw);
+  writeNotices(out);
+  const icons = collect(out);
+  if (Object.keys(icons).length !== files.length) {
+    throw new Error(`${binary}: read ${files.length} icon(s) but the shelf holds ${Object.keys(icons).length}`);
+  }
+  const manifest = {
+    source: describeSource("", { path, ...readBinary(binary, icons, path), version }),
+    rule: RULE,
+    pngIcons: [...PNG_ICONS],
+    count: files.length,
+    icons,
+  };
+  writeFileSync(join(out, "index.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
+
 export function build({ src, out = TARGET, path = "assets/icons", binary = "", version = "" }) {
   const srcIcons = join(src, path);
   const icons = collect(srcIcons);
@@ -219,8 +307,16 @@ if (process.argv[1] && process.argv[1].endsWith("build-icons.mjs")) {
     console.log(`[icons] magpie@${given(manifest.source.commit, "commit")} built ${manifest.source.builtAt || "?"} version ${manifest.source.version || "?"}`);
     process.exit(0);
   }
+  if (args.extract) {
+    const from = given(binary, "--from-binary");
+    const manifest = extract({ binary: from, version, path: typeof args.path === "string" ? args.path : "assets/icons" });
+    const bytes = Object.values(manifest.icons).reduce((total, entry) => total + entry.bytes, 0);
+    console.log(`[icons] extracted ${manifest.count} file(s), ${bytes} bytes from magpie@${given(manifest.source.commit, "commit")} -> assets/icons`);
+    process.exit(0);
+  }
   if (!args.src) {
-    console.error("usage: node scripts/build-icons.mjs --src <dir holding assets/icons> [--from-binary <magpie.exe>] [--magpie-version <x.y.z>]");
+    console.error("usage: node scripts/build-icons.mjs --extract --from-binary <magpie.exe> [--magpie-version <x.y.z>]");
+    console.error("       node scripts/build-icons.mjs --src <dir holding assets/icons> [--from-binary <magpie.exe>] [--magpie-version <x.y.z>]");
     console.error("       node scripts/build-icons.mjs --reclassify [--from-binary <magpie.exe>] [--magpie-version <x.y.z>]");
     process.exit(2);
   }
