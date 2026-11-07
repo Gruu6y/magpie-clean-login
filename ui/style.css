@@ -1494,6 +1494,58 @@ main { flex: 1; }
   }
 }
 
+/* The manual. Same editorial furniture as the rest of the page: a hairline
+   above each section, a mono number in the margin, and a measure wide enough
+   to read but short enough to track back to the start of the next line. No new
+   colour: every value below is an existing token, so it follows the host theme
+   like everything else. */
+.guide { padding-bottom: 8px; }
+.guide-section {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 0 18px;
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+.guide-section:first-child { border-top: 1px solid var(--ink); }
+.guide-num {
+  color: var(--red);
+  font: 500 11px/1.9 var(--mono);
+  letter-spacing: 0.14em;
+}
+.guide-main { min-width: 0; max-width: 76ch; }
+.guide-main h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.guide-lead { margin: 8px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.85; }
+.guide-text { margin: 12px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.85; }
+.guide-steps,
+.guide-list { margin: 12px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 13px; line-height: 1.85; }
+.guide-steps li,
+.guide-list li { margin: 5px 0 0; overflow-wrap: anywhere; }
+.guide-steps li::marker { color: var(--red); font: 500 11px/1.85 var(--mono); }
+.guide-list li::marker { color: var(--faint); }
+.guide-terms { margin: 12px 0 0; display: grid; gap: 10px; }
+.guide-terms div { border-top: 1px solid var(--line); padding-top: 8px; min-width: 0; }
+.guide-terms dt { color: var(--ink); font-size: 12.5px; font-weight: 700; overflow-wrap: anywhere; }
+.guide-terms dd { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.8; overflow-wrap: anywhere; }
+.guide-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--paper-3);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
 @media (max-width: 780px) {
   .shell { padding: 20px 16px 14px; }
   .header { align-items: flex-start; padding-bottom: 18px; }
@@ -1503,6 +1555,10 @@ main { flex: 1; }
   .tab { flex: 1; justify-content: center; }
   .tab + .tab { margin-left: 6px; }
   .panel { padding-top: 22px; }
+  /* The margin number moves above the heading so the prose keeps the full
+     width on a phone instead of losing 64px of an already narrow measure. */
+  .guide-section { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 18px 0; }
+  .guide-main { max-width: none; }
   .section-head { flex-wrap: wrap; gap: 12px; }
   .section-actions { width: 100%; flex-wrap: wrap; }
   .section-actions .button { width: 100%; }

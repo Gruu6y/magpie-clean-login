@@ -486,13 +486,14 @@ test("static files exist and carry no mock data or dead action buttons", () => {
     expect(existsSync(join(root, file))).toBe(true);
   }
   const html = readFileSync(join(root, "ui", "index.html"), "utf8");
-  // Three tabs, the one-time browser setup, the proxy dialog, delete
+  // Four tabs, the one-time browser setup, the proxy dialog, delete
   // confirmation, the add-account dialog, and the accounts page v2 toolbar,
   // filter chips and both account dialogs. Every button is wired in app.js.
   const buttonIds = [
     "tab-providers",
     "tab-proxies",
     "tab-accounts",
+    "tab-guide",
     "retry",
     "add-proxy",
     "add-proxy-empty",

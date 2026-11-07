@@ -8,7 +8,7 @@
 
 **Magpie Clean Login (CL · 干净登录) is an unofficial [magpie](https://usemagpie.ai) plugin for provider sign-ins: one page to manage proxy exits, where every account signs in through its own isolated browser identity and its own chosen proxy. The canonical repository is [github.com/Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login).**
 
-![The Providers tab: the three-tab header, search, one-time browser setup and the first provider cards](assets/screenshot-providers.png)
+![The Providers tab: the header, search, one-time browser setup and the first provider cards](assets/screenshot-providers.png)
 
 > **Unofficial plugin.** Clean Login is built and maintained here, at [Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login). It is **not** published by `magpie-community`, and nobody has reviewed it but you. Read the code, open an issue, send a pull request — all three are welcome.
 
@@ -20,7 +20,7 @@
 - [Requirements](#requirements)
 - [Install](#install)
 - [Quick start](#quick-start)
-- [The three tabs](#the-three-tabs)
+- [The four tabs](#the-four-tabs)
 - [Features](#features)
 - [Command line and agents](#command-line-and-agents)
 - [Troubleshooting](#troubleshooting)
@@ -66,7 +66,9 @@ The first time you sign in, Clean Login downloads its own browser runtime — ab
 
 > A provider needs a sign-in magpie can drive. A card without **Add account** has no runnable sign-in method from an installed plugin — a market offer that is not installed yet, for example — and the card says why.
 
-## The three tabs
+## The four tabs
+
+**Guide** — an in-page manual written for a first-time user: eight steps that cover preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and what to do when something sticks. Each of the four languages is written out on its own, not machine-translated English. It is a text page: no network, no downloads, nothing executed.
 
 **Proxy IPs** — test an exit through a real connection, read the exit IP, region and latency, then filter by region, latency and the tags in the name (家宽 / 静态). No direct-connection fallback: if a test fails, you see why. The measurement target can be the general exit check or a specific provider, measured straight to its API host.
 
