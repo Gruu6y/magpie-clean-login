@@ -87,7 +87,7 @@ export function distinctKeywords(proxies = [], keywords = KEYWORD_TAGS) {
 
 export function filterProxies(
   proxies = [],
-  { regions = [], keywords = [], minLatency = null, maxLatency = null } = {},
+  { regions = [], keywords = [], minLatency = null, maxLatency = null, latencyOf = null } = {},
 ) {
   const selected = selectionOf(regions);
   const chosen = selectionOf(keywords);
@@ -103,11 +103,14 @@ export function filterProxies(
       return false;
     }
     if (latencyFilter) {
+      // A selected probe target can supply its own latency. Without one this is
+      // exactly the record's own number, so the historical filter is unchanged.
+      const latency = typeof latencyOf === "function" ? latencyOf(proxy) : proxy.latency;
       // Only real numeric latencies participate. With a bound set, a row whose
       // latency is null/unknown is excluded rather than passing as 0.
-      if (typeof proxy.latency !== "number" || !Number.isFinite(proxy.latency)) return false;
-      if (min !== null && proxy.latency < min) return false;
-      if (max !== null && proxy.latency > max) return false;
+      if (typeof latency !== "number" || !Number.isFinite(latency)) return false;
+      if (min !== null && latency < min) return false;
+      if (max !== null && latency > max) return false;
     }
     return true;
   });

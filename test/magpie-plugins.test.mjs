@@ -129,6 +129,7 @@ test("normalizeScan keeps only public, bounded fields", () => {
     {
       id: "cursor",
       name: null,
+      api: "",
       package: "@magpie-community/opencode-cursor-auth",
       methods: [
         { type: "oauth", label: "Cursor (browser)", browser: true, category: "browser", prompts: [], runnable: true },
@@ -344,7 +345,7 @@ test("scanMagpiePlugins ignores noise and parses the marked JSON line", async ()
   const output = JSON.stringify({ available: true, providers: [{ id: "x", methods: [] }] });
   const exec = fakeExecFile((_f, _a, _o, callback) => callback(null, `warn: something\n${output}\n`));
   const scan = await scanMagpiePlugins({ execFile: exec });
-  expect(scan.providers).toEqual([{ id: "x", name: null, package: null, methods: [] }]);
+  expect(scan.providers).toEqual([{ id: "x", name: null, api: "", package: null, methods: [] }]);
 });
 
 test("a child error or timeout degrades to unavailable without throwing", async () => {

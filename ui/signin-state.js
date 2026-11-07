@@ -5,6 +5,7 @@
 import { signInAccount } from "./account-state.js";
 import { hasKeyword, proxyName } from "./proxy-filter.js";
 import { formatAddress, statusView } from "./proxy-state.js";
+import { targetStatusSuffix } from "./proxy-target.js";
 
 // The sign-in dialog probes the candidate exits in the background so the user
 // sees live latency right in the dropdown. A small cap keeps dozens of Clash
@@ -77,7 +78,11 @@ export function formatSignInProxyOption(proxy = {}, labels = {}, testing = false
   const view = statusView(proxy, labels, testing);
   if (view.state === "testing") return `${base} · ${view.label}`;
   if (view.state === "ok") {
-    return `${base} · ${view.detail || view.label}`;
+    // When the row was decorated for a provider target, the number belongs to
+    // that provider. Name it so a generic measurement can never be mistaken
+    // for a provider-specific one. Undecorated rows keep the exact old text.
+    const target = targetStatusSuffix(proxy);
+    return `${base} · ${view.detail || view.label}${target}`;
   }
   if (view.state === "error") return `${base} · ${view.label}`;
   return base;
