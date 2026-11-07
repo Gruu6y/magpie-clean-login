@@ -1,6 +1,6 @@
 {
   "name": "@gruu6y/page-clean-login",
-  "version": "0.1.81",
+  "version": "0.1.82",
   "description": "Manage proxy IPs and provider sign-ins in magpie, with each account signed in through an isolated browser. A page plugin with a loopback-only host service.",
   "license": "MIT",
   "type": "module",
