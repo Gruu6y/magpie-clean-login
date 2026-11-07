@@ -343,6 +343,22 @@ const messages = {
     accountsRefreshing: "Refreshing…",
     accountsRefreshed: "Read {count} accounts.",
     accountsCleared: "The identity was cleared.",
+    accountsImport: "Import",
+    accountsImportTitle: "Import accounts from Clean Login",
+    accountsImportCopy: "Reads the accounts Clean Login already keeps on this machine. Nothing is saved until you confirm; accounts that already exist or cannot be signed in to again are left untouched.",
+    accountsImportNew: "New",
+    accountsImportExisting: "Already exists",
+    accountsImportSkipped: "Skipped",
+    accountsImportReloginPlugin: "Plugin sign-in",
+    accountsImportReloginNative: "Browser sign-in",
+    accountsImportReloginNone: "No sign-in",
+    accountsImportConfirm: "Import selected",
+    accountsImportCancel: "Cancel",
+    accountsImportBusy: "Working…",
+    accountsImported: "Imported {count} accounts.",
+    accountsImportFailed: "Import failed.",
+    accountsImportEmpty: "No accounts were found to import.",
+    accountsImportNothing: "Select at least one account.",
     accountSearchLabel: "Search accounts",
     accountSearchPlaceholder: "Search accounts",
     accountSortLabel: "Sort",
@@ -785,6 +801,22 @@ const messages = {
     accountsRefreshing: "刷新中…",
     accountsRefreshed: "已读取 {count} 个账号。",
     accountsCleared: "身份已清除。",
+    accountsImport: "导入",
+    accountsImportTitle: "从干净登录导入账号",
+    accountsImportCopy: "读取干净登录已保存在本机的账号。确认前不会写入任何内容；已存在或无法再次登录的账号会保持原样。",
+    accountsImportNew: "新账号",
+    accountsImportExisting: "已存在",
+    accountsImportSkipped: "已跳过",
+    accountsImportReloginPlugin: "插件登录",
+    accountsImportReloginNative: "浏览器登录",
+    accountsImportReloginNone: "无需登录",
+    accountsImportConfirm: "导入所选",
+    accountsImportCancel: "取消",
+    accountsImportBusy: "处理中…",
+    accountsImported: "已导入 {count} 个账号。",
+    accountsImportFailed: "导入失败。",
+    accountsImportEmpty: "没有找到可导入的账号。",
+    accountsImportNothing: "请至少选择一个账号。",
     accountSearchLabel: "搜索账号",
     accountSearchPlaceholder: "搜索账号",
     accountSortLabel: "排序",
@@ -1227,6 +1259,22 @@ const messages = {
     accountsRefreshing: "重新整理中…",
     accountsRefreshed: "已讀取 {count} 個帳號。",
     accountsCleared: "身分已清除。",
+    accountsImport: "匯入",
+    accountsImportTitle: "從乾淨登入匯入帳號",
+    accountsImportCopy: "讀取乾淨登入已保存在本機的帳號。確認前不會寫入任何內容；已存在或無法再次登入的帳號會保持原樣。",
+    accountsImportNew: "新帳號",
+    accountsImportExisting: "已存在",
+    accountsImportSkipped: "已略過",
+    accountsImportReloginPlugin: "外掛登入",
+    accountsImportReloginNative: "瀏覽器登入",
+    accountsImportReloginNone: "無需登入",
+    accountsImportConfirm: "匯入所選",
+    accountsImportCancel: "取消",
+    accountsImportBusy: "處理中…",
+    accountsImported: "已匯入 {count} 個帳號。",
+    accountsImportFailed: "匯入失敗。",
+    accountsImportEmpty: "沒有找到可匯入的帳號。",
+    accountsImportNothing: "請至少選擇一個帳號。",
     accountSearchLabel: "搜尋帳號",
     accountSearchPlaceholder: "搜尋帳號",
     accountSortLabel: "排序",
@@ -1669,6 +1717,22 @@ const messages = {
     accountsRefreshing: "再読み込み中…",
     accountsRefreshed: "{count} 件のアカウントを読み込みました。",
     accountsCleared: "IDを消去しました。",
+    accountsImport: "インポート",
+    accountsImportTitle: "クリーンログインからアカウントをインポート",
+    accountsImportCopy: "このマシンにクリーンログインが保存しているアカウントを読み取ります。確認するまで何も書き込みません。既に存在するアカウントや再ログインできないアカウントはそのまま残ります。",
+    accountsImportNew: "新規",
+    accountsImportExisting: "既存",
+    accountsImportSkipped: "スキップ",
+    accountsImportReloginPlugin: "プラグインでログイン",
+    accountsImportReloginNative: "ブラウザーでログイン",
+    accountsImportReloginNone: "ログイン不要",
+    accountsImportConfirm: "選択した項目をインポート",
+    accountsImportCancel: "キャンセル",
+    accountsImportBusy: "処理中…",
+    accountsImported: "{count} 件のアカウントをインポートしました。",
+    accountsImportFailed: "インポートに失敗しました。",
+    accountsImportEmpty: "インポートできるアカウントが見つかりません。",
+    accountsImportNothing: "少なくとも1つのアカウントを選択してください。",
     accountSearchLabel: "アカウントを検索",
     accountSearchPlaceholder: "アカウントを検索",
     accountSortLabel: "並び替え",
@@ -1938,6 +2002,8 @@ let accountQuery = "";
 let accountFilter = "all";
 let accountSort = "lastLogin";
 let accountsNotice = "";
+let importPlan = null;
+let importBusy = false;
 let checkProxies = [];
 let accountCheckContext = null;
 let accountCheckTimer = null;
@@ -2153,6 +2219,11 @@ function applyText() {
   byId("accounts-title").textContent = text.accountsTitle;
   byId("accounts-copy").textContent = text.accountsCopy;
   byId("accounts-refresh").textContent = text.accountsRefresh;
+  byId("accounts-import").textContent = text.accountsImport;
+  byId("accounts-import-title").textContent = text.accountsImportTitle;
+  byId("accounts-import-copy").textContent = text.accountsImportCopy;
+  byId("accounts-import-confirm").textContent = text.accountsImportConfirm;
+  byId("accounts-import-cancel").textContent = text.accountsImportCancel;
   byId("account-search-label").textContent = text.accountSearchLabel;
   byId("account-search").placeholder = text.accountSearchPlaceholder;
   byId("account-search").setAttribute("aria-label", text.accountSearchLabel);
@@ -5359,6 +5430,114 @@ async function refreshAccounts() {
   }
 }
 
+// Reads the import plan from the service (read-only), then writes only the
+// entries the user selected.
+const IMPORT_PLAN_PATH = "api/accounts/import/plan";
+
+function setImportStatus(message, kind = "") {
+  const node = byId("accounts-import-status");
+  node.textContent = message || "";
+  node.hidden = !message;
+  node.dataset.kind = kind;
+}
+
+function importStateLabel(state) {
+  if (state === "new") return text.accountsImportNew;
+  if (state === "existing") return text.accountsImportExisting;
+  if (state === "skipped") return text.accountsImportSkipped;
+  return state ? String(state) : "";
+}
+
+function importReloginLabel(channel) {
+  if (channel === "plugin") return text.accountsImportReloginPlugin;
+  if (channel === "native") return text.accountsImportReloginNative;
+  if (channel === "none") return text.accountsImportReloginNone;
+  return channel ? String(channel) : "";
+}
+
+function renderImportPlan() {
+  const list = byId("accounts-import-list");
+  const items = Array.isArray(importPlan?.items) ? importPlan.items : [];
+  list.textContent = "";
+  if (!items.length && Array.isArray(importPlan?.items)) {
+    const note = document.createElement("p");
+    note.className = "setup-note";
+    note.textContent = text.accountsImportEmpty;
+    list.append(note);
+  }
+  for (const item of items) {
+    const row = document.createElement("label");
+    row.className = "accounts-import-row";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = String(item.key ?? "");
+    box.checked = item.state === "new";
+    box.disabled = importBusy || item.state !== "new";
+    const detail = document.createElement("span");
+    const identity = [item.provider, item.key, item.accountId || item.uid]
+      .filter(Boolean).map(String).join(" · ");
+    const reason = item.state === "skipped" || item.relogin === "none"
+      ? String(item.reason || "") : "";
+    detail.textContent = [
+      identity, importStateLabel(item.state), importReloginLabel(item.relogin), reason,
+    ].filter(Boolean).join(" · ");
+    row.append(box, detail);
+    list.append(row);
+  }
+  byId("accounts-import-confirm").disabled = importBusy
+    || !items.some((item) => item.state === "new");
+  byId("accounts-import-cancel").disabled = importBusy;
+}
+
+async function openImportPanel() {
+  if (importBusy) return;
+  importPlan = null;
+  byId("accounts-import-panel").hidden = false;
+  setImportStatus(text.accountsImportBusy);
+  renderImportPlan();
+  try {
+    importPlan = await api(IMPORT_PLAN_PATH);
+    setImportStatus("");
+  } catch (error) {
+    setImportStatus(serverErrorText(error) || text.accountsImportFailed, "error");
+  }
+  renderImportPlan();
+}
+
+function closeImportPanel() {
+  importPlan = null;
+  byId("accounts-import-panel").hidden = true;
+  setImportStatus("");
+  renderImportPlan();
+}
+
+async function runImport() {
+  if (importBusy) return;
+  const keys = [];
+  const boxes = byId("accounts-import-list").querySelectorAll('input[type="checkbox"]');
+  for (const box of boxes) {
+    if (box.checked && !box.disabled && box.value) keys.push(box.value);
+  }
+  if (!keys.length) {
+    setImportStatus(text.accountsImportNothing, "error");
+    return;
+  }
+  importBusy = true;
+  setImportStatus(text.accountsImportBusy);
+  renderImportPlan();
+  try {
+    await api("api/accounts/import", { method: "POST", body: { keys } });
+    accountsNotice = text.accountsImported.replace("{count}", String(keys.length));
+    closeImportPanel();
+    await loadAccountIdentities();
+  } catch (error) {
+    setImportStatus(serverErrorText(error) || text.accountsImportFailed, "error");
+  } finally {
+    importBusy = false;
+    renderImportPlan();
+  }
+}
+
 function toast(message) {
   const wrap = byId("toasts");
   const node = document.createElement("div");
@@ -6280,6 +6459,9 @@ byId("tab-accounts").addEventListener("click", () => {
   loadAccountIdentities();
 });
 byId("accounts-refresh").addEventListener("click", refreshAccounts);
+byId("accounts-import").addEventListener("click", openImportPanel);
+byId("accounts-import-confirm").addEventListener("click", runImport);
+byId("accounts-import-cancel").addEventListener("click", closeImportPanel);
 byId("account-search").addEventListener("input", () => {
   accountQuery = byId("account-search").value;
   renderAccounts();

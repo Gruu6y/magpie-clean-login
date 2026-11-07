@@ -219,10 +219,23 @@
             <p id="accounts-copy">Every account used with Clean Login, its pinned browser fingerprint, and who.1ms.dog's verdict on that identity.</p>
           </div>
           <div class="section-actions">
+            <button class="button" id="accounts-import" type="button">Import</button>
             <button class="button" id="accounts-refresh" type="button">Refresh</button>
           </div>
         </div>
         <p class="setup-note accounts-notice" id="accounts-notice" role="status" hidden></p>
+        <div class="setup-card" id="accounts-import-panel" hidden>
+          <div class="setup-head">
+            <h3 id="accounts-import-title">Import accounts from Clean Login</h3>
+          </div>
+          <p class="setup-copy" id="accounts-import-copy">Reads the accounts Clean Login already keeps on this machine. Nothing is saved until you confirm; accounts that already exist or cannot be signed in to again are left untouched.</p>
+          <div class="accounts-import-list" id="accounts-import-list"></div>
+          <p class="setup-note" id="accounts-import-status" role="status" hidden></p>
+          <div class="setup-actions">
+            <button class="button primary" id="accounts-import-confirm" type="button">Import selected</button>
+            <button class="button" id="accounts-import-cancel" type="button">Cancel</button>
+          </div>
+        </div>
         <div class="account-toolbar" id="account-toolbar">
           <div class="field account-toolbar-search">
             <label for="account-search" id="account-search-label">Search accounts</label>
