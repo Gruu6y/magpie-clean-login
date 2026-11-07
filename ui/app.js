@@ -83,7 +83,7 @@ const messages = {
     subtitle: "Proxy IPs and provider sign-ins.",
     guide: "Guide",
     guideTitle: "Guide",
-    guideCopy: "New here? These ten sections take you from an empty page to a cleanly signed-in account.",
+    guideCopy: "New here? These eleven sections take you from an empty page to a cleanly signed-in account.",
     providers: "Providers",
     proxies: "Proxy IPs",
     providersTitle: "Providers",
@@ -423,6 +423,9 @@ const messages = {
     accountHostingNextLabel: "Next attempt",
     accountHostingNextNone: "The credential is still valid; it will be renewed shortly before it expires",
     accountHostingNextOff: "Hosting is off, so nothing is scheduled",
+    hostingAlertText: "Hosted renewal switched itself off for {count} account(s) and needs a look",
+    hostingAlertOpen: "Review",
+    hostingAlertDismiss: "Dismiss",
     accountHostingNextAt: "{time}",
     accountHostingLastLabel: "Last renewal",
     accountHostingLastNone: "No renewal yet",
@@ -444,7 +447,7 @@ const messages = {
     accountHostingDisabledNotice: "Renew hosting is now off for this account.",
     accountHostingRunNotice: "A background renewal has started.",
     accountHostingPausedNotice: "The renewal needs you, so hosting switched itself off: {reason}",
-    accountHostingGuardNote: "Only one renewal runs at a time, and never alongside a sign-in you started. Attempts are at least 30 minutes apart, with no daily cap, because a short-lived credential legitimately needs many renewals a day. If it keeps failing or needs you personally, hosting switches itself off and you have to enable it again.",
+    accountHostingGuardNote: "Only one renewal runs at a time, and never alongside a sign-in or an identity check you started. Attempts are at least 30 minutes apart, with no daily cap, because a short-lived credential legitimately needs many renewals a day. While the credential is still valid a failure only retries with backoff; hosting switches itself off when it needs you personally, or when it keeps failing after the expiry has passed -- enabling it again is your click.",
     accountHostingHistoryTitle: "Renewal history",
     accountHostingHistoryEmpty: "No renewals yet.",
     accountHostingHistoryLine: "{time} · {outcome}",
@@ -523,7 +526,7 @@ const messages = {
     subtitle: "管理代理 IP 与供应商登录。",
     guide: "使用说明",
     guideTitle: "使用说明",
-    guideCopy: "第一次用？下面十节带你从空页面走到一个账号干净地登进 magpie。",
+    guideCopy: "第一次用？下面十一节带你从空页面走到一个账号干净地登进 magpie。",
     providers: "供应商",
     proxies: "代理 IP",
     providersTitle: "供应商",
@@ -862,6 +865,9 @@ const messages = {
     accountHostingNextLabel: "下次动作",
     accountHostingNextNone: "凭据仍有效，到期前会自动续期",
     accountHostingNextOff: "托管未开启，不会安排续期",
+    hostingAlertText: "{count} 个账号的续期托管已自动关闭，需要你处理",
+    hostingAlertOpen: "查看",
+    hostingAlertDismiss: "知道了",
     accountHostingNextAt: "{time}",
     accountHostingLastLabel: "上次续期",
     accountHostingLastNone: "还没有续期过",
@@ -883,7 +889,7 @@ const messages = {
     accountHostingDisabledNotice: "已关闭这个账号的续期托管。",
     accountHostingRunNotice: "已在后台开始一次续期。",
     accountHostingPausedNotice: "续期需要你本人处理，托管已自动关闭：{reason}",
-    accountHostingGuardNote: "同一时刻只跑一个续期，也不会和你手动发起的登录同时进行。两次尝试至少间隔 30 分钟，不设每日上限——有效期短的凭据一天本来就要续很多次。反复失败或需要你本人操作时会自动关闭，要再开通得重新点一次。",
+    accountHostingGuardNote: "同一时刻只跑一个续期，也不会和你手动发起的登录或身份检测同时进行。两次尝试至少间隔 30 分钟，不设每日上限——有效期短的凭据一天本来就要续很多次。凭据还有效时，失败只会退避重试；需要你本人操作，或过期后仍连续失败，才会自动关闭——要再开通得重新点一次。",
     accountHostingHistoryTitle: "续期记录",
     accountHostingHistoryEmpty: "还没有续期记录。",
     accountHostingHistoryLine: "{time} · {outcome}",
@@ -962,7 +968,7 @@ const messages = {
     subtitle: "管理代理 IP 與供應商登入。",
     guide: "使用說明",
     guideTitle: "使用說明",
-    guideCopy: "第一次用？下面十節帶你從空頁面走到一個帳號乾淨地登入 magpie。",
+    guideCopy: "第一次用？下面十一節帶你從空頁面走到一個帳號乾淨地登入 magpie。",
     providers: "供應商",
     proxies: "代理 IP",
     providersTitle: "供應商",
@@ -1301,6 +1307,9 @@ const messages = {
     accountHostingNextLabel: "下次動作",
     accountHostingNextNone: "憑證仍有效，到期前會自動續期",
     accountHostingNextOff: "託管未開啟，不會安排續期",
+    hostingAlertText: "{count} 個帳號的續期託管已自動關閉，需要你處理",
+    hostingAlertOpen: "查看",
+    hostingAlertDismiss: "知道了",
     accountHostingNextAt: "{time}",
     accountHostingLastLabel: "上次續期",
     accountHostingLastNone: "還沒有續期過",
@@ -1322,7 +1331,7 @@ const messages = {
     accountHostingDisabledNotice: "已關閉這個帳號的續期託管。",
     accountHostingRunNotice: "已在背景開始一次續期。",
     accountHostingPausedNotice: "續期需要你本人處理，託管已自動關閉：{reason}",
-    accountHostingGuardNote: "同一時刻只跑一個續期，也不會和你手動發起的登入同時進行。兩次嘗試至少間隔 30 分鐘，不設每日上限——有效期短的憑證一天本來就要續很多次。反覆失敗或需要你本人操作時會自動關閉，要再開通得重新點一次。",
+    accountHostingGuardNote: "同一時刻只跑一個續期，也不會和你手動發起的登入或身分檢測同時進行。兩次嘗試至少間隔 30 分鐘，不設每日上限——有效期短的憑證一天本來就要續很多次。憑證還有効時，失敗只會退避重試；需要你本人操作，或過期後仍連續失敗，才會自動關閉——要再開通得重新點一次。",
     accountHostingHistoryTitle: "續期記錄",
     accountHostingHistoryEmpty: "還沒有續期記錄。",
     accountHostingHistoryLine: "{time} · {outcome}",
@@ -1401,7 +1410,7 @@ const messages = {
     subtitle: "プロキシ IP とプロバイダーのログインを管理します。",
     guide: "使い方",
     guideTitle: "使い方",
-    guideCopy: "初めてなら、この 10 項目で、空のページからアカウントのクリーンなログインまでをたどれます。",
+    guideCopy: "初めてなら、この 11 項目で、空のページからアカウントのクリーンなログインまでをたどれます。",
     providers: "プロバイダー",
     proxies: "プロキシ IP",
     providersTitle: "プロバイダー",
@@ -1740,6 +1749,9 @@ const messages = {
     accountHostingNextLabel: "次の動作",
     accountHostingNextNone: "認証情報は有効です。期限切れ前に自動で更新されます",
     accountHostingNextOff: "託管がOFFのため、予定されません",
+    hostingAlertText: "{count} 件のアカウントで託管が自動的にOFFになりました。確認してください",
+    hostingAlertOpen: "確認する",
+    hostingAlertDismiss: "閉じる",
     accountHostingNextAt: "{time}",
     accountHostingLastLabel: "前回の更新",
     accountHostingLastNone: "まだ更新していません",
@@ -1761,7 +1773,7 @@ const messages = {
     accountHostingDisabledNotice: "このアカウントの更新ホスティングをオフにしました。",
     accountHostingRunNotice: "バックグラウンドで更新を開始しました。",
     accountHostingPausedNotice: "更新にはあなたの操作が必要なため、ホスティングは自動的にオフになりました：{reason}",
-    accountHostingGuardNote: "一度に実行される更新は1つだけで、手動のログインとも同時に動きません。試行は最低30分開けます。1日の上限はありません。有効期限の短い認証情報は1日に何度も更新が必要なためです。失敗が続いたりあなたの操作が必要になると自動的にオフになり、再度オンにするにはもう一度クリックが必要です。",
+    accountHostingGuardNote: "一度に実行される更新は1つだけで、手動のログインや身分チェックとも同時に動きません。試行は最低30分開けます。1日の上限はありません。有効期限の短い認証情報は1日に何度も更新が必要なためです。資格情報がまだ有効な間は、失敗してもバックオフして再試行するだけです。あなたの操作が必要な場合、または期限切れ後に失敗が続いた場合に自動的にオフになり、再度オンにするにはもう一度クリックが必要です。",
     accountHostingHistoryTitle: "更新履歴",
     accountHostingHistoryEmpty: "まだ更新履歴がありません。",
     accountHostingHistoryLine: "{time} · {outcome}",
@@ -2186,6 +2198,8 @@ function applyText() {
   byId("account-hosting-guard").textContent = text.accountHostingGuardNote;
   byId("account-hosting-history-title").textContent = text.accountHostingHistoryTitle;
   byId("account-hosting-dismiss").textContent = text.accountHostingDismiss;
+  byId("hosting-alert-open").textContent = text.hostingAlertOpen;
+  byId("hosting-alert-dismiss").textContent = text.hostingAlertDismiss;
   byId("account-hosting-close").setAttribute("aria-label", text.accountHostingDismiss);
   byId("account-hosting-toggle").textContent = text.accountHostingEnable;
   byId("account-hosting-run").textContent = text.accountHostingRun;
@@ -5257,11 +5271,38 @@ function accountRow(account) {
   return row;
 }
 
+// A hosted renewal that switched itself off is the one thing the page should
+// say without being asked: the account will not be renewed again until someone
+// looks. The banner counts them and jumps to the first one; dismissing it hides
+// it until the set of paused accounts (or their last update) changes again.
+let hostingAlertDismissed = "";
+
+function hostingAlertSignature(paused) {
+  return paused
+    .map((item) => `${item.provider}\u0000${item.key}\u0000${item.hosting?.updatedAt ?? ""}`)
+    .join("|");
+}
+
+function renderHostingAlert() {
+  const banner = byId("hosting-alert");
+  const paused = accountIdentities.filter((item) => item?.hosting?.state === "paused");
+  if (!paused.length || hostingAlertSignature(paused) === hostingAlertDismissed) {
+    banner.hidden = true;
+    return;
+  }
+  byId("hosting-alert-text").textContent = text.hostingAlertText.replace(
+    "{count}",
+    String(paused.length),
+  );
+  banner.hidden = false;
+}
+
 function renderAccounts() {
   const list = byId("accounts-list");
   const table = byId("account-table");
   const empty = byId("accounts-empty");
   const notice = byId("accounts-notice");
+  renderHostingAlert();
   const total = accountIdentities.length;
   const signedIn = accountIdentities.filter((item) => item?.signedIn === true).length;
   byId("account-count").textContent = String(total);
@@ -6266,6 +6307,16 @@ byId("account-hosting-toggle").addEventListener("click", () => {
 });
 byId("account-hosting-run").addEventListener("click", () => void runAccountHosting());
 byId("account-hosting-cancel").addEventListener("click", () => void cancelAccountHosting());
+byId("hosting-alert-open").addEventListener("click", () => {
+  const paused = accountIdentities.filter((item) => item?.hosting?.state === "paused");
+  selectTab("accounts");
+  if (paused.length) openAccountHosting(paused[0]);
+});
+byId("hosting-alert-dismiss").addEventListener("click", () => {
+  const paused = accountIdentities.filter((item) => item?.hosting?.state === "paused");
+  hostingAlertDismissed = hostingAlertSignature(paused);
+  renderHostingAlert();
+});
 byId("account-check-close").addEventListener("click", closeAccountCheck);
 byId("account-check-dismiss").addEventListener("click", closeAccountCheck);
 byId("account-check-start").addEventListener("click", startAccountCheck);

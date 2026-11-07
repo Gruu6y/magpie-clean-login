@@ -536,6 +536,8 @@ test("static files exist and carry no mock data or dead action buttons", () => {
     "account-hosting-cancel",
     "account-hosting-run",
     "account-hosting-toggle",
+    "hosting-alert-open",
+    "hosting-alert-dismiss",
     "report-close",
     "report-cancel",
     "report-copy-body",

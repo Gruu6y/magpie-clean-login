@@ -141,6 +141,25 @@ const en = [
   },
   {
     n: "08",
+    title: "Hosted renewal: keep one account's renewal in its own fingerprint",
+    lead: "Off by default. When you turn it on for one account, Clean Login takes over that account's renewal: before the credential expires it re-runs that account's own sign-in in the background, with the same fingerprint and the same exit it was signed in with.",
+    blocks: [
+      { t: "ol", items: [
+        "Open the Accounts tab, press Hosted renewal on the row, read which fingerprint and exit it will use, then press Enable hosting.",
+        "Nothing else changes: the account keeps working, and the row shows whether hosting is watching, renewing or paused.",
+        "Renew now tries once immediately, Stop this renewal cancels the one in flight, and you can turn hosting off again at any time.",
+      ] },
+      { t: "terms", items: [
+        { k: "Same fingerprint, same exit", v: "The same identity.json, the same persistent profile, and the exit recorded at sign-in. A direct sign-in stays direct." },
+        { k: "Renews before it expires", v: "15 minutes early for an hourly credential, about 72 minutes for a daily one, and five days for a fortnight- or month-long one." },
+        { k: "No daily cap", v: "Attempts are at least 30 minutes apart. A short-lived credential legitimately needs many renewals a day." },
+        { k: "Off by itself", v: "A verification code, a device code, a changed account, or repeated failures after the credential expired switch hosting off and say why; turn it on again once the account is fixed." },
+      ] },
+      { t: "note", text: "Hosting never races magpie's refresh token: it performs a complete sign-in and writes the new credential back through the same path a manual sign-in uses. It never runs at the same time as your own sign-in or an identity check." },
+    ],
+  },
+  {
+    n: "09",
     title: "Not sure how to start? Ask your agent",
     lead: "This is not only a web page. The plugin ships a command line and an agent endpoint, so an agent you already talk to can drive it for you.",
     blocks: [
@@ -153,7 +172,7 @@ const en = [
     ],
   },
   {
-    n: "09",
+    n: "10",
     title: "When something gets stuck",
     blocks: [
       { t: "terms", items: [
@@ -168,7 +187,7 @@ const en = [
     ],
   },
   {
-    n: "10",
+    n: "11",
     title: "Where your data lives",
     blocks: [
       { t: "ul", items: [
@@ -303,6 +322,25 @@ const zhHans = [
   },
   {
     n: "08",
+    title: "续期托管：让一个账号的续期留在它自己的指纹里",
+    lead: "默认关闭。你为某个账号打开之后，干净登录就接管这个账号的续期：在凭据到期前，用这个账号登录时的同一套指纹、同一条出口，在后台静默重跑一次它自己的登录。",
+    blocks: [
+      { t: "ol", items: [
+        "打开「账号」页，在该行点「托管续期」，看清它会用哪套指纹和出口，再点「开通托管」。",
+        "其余不变：账号照常可用，行内会显示托管是在监控、续期中还是已暂停。",
+        "「立即续期」可以马上试一次，「停止本次续期」可以中止正在跑的那次，随时也能把托管关掉。",
+      ] },
+      { t: "terms", items: [
+        { k: "同一套指纹、同一条出口", v: "同一个 identity.json、同一个持久 profile，以及登录时记下的那条出口；当时是直连就仍然直连。" },
+        { k: "到期前续", v: "一小时期的凭据提前 15 分钟，一天期约提前 72 分钟，半月或月期提前 5 天。" },
+        { k: "不设每日上限", v: "两次尝试至少间隔 30 分钟；有效期短的凭据一天本来就要续很多次。" },
+        { k: "会自己关闭", v: "遇到验证码、设备码、账号已变，或凭据过期后仍连续失败，托管会自动关闭并写明原因；修好后重新开通即可。" },
+      ] },
+      { t: "note", text: "托管不会去抢 magpie 的 refresh token：它走的是一次完整登录，新凭据经与手动登录完全相同的路径写回。它也不会和你的手动登录或身份检测同时进行。" },
+    ],
+  },
+  {
+    n: "09",
     title: "不会用？没关系，问你的 agent",
     lead: "这个插件不只是一个网页。它自带命令行和 agent 接口，你平时已经在对话的那个 agent 可以直接替你操作。",
     blocks: [
@@ -315,7 +353,7 @@ const zhHans = [
     ],
   },
   {
-    n: "09",
+    n: "10",
     title: "卡住了怎么办",
     blocks: [
       { t: "terms", items: [
@@ -330,7 +368,7 @@ const zhHans = [
     ],
   },
   {
-    n: "10",
+    n: "11",
     title: "你的数据放在哪里",
     blocks: [
       { t: "ul", items: [
@@ -465,6 +503,25 @@ const zhHant = [
   },
   {
     n: "08",
+    title: "續期託管：讓一個帳號的續期留在它自己的指紋裡",
+    lead: "預設關閉。你為某個帳號開啟之後，乾淨登入就接管這個帳號的續期：在憑證到期前，用這個帳號登入時的同一套指紋、同一條出口，在背景靜默重跑一次它自己的登入。",
+    blocks: [
+      { t: "ol", items: [
+        "開啟「帳號」頁，在該列點「託管續期」，看清它會用哪套指紋和出口，再點「開通託管」。",
+        "其餘不變：帳號照常可用，列內會顯示託管是在監控、續期中還是已暫停。",
+        "「立即續期」可以馬上試一次，「停止本次續期」可以中止正在跑的那次，隨時也能把託管關掉。",
+      ] },
+      { t: "terms", items: [
+        { k: "同一套指紋、同一條出口", v: "同一個 identity.json、同一個持久 profile，以及登入時記下的那條出口；當時是直連就仍然直連。" },
+        { k: "到期前續", v: "一小時期的憑證提前 15 分鐘，一天期約提前 72 分鐘，半月或月期提前 5 天。" },
+        { k: "不設每日上限", v: "兩次嘗試至少間隔 30 分鐘；有效期短的憑證一天本來就要續很多次。" },
+        { k: "會自己關閉", v: "遇到驗證碼、裝置碼、帳號已變，或憑證過期後仍連續失敗，託管會自動關閉並寫明原因；修好後重新開通即可。" },
+      ] },
+      { t: "note", text: "託管不會去搶 magpie 的 refresh token：它走的是一次完整登入，新憑證經與手動登入完全相同的路徑寫回。它也不會和你的手動登入或身分檢測同時進行。" },
+    ],
+  },
+  {
+    n: "09",
     title: "不會用？沒關係，問你的 agent",
     lead: "這個外掛不只是一個網頁。它自帶命令列和 agent 介面，你平時已經在對話的那個 agent 可以直接替你操作。",
     blocks: [
@@ -477,7 +534,7 @@ const zhHant = [
     ],
   },
   {
-    n: "09",
+    n: "10",
     title: "卡住了怎麼辦",
     blocks: [
       { t: "terms", items: [
@@ -492,7 +549,7 @@ const zhHant = [
     ],
   },
   {
-    n: "10",
+    n: "11",
     title: "你的資料放在哪裡",
     blocks: [
       { t: "ul", items: [
@@ -627,6 +684,25 @@ const ja = [
   },
   {
     n: "08",
+    title: "託管更新: 1 アカウントの更新をその指紋の中に保つ",
+    lead: "既定はオフです。1 つのアカウントでオンにすると、クリーンログインがそのアカウントの更新を引き継ぎます。資格情報が切れる前に、そのアカウントのログイン時と同じ指紋・同じ出口で、バックグラウンドで静かにログインし直します。",
+    blocks: [
+      { t: "ol", items: [
+        "「アカウント」タブを開き、その行の「託管更新」を押し、使う指紋と出口を確認してから「託管を有効にする」を押します。",
+        "ほかは変わりません。アカウントはそのまま使え、行には監視中・更新中・一時停止のどれかが表示されます。",
+        "「今すぐ更新」で一度だけ試し、「今回の更新を停止」で実行中のものを中止でき、いつでもオフに戻せます。",
+      ] },
+      { t: "terms", items: [
+        { k: "同じ指紋・同じ出口", v: "同じ identity.json、同じ永続プロファイル、そしてログイン時に記録した出口。直接接続なら直接接続のままです。" },
+        { k: "期限前に更新", v: "1 時間の資格情報は 15 分前、1 日なら約 72 分前、半月・月単位なら 5 日前です。" },
+        { k: "1 日の上限なし", v: "試行は少なくとも 30 分空けます。短命な資格情報は 1 日に何度も更新が必要だからです。" },
+        { k: "自動でオフ", v: "確認コード、デバイスコード、アカウントの変化、期限切れ後の連続失敗があると、理由を書いて自動でオフになります。直したらもう一度オンにしてください。" },
+      ] },
+      { t: "note", text: "託管は magpie の refresh token を奪いません。完全なログインを行い、手動ログインと同じ経路で新しい資格情報を書き戻します。手動ログインや身分チェックと同時には動きません。" },
+    ],
+  },
+  {
+    n: "09",
     title: "使い方が分からなければ、あなたの agent へ",
     lead: "これは Web ページだけではありません。プラグインにはコマンドラインと agent 用エンドポイントが入っているので、すでに会話している agent が代わりに操作できます。",
     blocks: [
@@ -639,7 +715,7 @@ const ja = [
     ],
   },
   {
-    n: "09",
+    n: "10",
     title: "詰まったとき",
     blocks: [
       { t: "terms", items: [
@@ -654,7 +730,7 @@ const ja = [
     ],
   },
   {
-    n: "10",
+    n: "11",
     title: "データの保存先",
     blocks: [
       { t: "ul", items: [

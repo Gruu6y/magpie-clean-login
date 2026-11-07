@@ -55,11 +55,11 @@ describe("the user guide tab and in-page manual", () => {
     const langs = ["en", "zh-Hans", "zh-Hant", "ja"];
     expect(Object.keys(GUIDE).sort()).toEqual([...langs].sort());
 
-    const expectedNumbers = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"];
+    const expectedNumbers = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"];
 
     for (const lang of langs) {
       const sections = GUIDE[lang];
-      expect(sections.length).toBe(10);
+      expect(sections.length).toBe(11);
       expect(sections.map((s) => s.n)).toEqual(expectedNumbers);
 
       for (const section of sections) {
@@ -143,9 +143,9 @@ describe("the user guide tab and in-page manual", () => {
     }
   });
 
-  test("section 08 points a stuck beginner at the shipped command line", () => {
+  test("section 09 points a stuck beginner at the shipped command line", () => {
     for (const lang of Object.keys(GUIDE)) {
-      const section = GUIDE[lang].find((s) => s.n === "08");
+      const section = GUIDE[lang].find((s) => s.n === "09");
       expect(section).toBeDefined();
       const prose = [section.lead, ...section.blocks.flatMap((b) => b.items || b.text || "")].join("\n");
       // The real entry point, not a promise of one.
@@ -158,7 +158,7 @@ describe("the user guide tab and in-page manual", () => {
   test("the guide intro counts the sections it actually renders", () => {
     // A number in the intro is a claim about the manual. It went stale once
     // when sections were added, so the count is derived from GUIDE, not typed.
-    const spoken = { en: ["ten", 10], "zh-Hans": ["十节", 10], "zh-Hant": ["十節", 10], ja: ["10 項目", 10] };
+    const spoken = { en: ["eleven", 11], "zh-Hans": ["十一节", 11], "zh-Hant": ["十一節", 11], ja: ["11 項目", 11] };
     const copies = [...app.matchAll(/guideCopy: "([^"]+)"/g)].map((m) => m[1]);
     expect(copies.length).toBe(4);
     LANGS.forEach((lang, index) => {
