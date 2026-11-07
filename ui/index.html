@@ -36,6 +36,10 @@
       <span class="rail-label" id="rail-accounts-label">Accounts</span>
       <span class="dot"></span>
     </div>
+    <div class="rail-item" id="rail-guide" data-rail="guide">
+      <span class="rail-label" id="rail-guide-label">Guide</span>
+      <span class="dot"></span>
+    </div>
   </nav>
   <div class="shell">
     <header class="header">
@@ -61,6 +65,10 @@
         aria-selected="false" aria-controls="panel-accounts">
         <span id="tab-accounts-label">Accounts</span>
         <span class="tab-count" id="account-count">0</span>
+      </button>
+      <button class="tab" id="tab-guide" type="button" role="tab"
+        aria-selected="false" aria-controls="panel-guide">
+        <span id="tab-guide-label">Guide</span>
       </button>
     </nav>
 
@@ -264,6 +272,20 @@
           <strong id="accounts-empty-title">No accounts yet</strong>
           <p id="accounts-empty-copy">Accounts appear here after a sign-in through Clean Login.</p>
         </div>
+      </section>
+
+      <!-- The manual. Static prose for a first-time user, rendered from
+           guide-content.js with textContent only: no markup, no remote
+           resource, no control of its own. It reads the same four languages
+           as the rest of the page. -->
+      <section class="panel" id="panel-guide" role="tabpanel" aria-labelledby="tab-guide" hidden>
+        <div class="section-head">
+          <div>
+            <h2 id="guide-title">Guide</h2>
+            <p id="guide-copy">A first-time walkthrough of the three tabs.</p>
+          </div>
+        </div>
+        <div class="guide" id="guide-body"></div>
       </section>
     </main>
 

@@ -13,7 +13,7 @@ const view = readFileSync(join(root, "ui", "account-view.js"), "utf8");
 const state = readFileSync(join(root, "ui", "account-state.js"), "utf8");
 
 const buttonIds = [
-  "tab-providers", "tab-proxies", "tab-accounts", "retry", "add-proxy",
+  "tab-providers", "tab-proxies", "tab-accounts", "tab-guide", "retry", "add-proxy",
   "add-proxy-empty", "environment-prepare", "environment-cancel",
   "environment-retry", "filter-reset", "score-cancel", "proxy-close",
   "test-proxy", "proxy-cancel", "save-proxy", "confirm-close", "confirm-cancel",

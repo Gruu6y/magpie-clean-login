@@ -65,6 +65,7 @@ import {
 } from "./environment-state.js";
 import { createReloadGuard } from "./reload-guard.js";
 import { followHostTheme } from "./host-theme.js";
+import { guideSections } from "./guide-content.js";
 
 const TOKEN_HEADER = "x-clean-login-token";
 
@@ -77,6 +78,9 @@ const messages = {
   en: {
     title: "Clean Login",
     subtitle: "Proxy IPs and provider sign-ins.",
+    guide: "Guide",
+    guideTitle: "Guide",
+    guideCopy: "New here? Follow these eight steps to sign an account in cleanly.",
     providers: "Providers",
     proxies: "Proxy IPs",
     providersTitle: "Providers",
@@ -455,6 +459,9 @@ const messages = {
   "zh-Hans": {
     title: "干净登录",
     subtitle: "管理代理 IP 与供应商登录。",
+    guide: "使用说明",
+    guideTitle: "使用说明",
+    guideCopy: "第一次用？照着下面八步走一遍，就能把一个账号干净地登进 magpie。",
     providers: "供应商",
     proxies: "代理 IP",
     providersTitle: "供应商",
@@ -832,6 +839,9 @@ const messages = {
   "zh-Hant": {
     title: "乾淨登入",
     subtitle: "管理代理 IP 與供應商登入。",
+    guide: "使用說明",
+    guideTitle: "使用說明",
+    guideCopy: "第一次用？照著下面八步走一遍，就能把一個帳號乾淨地登入 magpie。",
     providers: "供應商",
     proxies: "代理 IP",
     providersTitle: "供應商",
@@ -1209,6 +1219,9 @@ const messages = {
   ja: {
     title: "クリーンログイン",
     subtitle: "プロキシ IP とプロバイダーのログインを管理します。",
+    guide: "使い方",
+    guideTitle: "使い方",
+    guideCopy: "初めてなら、次の 8 ステップでアカウントをクリーンにログインできます。",
     providers: "プロバイダー",
     proxies: "プロキシ IP",
     providersTitle: "プロバイダー",
@@ -1790,6 +1803,10 @@ function applyText() {
   byId("rail-providers-label").textContent = text.providers;
   byId("rail-proxies-label").textContent = text.proxies;
   byId("rail-accounts-label").textContent = text.accounts;
+  byId("tab-guide-label").textContent = text.guide;
+  byId("rail-guide-label").textContent = text.guide;
+  byId("guide-title").textContent = text.guideTitle;
+  byId("guide-copy").textContent = text.guideCopy;
   byId("providers-title").textContent = text.providersTitle;
   byId("providers-copy").textContent = text.providersCopy;
   byId("providers-empty-title").textContent = text.providersEmptyTitle;
@@ -1947,6 +1964,7 @@ function selectTab(name) {
     ["providers", "tab-providers", "panel-providers"],
     ["proxies", "tab-proxies", "panel-proxies"],
     ["accounts", "tab-accounts", "panel-accounts"],
+    ["guide", "tab-guide", "panel-guide"],
   ]) {
     const active = key === name;
     byId(tabId).classList.toggle("is-active", active);
@@ -1956,6 +1974,66 @@ function selectTab(name) {
     // tablist, so it carries no controls); keep its highlight in step.
     const rail = byId(`rail-${key}`);
     if (rail) rail.classList.toggle("is-active", active);
+  }
+}
+
+// The manual is prose, so it is built from text nodes only: nothing in
+// guide-content.js can become markup, and no injection sink is used.
+// It is rendered once at startup because the language is fixed for the document.
+function renderGuide() {
+  const body = byId("guide-body");
+  body.textContent = "";
+  for (const section of guideSections(langKey)) {
+    const article = document.createElement("section");
+    article.className = "guide-section";
+    const number = document.createElement("span");
+    number.className = "guide-num";
+    number.textContent = section.n;
+    const main = document.createElement("div");
+    main.className = "guide-main";
+    const heading = document.createElement("h3");
+    heading.textContent = section.title;
+    main.append(heading);
+    if (section.lead) {
+      const lead = document.createElement("p");
+      lead.className = "guide-lead";
+      lead.textContent = section.lead;
+      main.append(lead);
+    }
+    for (const block of section.blocks || []) {
+      if (block.t === "terms") {
+        const terms = document.createElement("dl");
+        terms.className = "guide-terms";
+        for (const item of block.items) {
+          const row = document.createElement("div");
+          const term = document.createElement("dt");
+          term.textContent = item.k;
+          const detail = document.createElement("dd");
+          detail.textContent = item.v;
+          row.append(term, detail);
+          terms.append(row);
+        }
+        main.append(terms);
+        continue;
+      }
+      if (block.t === "ol" || block.t === "ul") {
+        const list = document.createElement(block.t);
+        list.className = block.t === "ol" ? "guide-steps" : "guide-list";
+        for (const item of block.items) {
+          const entry = document.createElement("li");
+          entry.textContent = item;
+          list.append(entry);
+        }
+        main.append(list);
+        continue;
+      }
+      const paragraph = document.createElement("p");
+      paragraph.className = block.t === "note" ? "guide-note" : "guide-text";
+      paragraph.textContent = block.text;
+      main.append(paragraph);
+    }
+    article.append(number, main);
+    body.append(article);
   }
 }
 
@@ -5412,8 +5490,11 @@ function cleanupAccountCheck() {
 }
 
 applyText();
+renderGuide();
 byId("tab-providers").addEventListener("click", () => selectTab("providers"));
 byId("tab-proxies").addEventListener("click", () => selectTab("proxies"));
+// The manual is static prose: switching to it must not refetch anything.
+byId("tab-guide").addEventListener("click", () => selectTab("guide"));
 // Reading progress for the top hairline. Decoration only: the value comes from
 // the scroll position and is never persisted.
 const progressLine = byId("progress-line");

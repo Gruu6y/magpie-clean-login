@@ -8,7 +8,7 @@
 
 **干净登录（CL）是 [magpie](https://usemagpie.ai) 的一个非官方插件，用来登录各家供应商：在一个页面里管理代理出口，每个账号都通过自己独立的浏览器身份、自己选定的代理完成登录。规范仓库地址是 [github.com/Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login)。**
 
-![供应商页：三个标签页的页头、搜索框、一次性浏览器准备，以及最前面的供应商卡片](assets/screenshot-providers.png)
+![供应商页：页头、搜索框、一次性浏览器准备，以及最前面的供应商卡片](assets/screenshot-providers.png)
 
 > **非官方插件。** 干净登录就在 [Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login) 这里开发和维护，**不是** `magpie-community` 发布的，除了你自己没有人审阅过它。读代码、提 issue、发 pull request —— 三件都欢迎。
 
@@ -20,7 +20,7 @@
 - [环境要求](#requirements)
 - [安装](#install)
 - [快速开始](#quick-start)
-- [三个标签页](#tabs)
+- [四个标签页](#tabs)
 - [功能](#features)
 - [命令行与 agent](#cli)
 - [排查问题](#troubleshooting)
@@ -76,7 +76,9 @@
 
 <a id="tabs"></a>
 
-## 三个标签页
+## 四个标签页
+
+**Guide（使用说明）** —— 页内自带一份面向第一次使用者的说明书，八步讲清准备浏览器、加代理、登录账号、看懂身份检测结论，以及卡住了怎么办。四种语言各写一份，不是把英文句子机翻过去。纯文字页面，不联网、不下载、不执行任何东西。
 
 **Proxy IPs（出口 IP）** —— 用一条真实连接测试出口，读出出口 IP、地区和延迟，然后按地区、延迟区间以及名字里的标签（家宽 / 静态）筛选。不会退回直连：测试失败就把失败原因摆给你看。测速目标可以选「通用（出口检测）」，也可以选某家供应商，直接测到它的 API 主机。
 
