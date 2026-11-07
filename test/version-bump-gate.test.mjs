@@ -118,6 +118,40 @@ test("the gate rejects a branch whose version is lower than the current main", (
   });
 });
 
+// The collision that actually happened four times: two branches, each started
+// where main was 0.1.62, each declaring the next patch -- and main had already
+// released that number. Being *equal* to main is not a downgrade, so the check
+// above lets it through; it is a version nobody receives, which is worse.
+test("the gate rejects a branch that declares the version main already released", () => {
+  withFixture((dir) => {
+    git(dir, ["checkout", "-q", "-b", "topic"]);
+    writeFileSync(join(dir, "package.json"), manifest("0.1.63"));
+    writeFileSync(join(dir, "lib", "existing.mjs"), "export const a = 2;\n");
+    git(dir, ["add", "-A"]);
+    commit(dir, "branch declares 0.1.63");
+
+    // Someone else ships 0.1.63 while this branch sits open.
+    git(dir, ["checkout", "-q", "main"]);
+    writeFileSync(join(dir, "package.json"), manifest("0.1.63"));
+    git(dir, ["add", "-A"]);
+    commit(dir, "0.1.63: release");
+
+    git(dir, ["checkout", "-q", "topic"]);
+    const taken = runGate(dir);
+    expect(taken.status).toBe(1);
+    expect(taken.stderr).toContain("already released 0.1.63");
+    expect(taken.stderr).toContain("strictly greater");
+
+    // The fix the message prescribes: one above what main shipped.
+    writeFileSync(join(dir, "package.json"), manifest("0.1.64"));
+    git(dir, ["add", "-A"]);
+    commit(dir, "bump above the released number");
+    const fixed = runGate(dir);
+    expect(fixed.status).toBe(0);
+    expect(fixed.stdout).toContain("[version-check] OK:");
+  });
+});
+
 test("a docs-only branch with no version claim still passes when main moved on", () => {
   withFixture((dir) => {
     // Cut the PR while main was still 0.1.62, touching only README.md.
@@ -155,5 +189,9 @@ test("the gate script actually wires the ordering check into its decision", () =
   expect(gateSource).toContain('import { compareVersions } from "./version-order.mjs";');
   expect(gateSource).toContain("const mainVersion = versionAt(baseCommit) || forkVersion;");
   expect(gateSource).toContain("order < 0");
+  // A number equal to main's is refused by its own branch, not folded into the
+  // downgrade message: the two need different advice.
+  expect(gateSource).toContain("if (order === 0) {");
+  expect(gateSource).toContain("already released");
   expect(gateSource).toContain("went backwards");
 });
