@@ -68,7 +68,7 @@ The first time you sign in, Clean Login downloads its own browser runtime — ab
 
 ## The four tabs
 
-**Guide** — an in-page manual written for a first-time user: eight steps that cover preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and what to do when something sticks. Each of the four languages is written out on its own, not machine-translated English. It is a text page: no network, no downloads, nothing executed.
+**Guide** — an in-page manual written for a first-time user: ten sections that cover why this plugin exists, preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and handing the whole thing to your own agent when you would rather not click. Each of the four languages is written out on its own, not machine-translated English. It is a text page: no network, no downloads, nothing executed.
 
 **Proxy IPs** — test an exit through a real connection, read the exit IP, region and latency, then filter by region, latency and the tags in the name (家宽 / 静态). No direct-connection fallback: if a test fails, you see why. The measurement target can be the general exit check or a specific provider, measured straight to its API host.
 
