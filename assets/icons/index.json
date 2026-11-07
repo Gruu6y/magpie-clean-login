@@ -24,7 +24,7 @@
     "zoo-code",
     "kimi-code-desktop"
   ],
-  "count": 193,
+  "count": 195,
   "icons": {
     "ai21": {
       "file": "ai21.svg",
@@ -608,6 +608,12 @@
       "bytes": 524,
       "sha256": "4727b1cbd33bd256"
     },
+    "liveagent-color": {
+      "file": "liveagent-color.svg",
+      "kind": "picture",
+      "bytes": 6928,
+      "sha256": "59522259efd827b1"
+    },
     "llmapi": {
       "file": "llmapi.svg",
       "kind": "mark",
@@ -799,6 +805,12 @@
       "kind": "mark",
       "bytes": 235,
       "sha256": "7cfa6e9d6726f7c9"
+    },
+    "openmausbot": {
+      "file": "openmausbot.svg",
+      "kind": "picture",
+      "bytes": 7169,
+      "sha256": "7d01846ba0c87cf6"
     },
     "openrouter": {
       "file": "openrouter.svg",
