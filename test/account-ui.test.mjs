@@ -83,6 +83,69 @@ test("signInPayload adds the account only when one was chosen", () => {
   });
 });
 
+test("a rotation travels only as a boolean true beside a real key", () => {
+  expect(signInAccount("workbuddy#a", true)).toEqual({ key: "workbuddy#a", rotate: true });
+  // A plain continue sends exactly what it always sent.
+  expect(signInAccount("workbuddy#a")).toEqual({ key: "workbuddy#a" });
+  expect(signInAccount("workbuddy#a", false)).toEqual({ key: "workbuddy#a" });
+  // Truthy is not consent: replacing an account's machine is deliberate.
+  for (const rotate of ["true", "yes", 1, {}, null, undefined]) {
+    expect(signInAccount("workbuddy#a", rotate)).toEqual({ key: "workbuddy#a" });
+  }
+  // No key, no rotation -- there is no account to give a machine to.
+  for (const key of ["", "   ", null, { key: "x" }]) {
+    expect(signInAccount(key, true)).toBeNull();
+  }
+});
+
+test("signInPayload carries a rotation beside the account and the method", () => {
+  expect(signInPayload("workbuddy", null, "Browser", "workbuddy#a", null, true)).toEqual({
+    provider: "workbuddy",
+    proxy: null,
+    methodLabel: "Browser",
+    account: { key: "workbuddy#a", rotate: true },
+  });
+  // Without an account the flag has nowhere to go and is dropped entirely.
+  expect(signInPayload("workbuddy", null, null, "", null, true)).toEqual({
+    provider: "workbuddy",
+    proxy: null,
+  });
+  // The five-argument call every existing caller makes is unchanged.
+  expect(signInPayload("workbuddy", null, null, "workbuddy#a")).toEqual({
+    provider: "workbuddy",
+    proxy: null,
+    account: { key: "workbuddy#a" },
+  });
+});
+
+test("a signed-in account can ask for a new machine, and the dialog says which it will do", () => {
+  // The gap this closes: clearing an identity is refused while magpie holds the
+  // credential, so a signed-in account had no door at all.
+  expect(app).toContain("if (view.signedIn) {");
+  expect(app).toContain("openSignInDialog(view.provider, { accountKey: view.key, rotate: true })");
+  expect(app).toContain("rotate.title = text.accountRotateTitle");
+  expect(app).toContain("rotate: options.rotate === true");
+  expect(app).toContain("context.rotate === true,");
+  // The picker cannot fall back to 'new account' mid-renewal, which would send
+  // no key and quietly turn the request into an ordinary sign-in.
+  expect(app).toContain("select.disabled = signInContext?.rotate === true");
+  expect(app).toContain("function signInIdentityHint()");
+  // Three outcomes, three sentences: a discarded pin must not read like a
+  // renewed one.
+  expect(app).toContain("flow?.rotated");
+  expect(app).toContain("flow?.pinDiscarded");
+  for (const key of [
+    "accountRotate",
+    "accountRotateTitle",
+    "signInRotateHint",
+    "signInDoneRotated",
+    "signInDoneKeptPin",
+  ]) {
+    const count = (app.match(new RegExp(`\\b${key}:`, "g")) || []).length;
+    expect(count).toBeGreaterThanOrEqual(4);
+  }
+});
+
 test("accountIdentityPath URL-encodes both segments", () => {
   expect(accountIdentityPath("workbuddy", "workbuddy#ab12")).toBe(
     "api/accounts/workbuddy/workbuddy%23ab12",

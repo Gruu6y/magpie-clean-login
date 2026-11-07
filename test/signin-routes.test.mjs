@@ -155,6 +155,38 @@ test("POST /api/signin ignores a blank or non-string account key", async () => {
   }
 });
 
+test("POST /api/signin forwards a rotation only as a boolean true", async () => {
+  const res = await api("POST", "/api/signin", {
+    provider: "workbuddy",
+    account: { key: "workbuddy#ab12", rotate: true },
+  });
+  expect(res.status).toBe(202);
+  expect(lastStart.account).toEqual({ key: "workbuddy#ab12", rotate: true });
+
+  // Anything else is 'no rotation asked', and the key travels alone exactly as
+  // it did before rotations existed. A string, a number or a nested object must
+  // never be read as consent to replace an account's machine.
+  for (const rotate of [false, "true", "yes", 1, null, {}, undefined]) {
+    const plain = await api("POST", "/api/signin", {
+      provider: "workbuddy",
+      account: { key: "workbuddy#ab12", rotate },
+    });
+    expect(plain.status).toBe(202);
+    expect(lastStart.account).toEqual({ key: "workbuddy#ab12" });
+  }
+});
+
+test("POST /api/signin drops a rotation that names no account", async () => {
+  // The page cannot rotate 'nothing': without a key there is no claim, and the
+  // route does not invent one out of the rotate flag.
+  const res = await api("POST", "/api/signin", {
+    provider: "workbuddy",
+    account: { rotate: true },
+  });
+  expect(res.status).toBe(202);
+  expect(lastStart.account).toBeNull();
+});
+
 // The plugin exposes several runnable oauth methods (ZCode's per-site flows),
 // so the page sends the exact label of the one the user picked.
 test("POST /api/signin forwards the chosen method label", async () => {

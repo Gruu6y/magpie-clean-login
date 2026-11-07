@@ -40,9 +40,14 @@ export function defaultAccountKey(accounts, provider) {
 // The request body for a sign-in that continues an existing identity. The
 // page sends the exact account key it listed; the service verifies the
 // directory's ledger before reusing its fingerprint.
-export function signInAccount(key) {
+//
+// `rotate` is the user asking that same account for a NEW fingerprint. It only
+// ever travels as a boolean true and only alongside a key: replacing a machine
+// is a deliberate act, so a truthy string or a bare flag must not mean it.
+export function signInAccount(key, rotate = false) {
   const value = typeof key === "string" ? key.trim() : "";
-  return value ? { key: value } : null;
+  if (!value) return null;
+  return rotate === true ? { key: value, rotate: true } : { key: value };
 }
 
 // The DELETE path for one identity. Both segments are URL-encoded: a magpie
