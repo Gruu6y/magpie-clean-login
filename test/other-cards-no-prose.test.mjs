@@ -130,6 +130,18 @@ test("the other-providers grid lets a card end where its content ends", () => {
 
 // --- 4. the cards that do need prose keep it -----------------------------
 
+test("the card renderer drops a repeated line instead of showing it twice", () => {
+  // A card appends reason, presence note and notice in order. When a presence
+  // derives multiple slots from one copy block, the duplicate line must be
+  // dropped so a card never prints the same sentence twice. This guard pins the
+  // deduplicating Set in ui/app.js so future edits do not quietly revert it.
+  expect(app).toContain("if (reason.textContent) card.append(reason);");
+  expect(app).toContain("const shownLines = new Set([description.textContent, reason.textContent].filter(Boolean));");
+  expect(app).toContain("if (presenceNode.textContent && !shownLines.has(presenceNode.textContent)) {");
+  expect(app).toContain("shownLines.add(presenceNode.textContent);");
+  expect(app).toContain("if (notice.textContent && !shownLines.has(notice.textContent)) card.append(notice);");
+});
+
 test("a local card keeps its own description and reason", () => {
   const view = mergeProviderSources({ local: LOCAL, magpie: ["codex"], plugins: { available: true, providers: [] } });
   const codex = view.providers.find((provider) => provider.id === "codex");
