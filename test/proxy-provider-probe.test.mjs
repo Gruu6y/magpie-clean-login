@@ -9,6 +9,9 @@ import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { normalizeProxyTargets, proxyForTarget } from "../ui/proxy-target.js";
+import { statusView } from "../ui/proxy-state.js";
+
 const tmp = mkdtempSync(join(tmpdir(), "clean-login-provider-probe-"));
 const dataDir = join(tmp, "data");
 const serverEnv = {
@@ -59,6 +62,19 @@ const proxyTester = async (_proxy, options) => {
         error: "The provider could not be reached through this proxy.",
         errorCode: "proxy_tunnel",
         latency: null,
+        checkedAt: "2026-11-08T01:00:00.000Z",
+      };
+    }
+    if (probeOutcome === "handshake") {
+      // What a WAF looks like from here: the TLS handshake finished, the first
+      // byte back was not HTTP, so the probe fell back to the handshake clock.
+      return {
+        ok: true,
+        provider: options.target.provider,
+        host: options.target.host,
+        statusCode: 0,
+        tlsOnly: true,
+        latency: 187,
         checkedAt: "2026-11-08T01:00:00.000Z",
       };
     }
@@ -240,6 +256,51 @@ test("a named provider runs two legs and reports only the provider round trip", 
   });
   const stored = await raw("GET", "/api/proxies", auth());
   expect(JSON.parse(stored.body).proxies.find((p) => p.id === created.id).latencyByProvider["qoder-cn"].ms).toBe(233);
+  // A real round trip is not a handshake, so it must not grow the caveat.
+  expect(
+    JSON.parse(stored.body).proxies.find((p) => p.id === created.id).latencyByProvider["qoder-cn"].handshake,
+  ).toBeUndefined();
+});
+
+// The number a WAF produces is the TLS handshake clock, not a request time.
+// Shipping it unlabeled was the one honesty gap left after the first version:
+// the flag has to reach the stored row, because that is all the page reads.
+test("a handshake-only provider leg stores the caveat with the number", async () => {
+  calls = [];
+  probeOutcome = "handshake";
+  const created = await newProxy();
+  const response = await post(`/api/proxies/${encodeURIComponent(created.id)}/test`, {
+    provider: "qoder-cn",
+  });
+  expect(response.status).toBe(200);
+  expect(response.data.ok).toBe(true);
+  expect(response.data.result.tlsOnly).toBe(true);
+  expect(response.data.result.statusCode).toBe(0);
+  expect(response.data.result.latency).toBe(187);
+  // The exit leg still measured the real thing, so the row keeps 41 ms.
+  expect(response.data.proxy.latency).toBe(41);
+  expect(response.data.proxy.latencyByProvider["qoder-cn"]).toEqual({
+    ms: 187,
+    host: "gateway.qoder.com.cn",
+    at: "2026-11-08T01:00:00.000Z",
+    handshake: true,
+  });
+
+  const stored = await raw("GET", "/api/proxies", auth());
+  const row = JSON.parse(stored.body).proxies.find((p) => p.id === created.id);
+  expect(row.latencyByProvider["qoder-cn"].handshake).toBe(true);
+  expect(row.latency).toBe(41);
+
+  // The page renders exactly that shape, so the marker follows the flag. The
+  // catalogue comes from the service itself, which also proves the target list
+  // the picker reads is the one the row's provider id has to match.
+  const catalogueResponse = await raw("GET", "/api/proxy-targets", auth());
+  const catalogue = normalizeProxyTargets(JSON.parse(catalogueResponse.body));
+  const labels = { statusOk: "可用" };
+  expect(proxyForTarget(row, "qoder-cn", catalogue).latency).toBe(187);
+  expect(statusView(proxyForTarget(row, "qoder-cn", catalogue), labels).detail).toBe("~187 ms");
+  expect(statusView(proxyForTarget(row, "", catalogue), labels).detail).toBe("41 ms");
+  probeOutcome = "ok";
 });
 
 test("the draft route takes the same target without creating a row", async () => {

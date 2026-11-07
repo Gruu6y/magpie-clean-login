@@ -77,11 +77,16 @@ export function providerLatency(proxy, provider) {
   if (!entry || typeof entry !== "object") return null;
   const ms = Number(entry.ms);
   if (!Number.isFinite(ms) || ms < 0) return null;
-  return {
+  const measured = {
     ms: Math.round(ms),
     host: short(entry.host, MAX_HOST),
     at: short(entry.at, 40),
   };
+  // Only a handshake-only measurement carries a flag. An ordinary entry keeps
+  // the exact three fields it has always had, so nothing downstream has to
+  // learn a new shape to read a normal number.
+  if (entry.handshake === true) measured.handshake = true;
+  return measured;
 }
 
 // The row and the sign-in dropdown render through statusView(), which reads
@@ -102,6 +107,7 @@ export function proxyForTarget(proxy, provider, catalogue) {
       name: target.name,
       host: measured?.host || target.host,
       at: measured?.at || "",
+      ...(measured?.handshake ? { handshake: true } : {}),
     },
   };
 }
@@ -109,6 +115,13 @@ export function proxyForTarget(proxy, provider, catalogue) {
 export function targetStatusSuffix(proxy) {
   const target = proxy?.latencyTarget;
   return target?.id ? ` · ${target.id}` : "";
+}
+
+// A handshake-only measurement is a lower bound, not a request time, so the
+// number gets a tilde. A real round trip keeps its exact old text, character
+// for character.
+export function latencyMarker(proxy) {
+  return proxy?.latencyTarget?.handshake ? "~" : "";
 }
 
 // A sweep result carries the target it measured. Folding it into the local
@@ -132,10 +145,12 @@ export function withProbeResult(proxy, result) {
   const entries = previous && typeof previous === "object" && !Array.isArray(previous)
     ? { ...previous }
     : {};
-  entries[target.provider] = {
+  const stored = {
     ms: Math.round(ms),
     host: short(target.host, MAX_HOST),
     at: short(result.checkedAt, 40),
   };
+  if (result.tlsOnly === true) stored.handshake = true;
+  entries[target.provider] = stored;
   return { ...proxy, latencyByProvider: entries };
 }
