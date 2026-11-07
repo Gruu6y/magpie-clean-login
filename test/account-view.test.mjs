@@ -4,6 +4,9 @@ import {
   filterAccounts,
   formatCheckSummary,
   formatExit,
+  hostingStateLabel,
+  hostingTone,
+  normalizeHosting,
   sortAccounts,
 } from "../ui/account-view.js";
 
@@ -188,5 +191,81 @@ describe("sortAccounts", () => {
   test("sorts by lastLogin descending (latest first)", () => {
     const sorted = sortAccounts(accounts, "lastLogin");
     expect(sorted.map((a) => a.accountId)).toEqual(["Alice", "Bob", "Charlie", "Dave"]);
+  });
+});
+
+describe("normalizeHosting", () => {
+  test("defaults null or undefined to off", () => {
+    const h = normalizeHosting(null);
+    expect(h.enabled).toBe(false);
+    expect(h.state).toBe("off");
+    expect(h.history).toEqual([]);
+  });
+
+  test("derives paused state when disabled with a pausedReason", () => {
+    const h = normalizeHosting({ enabled: false, pausedReason: "not_hostable" });
+    expect(h.state).toBe("paused");
+    expect(h.pausedReason).toBe("not_hostable");
+  });
+
+  test("derives watching state when enabled without pausedReason", () => {
+    const h = normalizeHosting({ enabled: true, state: "watching" });
+    expect(h.state).toBe("watching");
+  });
+
+  test("derives running state when actively running", () => {
+    const h = normalizeHosting({ enabled: true, state: "running" });
+    expect(h.state).toBe("running");
+  });
+
+  // The service stores epoch milliseconds; the ledger stores ISO strings. A
+  // reader that only accepted strings silently erased every hosting time and
+  // showed an enabled account as "no expiry" / "never renewed".
+  test("keeps epoch-millisecond timestamps and normalises them to ISO", () => {
+    const at = Date.parse("2026-11-08T03:00:00.000Z");
+    const h = normalizeHosting({
+      enabled: true,
+      enabledAt: at,
+      updatedAt: at,
+      nextDueAt: at,
+      lastAt: at,
+      expiresAt: at,
+      history: [{ at, outcome: "ok" }],
+    });
+    const iso = "2026-11-08T03:00:00.000Z";
+    expect(h.enabledAt).toBe(iso);
+    expect(h.updatedAt).toBe(iso);
+    expect(h.nextDueAt).toBe(iso);
+    expect(h.lastAt).toBe(iso);
+    expect(h.expiresAt).toBe(iso);
+    expect(h.history[0].at).toBe(iso);
+  });
+
+  test("still keeps ISO timestamps as they came", () => {
+    const h = normalizeHosting({ enabled: true, lastAt: "2026-11-08T03:00:00.000Z" });
+    expect(h.lastAt).toBe("2026-11-08T03:00:00.000Z");
+  });
+
+  test("drops zero, negative and non-finite timestamps", () => {
+    const h = normalizeHosting({ enabled: true, lastAt: 0, expiresAt: -1, nextDueAt: NaN });
+    expect(h.lastAt).toBeNull();
+    expect(h.expiresAt).toBeNull();
+    expect(h.nextDueAt).toBeNull();
+  });
+});
+
+describe("hostingTone and hostingStateLabel", () => {
+  const labels = { off: "未开通", watching: "监控中", running: "续期中…", paused: "已暂停" };
+
+  test("matches state to tone and label correctly", () => {
+    expect(hostingTone({ enabled: false })).toBe("none");
+    expect(hostingTone({ enabled: true, state: "watching" })).toBe("good");
+    expect(hostingTone({ enabled: true, state: "running" })).toBe("active");
+    expect(hostingTone({ enabled: false, pausedReason: "error" })).toBe("warn");
+
+    expect(hostingStateLabel({ enabled: false }, labels)).toBe("未开通");
+    expect(hostingStateLabel({ enabled: true, state: "watching" }, labels)).toBe("监控中");
+    expect(hostingStateLabel({ enabled: true, state: "running" }, labels)).toBe("续期中…");
+    expect(hostingStateLabel({ enabled: false, pausedReason: "error" }, labels)).toBe("已暂停");
   });
 });

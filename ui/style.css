@@ -1272,6 +1272,22 @@ main { flex: 1; }
   overflow-wrap: anywhere;
 }
 
+/* Hosted renewal is a second fact under the signed-in badge, so it gets its
+   own line rather than running into the status word. "off" is the default and
+   stays neutral; only a self-paused policy asks for attention. */
+.account-hosting-line {
+  display: block;
+  margin-top: 3px;
+  font: 500 10px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--faint);
+}
+.account-hosting-line.is-good { color: var(--green); }
+.account-hosting-line.is-warn { color: var(--amber); }
+.account-hosting-line.is-active { color: var(--amber); animation: pulse 1.4s infinite; }
+
 .account-toolbar {
   display: flex;
   flex-wrap: wrap;
