@@ -98,9 +98,10 @@ The first time you sign in, Clean Login downloads its own browser runtime — ab
 
 **Everyday use**
 
+- Each provider card carries the brand mark **magpie** itself ships, recoloured to follow the theme. Nothing is fetched to draw them: the set is copied into `assets/icons/`, with what it was taken from written in `assets/icons/index.json` and the ownership note in `assets/icons/NOTICES.md`.
 - **Four languages**: English, 简体中文, 繁體中文, 日本語, following magpie's language setting.
 - Light and dark follow magpie's theme setting, and switching it while the page is open takes effect immediately.
-- Everything stays on this computer: no account, no telemetry. Stored proxy passwords are never shown to the page and never written to a log.
+- Everything stays on this computer: no account, no telemetry, no request out for a logo. Stored proxy passwords are never shown to the page and never written to a log.
 
 ## Command line and agents
 

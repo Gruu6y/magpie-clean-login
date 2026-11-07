@@ -1985,6 +1985,31 @@ function formatTime(value) {
   }
 }
 
+// magpie's own mark for a provider, when we could name one. A picture is the
+// art magpie downloaded, shown as it is; a mark is one of our recolourable
+// shapes, drawn in the text colour so it reads in either theme. Returns null
+// when there is nothing to show, which is what keeps the letter tile in place.
+function providerLogoElement(logo, { onError } = {}) {
+  const src = typeof logo?.src === "string" ? logo.src : "";
+  if (!src || (logo.kind !== "picture" && logo.kind !== "mark")) return null;
+  if (logo.kind === "picture") {
+    const image = document.createElement("img");
+    image.className = "provider-logo";
+    image.src = src;
+    image.alt = "";
+    image.draggable = false;
+    if (onError) image.addEventListener("error", onError);
+    return image;
+  }
+  const glyph = document.createElement("span");
+  glyph.className = "provider-logo glyph";
+  glyph.style.setProperty("--logo", `url("${src}")`);
+  // A mask cannot report a failed load, so a mark is only ever named by the
+  // manifest, and the manifest is written by the same build that puts the file
+  // down beside it. The packaging test holds those two together.
+  return glyph;
+}
+
 async function api(path, { method = "GET", body, signal } = {}) {
   let response;
   try {
@@ -2627,6 +2652,21 @@ function providerCard(provider) {
   mark.className = `provider-mark tone-${provider.mark?.tone || "neutral"}`;
   mark.textContent = provider.mark?.text || String(provider.name || "?").slice(0, 1);
   mark.setAttribute("aria-hidden", "true");
+
+  // A logo replaces the letter, never adds to the card. If the file the name
+  // promised is not there after all, the letter it would have shown comes
+  // back: an empty tile reads like a broken page, a letter reads like a name.
+  const logo = providerLogoElement(provider.logo, {
+    onError: () => {
+      mark.className = `provider-mark tone-${provider.mark?.tone || "neutral"}`;
+      mark.textContent = provider.mark?.text || String(provider.name || "?").slice(0, 1);
+    },
+  });
+  if (logo) {
+    mark.className = "provider-mark has-logo";
+    mark.textContent = "";
+    mark.append(logo);
+  }
 
   const name = document.createElement("h3");
   name.className = "provider-name";

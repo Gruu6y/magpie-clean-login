@@ -1,0 +1,1188 @@
+{
+  "source": {
+    "project": "magpie",
+    "path": "assets/icons",
+    "version": "0.1.3260",
+    "commit": "710f0290cced5354fb8b673d2bbe5b40b7e7d863",
+    "builtAt": "2026-11-07T15:27:42Z",
+    "obtained": "the installed magpie binary magpie.exe",
+    "notices": "NOTICES.md"
+  },
+  "rule": "a `-color` name, one of pngIcons, or a file that carries its own colours is a picture; anything else takes the text colour",
+  "pngIcons": [
+    "crush",
+    "zcode",
+    "alma",
+    "hanako",
+    "cindy",
+    "lody",
+    "typesafe",
+    "atomcode",
+    "snow",
+    "mlx-serve",
+    "mothx",
+    "zoo-code",
+    "kimi-code-desktop"
+  ],
+  "count": 193,
+  "icons": {
+    "ai21": {
+      "file": "ai21.svg",
+      "kind": "mark",
+      "bytes": 1235,
+      "sha256": "6c80f2c0d8b11d1b"
+    },
+    "ai302-color": {
+      "file": "ai302-color.svg",
+      "kind": "picture",
+      "bytes": 1484,
+      "sha256": "35ede625cfc22335"
+    },
+    "ai360-color": {
+      "file": "ai360-color.svg",
+      "kind": "picture",
+      "bytes": 3226,
+      "sha256": "59366fe04a433651"
+    },
+    "aihubmix-color": {
+      "file": "aihubmix-color.svg",
+      "kind": "picture",
+      "bytes": 1441,
+      "sha256": "e0ba11dd4b14fce9"
+    },
+    "aionui": {
+      "file": "aionui.svg",
+      "kind": "mark",
+      "bytes": 425,
+      "sha256": "1af43a74298a313c"
+    },
+    "air": {
+      "file": "air.svg",
+      "kind": "picture",
+      "bytes": 19427,
+      "sha256": "0c9b8537c6fa46f1"
+    },
+    "alibaba-color": {
+      "file": "alibaba-color.svg",
+      "kind": "picture",
+      "bytes": 1407,
+      "sha256": "48ee796c5b1da5f5"
+    },
+    "alibabacloud-color": {
+      "file": "alibabacloud-color.svg",
+      "kind": "picture",
+      "bytes": 656,
+      "sha256": "73ea97baf919edb3"
+    },
+    "alma": {
+      "file": "alma.png",
+      "kind": "picture",
+      "bytes": 4573,
+      "sha256": "4cca00f442597907"
+    },
+    "anthropic": {
+      "file": "anthropic.svg",
+      "kind": "mark",
+      "bytes": 368,
+      "sha256": "e833fdfa7e7187a8"
+    },
+    "antigravity-color": {
+      "file": "antigravity-color.svg",
+      "kind": "picture",
+      "bytes": 7634,
+      "sha256": "652128cf55a28bb9"
+    },
+    "anyscale-color": {
+      "file": "anyscale-color.svg",
+      "kind": "picture",
+      "bytes": 627,
+      "sha256": "c0d5ba61c5248bee"
+    },
+    "app-alma": {
+      "file": "app-alma.png",
+      "kind": "picture",
+      "bytes": 4573,
+      "sha256": "4cca00f442597907"
+    },
+    "app-cc-switch": {
+      "file": "app-cc-switch.png",
+      "kind": "picture",
+      "bytes": 5265,
+      "sha256": "dc6f20e8fb90d788"
+    },
+    "apple-touch-icon": {
+      "file": "apple-touch-icon.png",
+      "kind": "picture",
+      "bytes": 10157,
+      "sha256": "4132975efe9fe2ff"
+    },
+    "aside": {
+      "file": "aside.svg",
+      "kind": "picture",
+      "bytes": 11092,
+      "sha256": "4ae469ccad9f8008"
+    },
+    "astrbot": {
+      "file": "astrbot.svg",
+      "kind": "picture",
+      "bytes": 922,
+      "sha256": "c6581e461286507e"
+    },
+    "atomcode": {
+      "file": "atomcode.png",
+      "kind": "picture",
+      "bytes": 14059,
+      "sha256": "033e3cb2effe16e8"
+    },
+    "aws": {
+      "file": "aws.svg",
+      "kind": "mark",
+      "bytes": 3234,
+      "sha256": "f73f2506defea5df"
+    },
+    "azure-color": {
+      "file": "azure-color.svg",
+      "kind": "picture",
+      "bytes": 1621,
+      "sha256": "abc639d094593943"
+    },
+    "azureai-color": {
+      "file": "azureai-color.svg",
+      "kind": "picture",
+      "bytes": 2606,
+      "sha256": "89bef85d67f45984"
+    },
+    "baichuan-color": {
+      "file": "baichuan-color.svg",
+      "kind": "picture",
+      "bytes": 571,
+      "sha256": "7d49311206402734"
+    },
+    "baidu-color": {
+      "file": "baidu-color.svg",
+      "kind": "picture",
+      "bytes": 1384,
+      "sha256": "1059750a2069aec6"
+    },
+    "baiducloud-color": {
+      "file": "baiducloud-color.svg",
+      "kind": "picture",
+      "bytes": 717,
+      "sha256": "2269f4c82a3a810f"
+    },
+    "bailian-color": {
+      "file": "bailian-color.svg",
+      "kind": "picture",
+      "bytes": 1353,
+      "sha256": "5cc26dc961b2ecd0"
+    },
+    "baseten": {
+      "file": "baseten.svg",
+      "kind": "mark",
+      "bytes": 559,
+      "sha256": "d560883f6df500c1"
+    },
+    "bedrock-color": {
+      "file": "bedrock-color.svg",
+      "kind": "picture",
+      "bytes": 2270,
+      "sha256": "a149a5678ce2b5d8"
+    },
+    "burncloud-color": {
+      "file": "burncloud-color.svg",
+      "kind": "picture",
+      "bytes": 997,
+      "sha256": "d51a3c8049a0a6e2"
+    },
+    "bytedance-color": {
+      "file": "bytedance-color.svg",
+      "kind": "picture",
+      "bytes": 953,
+      "sha256": "3d37647be262c79b"
+    },
+    "cerebras": {
+      "file": "cerebras.svg",
+      "kind": "mark",
+      "bytes": 1235,
+      "sha256": "05af9593eca3fefd"
+    },
+    "chatglm-color": {
+      "file": "chatglm-color.svg",
+      "kind": "picture",
+      "bytes": 2485,
+      "sha256": "6e935f6ccad7a776"
+    },
+    "cherryin-color": {
+      "file": "cherryin-color.svg",
+      "kind": "picture",
+      "bytes": 260,
+      "sha256": "821d057bdb2707ab"
+    },
+    "chutes": {
+      "file": "chutes.svg",
+      "kind": "mark",
+      "bytes": 772,
+      "sha256": "b1827890cee5c1e6"
+    },
+    "cindy": {
+      "file": "cindy.png",
+      "kind": "picture",
+      "bytes": 8102,
+      "sha256": "fd7ad23096a2e968"
+    },
+    "claude-color": {
+      "file": "claude-color.svg",
+      "kind": "picture",
+      "bytes": 1696,
+      "sha256": "a3101f3047a119aa"
+    },
+    "claudecode-color": {
+      "file": "claudecode-color.svg",
+      "kind": "picture",
+      "bytes": 424,
+      "sha256": "670b3d8d749d0815"
+    },
+    "cline": {
+      "file": "cline.svg",
+      "kind": "mark",
+      "bytes": 750,
+      "sha256": "9003d2cdce82b016"
+    },
+    "cloudflare-color": {
+      "file": "cloudflare-color.svg",
+      "kind": "picture",
+      "bytes": 1073,
+      "sha256": "cee35d3f0ecb7925"
+    },
+    "codebuddy-color": {
+      "file": "codebuddy-color.svg",
+      "kind": "picture",
+      "bytes": 1589,
+      "sha256": "033d5da624460e68"
+    },
+    "codex-color": {
+      "file": "codex-color.svg",
+      "kind": "picture",
+      "bytes": 1769,
+      "sha256": "4a2f43ce46b5b6e3"
+    },
+    "cohere-color": {
+      "file": "cohere-color.svg",
+      "kind": "picture",
+      "bytes": 769,
+      "sha256": "84d0ee3cbe66f030"
+    },
+    "cometapi-color": {
+      "file": "cometapi-color.svg",
+      "kind": "picture",
+      "bytes": 1308,
+      "sha256": "069903c78f5f468d"
+    },
+    "commandcode": {
+      "file": "commandcode.svg",
+      "kind": "mark",
+      "bytes": 2849,
+      "sha256": "472cf8f2f7a62ca5"
+    },
+    "copilot-color": {
+      "file": "copilot-color.svg",
+      "kind": "picture",
+      "bytes": 3569,
+      "sha256": "04f15d0556fbac10"
+    },
+    "coze": {
+      "file": "coze.svg",
+      "kind": "mark",
+      "bytes": 866,
+      "sha256": "bd0dce025396aecf"
+    },
+    "crush": {
+      "file": "crush.png",
+      "kind": "picture",
+      "bytes": 16519,
+      "sha256": "76167b40452da7da"
+    },
+    "curl": {
+      "file": "curl.svg",
+      "kind": "picture",
+      "bytes": 1923,
+      "sha256": "c37cfad781cc0b3d"
+    },
+    "cursor": {
+      "file": "cursor.svg",
+      "kind": "mark",
+      "bytes": 547,
+      "sha256": "0cb51bddf264ae10"
+    },
+    "deepinfra-color": {
+      "file": "deepinfra-color.svg",
+      "kind": "picture",
+      "bytes": 3415,
+      "sha256": "bfc78853fe658f64"
+    },
+    "deepmind-color": {
+      "file": "deepmind-color.svg",
+      "kind": "picture",
+      "bytes": 820,
+      "sha256": "f19b4db1fcf8660a"
+    },
+    "deepseek-color": {
+      "file": "deepseek-color.svg",
+      "kind": "picture",
+      "bytes": 2164,
+      "sha256": "deba5f98a5c1796e"
+    },
+    "deveco-color": {
+      "file": "deveco-color.svg",
+      "kind": "picture",
+      "bytes": 818,
+      "sha256": "c2d531fd8fbfacdc"
+    },
+    "devin": {
+      "file": "devin.svg",
+      "kind": "mark",
+      "bytes": 3302,
+      "sha256": "8d197b0c31522517"
+    },
+    "doubao-color": {
+      "file": "doubao-color.svg",
+      "kind": "picture",
+      "bytes": 1153,
+      "sha256": "3cd31ba03ae44b8c"
+    },
+    "empryo-color": {
+      "file": "empryo-color.svg",
+      "kind": "picture",
+      "bytes": 2925,
+      "sha256": "de842ec0c3a379d4"
+    },
+    "factory": {
+      "file": "factory.svg",
+      "kind": "mark",
+      "bytes": 6046,
+      "sha256": "6a502c844029a326"
+    },
+    "favicon": {
+      "file": "favicon.svg",
+      "kind": "picture",
+      "bytes": 5043,
+      "sha256": "4783af97c8dd94c6"
+    },
+    "featherless-color": {
+      "file": "featherless-color.svg",
+      "kind": "picture",
+      "bytes": 987,
+      "sha256": "45efbd887b9cfbef"
+    },
+    "fireworks-color": {
+      "file": "fireworks-color.svg",
+      "kind": "picture",
+      "bytes": 592,
+      "sha256": "f1c4782b86bc03a3"
+    },
+    "friendli": {
+      "file": "friendli.svg",
+      "kind": "mark",
+      "bytes": 1473,
+      "sha256": "0ea6e5b955988d33"
+    },
+    "fx": {
+      "file": "fx.svg",
+      "kind": "mark",
+      "bytes": 1063,
+      "sha256": "1c8fec7bd6cb8931"
+    },
+    "gemini-color": {
+      "file": "gemini-color.svg",
+      "kind": "picture",
+      "bytes": 2836,
+      "sha256": "8ab0a9bafec11f7e"
+    },
+    "geminicli-color": {
+      "file": "geminicli-color.svg",
+      "kind": "picture",
+      "bytes": 921,
+      "sha256": "c2f54ebaa4c3b919"
+    },
+    "gemma-color": {
+      "file": "gemma-color.svg",
+      "kind": "picture",
+      "bytes": 2368,
+      "sha256": "8cdc48e35113d2f7"
+    },
+    "giteeai": {
+      "file": "giteeai.svg",
+      "kind": "mark",
+      "bytes": 1391,
+      "sha256": "bff2da7cbd983911"
+    },
+    "github": {
+      "file": "github.svg",
+      "kind": "mark",
+      "bytes": 907,
+      "sha256": "1bd763b5d53ab161"
+    },
+    "githubcopilot": {
+      "file": "githubcopilot.svg",
+      "kind": "mark",
+      "bytes": 2019,
+      "sha256": "bbc7fddc13448236"
+    },
+    "glama": {
+      "file": "glama.svg",
+      "kind": "mark",
+      "bytes": 7901,
+      "sha256": "ab2513d6b0833fbb"
+    },
+    "gmicloud": {
+      "file": "gmicloud.svg",
+      "kind": "mark",
+      "bytes": 886,
+      "sha256": "22b0d7150d3d04fc"
+    },
+    "google-color": {
+      "file": "google-color.svg",
+      "kind": "picture",
+      "bytes": 920,
+      "sha256": "4e6aa8892ef15a6b"
+    },
+    "googlecloud-color": {
+      "file": "googlecloud-color.svg",
+      "kind": "picture",
+      "bytes": 925,
+      "sha256": "c0faf37b180dfc1e"
+    },
+    "goose": {
+      "file": "goose.svg",
+      "kind": "mark",
+      "bytes": 1807,
+      "sha256": "8779d9a61c5b0be7"
+    },
+    "grok": {
+      "file": "grok.svg",
+      "kind": "mark",
+      "bytes": 756,
+      "sha256": "9175fc90c2265516"
+    },
+    "groq": {
+      "file": "groq.svg",
+      "kind": "mark",
+      "bytes": 568,
+      "sha256": "078d5cf6e7a54905"
+    },
+    "hanako": {
+      "file": "hanako.png",
+      "kind": "picture",
+      "bytes": 21062,
+      "sha256": "f899034194797adb"
+    },
+    "hermes": {
+      "file": "hermes.svg",
+      "kind": "mark",
+      "bytes": 284,
+      "sha256": "8250f008f40c5184"
+    },
+    "huawei-color": {
+      "file": "huawei-color.svg",
+      "kind": "picture",
+      "bytes": 1481,
+      "sha256": "ca9af4229ba3d538"
+    },
+    "huaweicloud-color": {
+      "file": "huaweicloud-color.svg",
+      "kind": "picture",
+      "bytes": 1486,
+      "sha256": "8a5e4cb6452046ec"
+    },
+    "huggingface-color": {
+      "file": "huggingface-color.svg",
+      "kind": "picture",
+      "bytes": 3768,
+      "sha256": "5d39d66bb6c9b026"
+    },
+    "hunyuan-color": {
+      "file": "hunyuan-color.svg",
+      "kind": "picture",
+      "bytes": 1115,
+      "sha256": "510e7bb438506b5a"
+    },
+    "hyperbolic-color": {
+      "file": "hyperbolic-color.svg",
+      "kind": "picture",
+      "bytes": 1272,
+      "sha256": "459ebd5a986f2ba3"
+    },
+    "icon-512": {
+      "file": "icon-512.png",
+      "kind": "picture",
+      "bytes": 34716,
+      "sha256": "bbcca85e90510c99"
+    },
+    "iflytekcloud-color": {
+      "file": "iflytekcloud-color.svg",
+      "kind": "picture",
+      "bytes": 1149,
+      "sha256": "0012c7c24cf8d987"
+    },
+    "inference": {
+      "file": "inference.svg",
+      "kind": "mark",
+      "bytes": 348,
+      "sha256": "289a6a94c69929eb"
+    },
+    "infinigence-color": {
+      "file": "infinigence-color.svg",
+      "kind": "picture",
+      "bytes": 314,
+      "sha256": "4b9f3e7da2bfa38b"
+    },
+    "internlm-color": {
+      "file": "internlm-color.svg",
+      "kind": "picture",
+      "bytes": 8151,
+      "sha256": "0e84741d3fb76e65"
+    },
+    "jcode": {
+      "file": "jcode.svg",
+      "kind": "picture",
+      "bytes": 12514,
+      "sha256": "d4e154f651de391d"
+    },
+    "jina": {
+      "file": "jina.svg",
+      "kind": "mark",
+      "bytes": 404,
+      "sha256": "dbb78d6217774ddd"
+    },
+    "kilo": {
+      "file": "kilo.svg",
+      "kind": "mark",
+      "bytes": 642,
+      "sha256": "6f9583757427ed6e"
+    },
+    "kilocode": {
+      "file": "kilocode.svg",
+      "kind": "mark",
+      "bytes": 652,
+      "sha256": "a2aef0e0bb992ebe"
+    },
+    "kimi-code-desktop": {
+      "file": "kimi-code-desktop.png",
+      "kind": "picture",
+      "bytes": 8357,
+      "sha256": "faad576b6c72944e"
+    },
+    "kimi": {
+      "file": "kimi.svg",
+      "kind": "mark",
+      "bytes": 786,
+      "sha256": "ed08131b46acf70e"
+    },
+    "kiro-color": {
+      "file": "kiro-color.svg",
+      "kind": "picture",
+      "bytes": 960,
+      "sha256": "4eae4d6e818da734"
+    },
+    "kling-color": {
+      "file": "kling-color.svg",
+      "kind": "picture",
+      "bytes": 2245,
+      "sha256": "a8aa4def0eb1c3ca"
+    },
+    "lambda": {
+      "file": "lambda.svg",
+      "kind": "mark",
+      "bytes": 350,
+      "sha256": "0fda3913e9969665"
+    },
+    "leptonai-color": {
+      "file": "leptonai-color.svg",
+      "kind": "picture",
+      "bytes": 3221,
+      "sha256": "7e74337360b476df"
+    },
+    "liquid": {
+      "file": "liquid.svg",
+      "kind": "mark",
+      "bytes": 524,
+      "sha256": "4727b1cbd33bd256"
+    },
+    "llmapi": {
+      "file": "llmapi.svg",
+      "kind": "mark",
+      "bytes": 1368,
+      "sha256": "7e622071317ebbac"
+    },
+    "lmstudio": {
+      "file": "lmstudio.svg",
+      "kind": "mark",
+      "bytes": 1253,
+      "sha256": "4a575e8382b52ce7"
+    },
+    "lody": {
+      "file": "lody.png",
+      "kind": "picture",
+      "bytes": 6056,
+      "sha256": "e593417b41884ef4"
+    },
+    "longcat": {
+      "file": "longcat.svg",
+      "kind": "mark",
+      "bytes": 804,
+      "sha256": "4f1ff7194ad6752e"
+    },
+    "magpie": {
+      "file": "magpie.svg",
+      "kind": "picture",
+      "bytes": 4956,
+      "sha256": "988d2e57b6b87043"
+    },
+    "meta-color": {
+      "file": "meta-color.svg",
+      "kind": "picture",
+      "bytes": 2516,
+      "sha256": "096f2bb3aa466dcb"
+    },
+    "metaai-color": {
+      "file": "metaai-color.svg",
+      "kind": "picture",
+      "bytes": 4546,
+      "sha256": "5a2c8b2c71ddb4d6"
+    },
+    "microsoft-color": {
+      "file": "microsoft-color.svg",
+      "kind": "picture",
+      "bytes": 399,
+      "sha256": "5cfb0ffa3231313c"
+    },
+    "mimocode": {
+      "file": "mimocode.svg",
+      "kind": "mark",
+      "bytes": 4572,
+      "sha256": "a1cf318ef84e3bba"
+    },
+    "minimax-color": {
+      "file": "minimax-color.svg",
+      "kind": "picture",
+      "bytes": 1570,
+      "sha256": "7f7187fa6d9b341a"
+    },
+    "mistermorph-color": {
+      "file": "mistermorph-color.svg",
+      "kind": "picture",
+      "bytes": 13465,
+      "sha256": "8133be26416e1750"
+    },
+    "mistral-color": {
+      "file": "mistral-color.svg",
+      "kind": "picture",
+      "bytes": 655,
+      "sha256": "722f74b289d95486"
+    },
+    "mlx-serve": {
+      "file": "mlx-serve.png",
+      "kind": "picture",
+      "bytes": 6386,
+      "sha256": "91cad40f57f19541"
+    },
+    "modelscope-color": {
+      "file": "modelscope-color.svg",
+      "kind": "picture",
+      "bytes": 632,
+      "sha256": "21841ddba0c560ad"
+    },
+    "monica-color": {
+      "file": "monica-color.svg",
+      "kind": "picture",
+      "bytes": 833,
+      "sha256": "9e36f56b2691e107"
+    },
+    "moonshot": {
+      "file": "moonshot.svg",
+      "kind": "mark",
+      "bytes": 4028,
+      "sha256": "435f41b74e6a8763"
+    },
+    "morph-color": {
+      "file": "morph-color.svg",
+      "kind": "picture",
+      "bytes": 1777,
+      "sha256": "994eb5b52da00eca"
+    },
+    "mothx": {
+      "file": "mothx.png",
+      "kind": "picture",
+      "bytes": 10545,
+      "sha256": "bb3763301ecb7413"
+    },
+    "nebius": {
+      "file": "nebius.svg",
+      "kind": "mark",
+      "bytes": 519,
+      "sha256": "4213ea25ec4c7826"
+    },
+    "newapi-color": {
+      "file": "newapi-color.svg",
+      "kind": "picture",
+      "bytes": 2443,
+      "sha256": "b54496a735b49c4e"
+    },
+    "nousresearch": {
+      "file": "nousresearch.svg",
+      "kind": "mark",
+      "bytes": 19786,
+      "sha256": "4dc3c7cdf13d2f0b"
+    },
+    "nova-color": {
+      "file": "nova-color.svg",
+      "kind": "picture",
+      "bytes": 2052,
+      "sha256": "9dbe0c8d3c82dce1"
+    },
+    "novita-color": {
+      "file": "novita-color.svg",
+      "kind": "picture",
+      "bytes": 286,
+      "sha256": "e41321ff6a421b95"
+    },
+    "nvidia-color": {
+      "file": "nvidia-color.svg",
+      "kind": "picture",
+      "bytes": 1025,
+      "sha256": "8c941e4eb8b782ec"
+    },
+    "ollama": {
+      "file": "ollama.svg",
+      "kind": "mark",
+      "bytes": 3290,
+      "sha256": "3a268218fb2e6e81"
+    },
+    "omlx": {
+      "file": "omlx.svg",
+      "kind": "mark",
+      "bytes": 1229,
+      "sha256": "01a73d9e908684d7"
+    },
+    "omo": {
+      "file": "omo.svg",
+      "kind": "mark",
+      "bytes": 2942,
+      "sha256": "236a0982bfca0d11"
+    },
+    "omp": {
+      "file": "omp.svg",
+      "kind": "mark",
+      "bytes": 240,
+      "sha256": "cc1e9fac8bc435b5"
+    },
+    "openai": {
+      "file": "openai.svg",
+      "kind": "mark",
+      "bytes": 1687,
+      "sha256": "a595df6b423920c6"
+    },
+    "openchamber": {
+      "file": "openchamber.svg",
+      "kind": "picture",
+      "bytes": 824,
+      "sha256": "c89f9fc59c3aeca0"
+    },
+    "openclaw": {
+      "file": "openclaw.svg",
+      "kind": "picture",
+      "bytes": 642,
+      "sha256": "d66797894d1151ca"
+    },
+    "opencode": {
+      "file": "opencode.svg",
+      "kind": "mark",
+      "bytes": 235,
+      "sha256": "7cfa6e9d6726f7c9"
+    },
+    "openrouter": {
+      "file": "openrouter.svg",
+      "kind": "mark",
+      "bytes": 382,
+      "sha256": "ae671cc83de9bd45"
+    },
+    "openwebui": {
+      "file": "openwebui.svg",
+      "kind": "mark",
+      "bytes": 491,
+      "sha256": "9cbf7a1105e51029"
+    },
+    "parasail": {
+      "file": "parasail.svg",
+      "kind": "mark",
+      "bytes": 444,
+      "sha256": "0083857f48835c3c"
+    },
+    "penguin-color": {
+      "file": "penguin-color.svg",
+      "kind": "picture",
+      "bytes": 4639,
+      "sha256": "f7588718ba95267e"
+    },
+    "perplexity-color": {
+      "file": "perplexity-color.svg",
+      "kind": "picture",
+      "bytes": 603,
+      "sha256": "8353f3ab20822f1a"
+    },
+    "phala-color": {
+      "file": "phala-color.svg",
+      "kind": "picture",
+      "bytes": 680,
+      "sha256": "9cfa328bd89f4038"
+    },
+    "pi": {
+      "file": "pi.svg",
+      "kind": "mark",
+      "bytes": 313,
+      "sha256": "d82978781b824273"
+    },
+    "pipellm-color": {
+      "file": "pipellm-color.svg",
+      "kind": "picture",
+      "bytes": 728,
+      "sha256": "fdec7951432b5d38"
+    },
+    "poe": {
+      "file": "poe.svg",
+      "kind": "mark",
+      "bytes": 1627,
+      "sha256": "d427b1abf53b3d52"
+    },
+    "ppio-color": {
+      "file": "ppio-color.svg",
+      "kind": "picture",
+      "bytes": 808,
+      "sha256": "a1735277c456430e"
+    },
+    "prime-agent": {
+      "file": "prime-agent.svg",
+      "kind": "mark",
+      "bytes": 4101,
+      "sha256": "9eed2ee52a4330df"
+    },
+    "qiniu-color": {
+      "file": "qiniu-color.svg",
+      "kind": "picture",
+      "bytes": 649,
+      "sha256": "a3b7b47f1127448d"
+    },
+    "qoder": {
+      "file": "qoder.svg",
+      "kind": "mark",
+      "bytes": 6214,
+      "sha256": "f8503aacc41a58e7"
+    },
+    "qwen-color": {
+      "file": "qwen-color.svg",
+      "kind": "picture",
+      "bytes": 2044,
+      "sha256": "77f5768c66d08ce1"
+    },
+    "qwenpaw": {
+      "file": "qwenpaw.svg",
+      "kind": "picture",
+      "bytes": 6998,
+      "sha256": "6f8dbdbc257d6c87"
+    },
+    "raycast": {
+      "file": "raycast.svg",
+      "kind": "mark",
+      "bytes": 617,
+      "sha256": "3a3352f28af4df22"
+    },
+    "reasonix-color": {
+      "file": "reasonix-color.svg",
+      "kind": "picture",
+      "bytes": 3705,
+      "sha256": "1479f9f6a0d28ded"
+    },
+    "reka": {
+      "file": "reka.svg",
+      "kind": "mark",
+      "bytes": 2866,
+      "sha256": "533ae212f32db47f"
+    },
+    "replicate": {
+      "file": "replicate.svg",
+      "kind": "mark",
+      "bytes": 313,
+      "sha256": "ff02158db5bc4a69"
+    },
+    "roocode": {
+      "file": "roocode.svg",
+      "kind": "mark",
+      "bytes": 763,
+      "sha256": "34904d40bfd976b5"
+    },
+    "rtk": {
+      "file": "rtk.png",
+      "kind": "picture",
+      "bytes": 4396,
+      "sha256": "83fad62353224d18"
+    },
+    "sambanova-color": {
+      "file": "sambanova-color.svg",
+      "kind": "picture",
+      "bytes": 1602,
+      "sha256": "411ab881318738b7"
+    },
+    "sensenova-color": {
+      "file": "sensenova-color.svg",
+      "kind": "picture",
+      "bytes": 1559,
+      "sha256": "bd2e0f8e310ff6a5"
+    },
+    "siliconcloud-color": {
+      "file": "siliconcloud-color.svg",
+      "kind": "picture",
+      "bytes": 520,
+      "sha256": "a02d8d7ccb81739f"
+    },
+    "snow": {
+      "file": "snow.png",
+      "kind": "picture",
+      "bytes": 6375,
+      "sha256": "f62d61e2fd399f45"
+    },
+    "snowflake-color": {
+      "file": "snowflake-color.svg",
+      "kind": "picture",
+      "bytes": 2292,
+      "sha256": "f9e4d625d1563a02"
+    },
+    "sophnet-color": {
+      "file": "sophnet-color.svg",
+      "kind": "picture",
+      "bytes": 654,
+      "sha256": "ef90bf51bc6c55ca"
+    },
+    "spark-color": {
+      "file": "spark-color.svg",
+      "kind": "picture",
+      "bytes": 882,
+      "sha256": "4068581452b808e4"
+    },
+    "stepfun-color": {
+      "file": "stepfun-color.svg",
+      "kind": "picture",
+      "bytes": 676,
+      "sha256": "f55afc0e6004c885"
+    },
+    "straico-color": {
+      "file": "straico-color.svg",
+      "kind": "picture",
+      "bytes": 224,
+      "sha256": "590fc23e586e03b8"
+    },
+    "submodel-color": {
+      "file": "submodel-color.svg",
+      "kind": "picture",
+      "bytes": 2615,
+      "sha256": "de65dab573c676c9"
+    },
+    "t3code": {
+      "file": "t3code.svg",
+      "kind": "picture",
+      "bytes": 1013,
+      "sha256": "e8e6bdbdf374afea"
+    },
+    "targon-color": {
+      "file": "targon-color.svg",
+      "kind": "picture",
+      "bytes": 1323,
+      "sha256": "bf5408cb3d59fc00"
+    },
+    "tencent-color": {
+      "file": "tencent-color.svg",
+      "kind": "picture",
+      "bytes": 277,
+      "sha256": "7c370ad4b75e3f30"
+    },
+    "tencentcloud-color": {
+      "file": "tencentcloud-color.svg",
+      "kind": "picture",
+      "bytes": 2124,
+      "sha256": "f860dae064a3afd2"
+    },
+    "tiangong-color": {
+      "file": "tiangong-color.svg",
+      "kind": "picture",
+      "bytes": 2604,
+      "sha256": "3b0ba724337004a5"
+    },
+    "together-color": {
+      "file": "together-color.svg",
+      "kind": "picture",
+      "bytes": 582,
+      "sha256": "27ccaf118a431c38"
+    },
+    "trae": {
+      "file": "trae.svg",
+      "kind": "mark",
+      "bytes": 402,
+      "sha256": "59ef6255dfce52d4"
+    },
+    "typesafe": {
+      "file": "typesafe.png",
+      "kind": "picture",
+      "bytes": 8085,
+      "sha256": "86f8c025fc0e0b44"
+    },
+    "upstage-color": {
+      "file": "upstage-color.svg",
+      "kind": "picture",
+      "bytes": 946,
+      "sha256": "206e23f9143cd308"
+    },
+    "venice-color": {
+      "file": "venice-color.svg",
+      "kind": "picture",
+      "bytes": 2683,
+      "sha256": "a4a909b289b05d3b"
+    },
+    "vercel": {
+      "file": "vercel.svg",
+      "kind": "mark",
+      "bytes": 225,
+      "sha256": "4874d52d8b2ce7c3"
+    },
+    "vertexai-color": {
+      "file": "vertexai-color.svg",
+      "kind": "picture",
+      "bytes": 2171,
+      "sha256": "40f8bb6f7aca8d80"
+    },
+    "vllm-color": {
+      "file": "vllm-color.svg",
+      "kind": "picture",
+      "bytes": 286,
+      "sha256": "3f837bad8d7f85d1"
+    },
+    "volcengine-color": {
+      "file": "volcengine-color.svg",
+      "kind": "picture",
+      "bytes": 858,
+      "sha256": "84f9e2cd1da7e73d"
+    },
+    "voyage-color": {
+      "file": "voyage-color.svg",
+      "kind": "picture",
+      "bytes": 610,
+      "sha256": "96423656ee32fb76"
+    },
+    "vscode": {
+      "file": "vscode.svg",
+      "kind": "mark",
+      "bytes": 935,
+      "sha256": "01d978e9a8365ae7"
+    },
+    "wenxin-color": {
+      "file": "wenxin-color.svg",
+      "kind": "picture",
+      "bytes": 1509,
+      "sha256": "9fb88d8b6f7be470"
+    },
+    "windsurf": {
+      "file": "windsurf.svg",
+      "kind": "mark",
+      "bytes": 820,
+      "sha256": "e3c836aae05a3741"
+    },
+    "workbuddy-color": {
+      "file": "workbuddy-color.svg",
+      "kind": "picture",
+      "bytes": 4119,
+      "sha256": "ade134028e69e034"
+    },
+    "workersai-color": {
+      "file": "workersai-color.svg",
+      "kind": "picture",
+      "bytes": 778,
+      "sha256": "22617d11289857c7"
+    },
+    "xai": {
+      "file": "xai.svg",
+      "kind": "mark",
+      "bytes": 372,
+      "sha256": "89eb7de9f0d02a41"
+    },
+    "xiaomimimo": {
+      "file": "xiaomimimo.svg",
+      "kind": "mark",
+      "bytes": 2544,
+      "sha256": "b04ad7dad52af221"
+    },
+    "xinference-color": {
+      "file": "xinference-color.svg",
+      "kind": "picture",
+      "bytes": 2594,
+      "sha256": "9fb12f4b6b3451a6"
+    },
+    "yi": {
+      "file": "yi.svg",
+      "kind": "mark",
+      "bytes": 771,
+      "sha256": "c1975458cc94ee44"
+    },
+    "yuanbao-color": {
+      "file": "yuanbao-color.svg",
+      "kind": "picture",
+      "bytes": 1110,
+      "sha256": "522b9c3ee6f4136b"
+    },
+    "yylx": {
+      "file": "yylx.svg",
+      "kind": "picture",
+      "bytes": 27466,
+      "sha256": "d9027766b7df7590"
+    },
+    "zai": {
+      "file": "zai.svg",
+      "kind": "mark",
+      "bytes": 319,
+      "sha256": "e748cb5108ce37b1"
+    },
+    "zcode": {
+      "file": "zcode.png",
+      "kind": "picture",
+      "bytes": 8170,
+      "sha256": "df3aba17ddb55b9c"
+    },
+    "zed": {
+      "file": "zed.svg",
+      "kind": "mark",
+      "bytes": 760,
+      "sha256": "f0529485410560c5"
+    },
+    "zenmux": {
+      "file": "zenmux.svg",
+      "kind": "mark",
+      "bytes": 2500,
+      "sha256": "1f9fab4e48601ca5"
+    },
+    "zeroone": {
+      "file": "zeroone.svg",
+      "kind": "mark",
+      "bytes": 868,
+      "sha256": "548126aabc59e4fc"
+    },
+    "zhipu-color": {
+      "file": "zhipu-color.svg",
+      "kind": "picture",
+      "bytes": 3597,
+      "sha256": "8174e65ff71647d5"
+    },
+    "zoo-code": {
+      "file": "zoo-code.png",
+      "kind": "picture",
+      "bytes": 18982,
+      "sha256": "22e6e76317e1d026"
+    }
+  }
+}
