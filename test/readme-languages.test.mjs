@@ -97,6 +97,32 @@ test("the screenshot generator seeds reserved ranges into a throwaway directory"
   expect(source).not.toContain("innerHTML");
 });
 
+// The login-browser panel prints two strings straight off the machine: the
+// install path and the free space on its volume. Left alone, a regenerated
+// screenshot publishes the OS account name (C:\Users\<name>\...) and how full
+// the author's drive is. The generator must therefore drive that panel through
+// the operator seam with a neutral root and a supplied free-byte figure, and
+// both READMEs must say those two values are neutral rather than real.
+test("the browser panel in the screenshots cannot publish the generating machine", () => {
+  const source = read("scripts/shoot-readme-screenshots.mjs");
+  // The seam, not a hand-drawn panel: the shipped manager still computes the
+  // badge, the download size and the required space.
+  expect(source).toContain("createEnvironmentManager");
+  expect(source).toContain("freeBytes: NEUTRAL_FREE_BYTES");
+  expect(source).toContain("root: browserRoot");
+  // A shared, machine-neutral base -- never the user's own profile directory.
+  expect(source).toContain('"C:/Users/Public"');
+  expect(source).not.toContain("LOCALAPPDATA");
+  // And it refuses to publish a path that still names an account.
+  expect(source).toContain("machine-specific path");
+  for (const markdown of [zh, en]) {
+    expect(markdown).toContain("C:\\Users\\Public");
+    expect(markdown).toContain("256 GB");
+  }
+  expect(zh).toContain("中性值");
+  expect(en).toContain("neutral values");
+});
+
 test("every relative link in either README points at a file that exists", () => {
   for (const [name, markdown] of [["README.md", zh], ["README.en.md", en]]) {
     for (const target of targetsOf(markdown)) {
