@@ -1,149 +1,138 @@
 # Magpie Clean Login · 干净登录
 
+**简体中文** · [English](README.en.md)
+
 [![tag](https://img.shields.io/github/v/tag/Gruu6y/magpie-clean-login?style=flat-square)](https://github.com/Gruu6y/magpie-clean-login/tags)
 [![ci](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml/badge.svg)](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-**Magpie Clean Login (CL · 干净登录) is an unofficial [magpie](https://usemagpie.ai) plugin for provider sign-ins: one page to manage proxy exits, where every account signs in through its own isolated browser identity and its own chosen proxy. The canonical repository is [github.com/Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login).**
+**干净登录（CL）是 [magpie](https://usemagpie.ai) 的一个非官方插件，用来登录各家供应商：在一个页面里管理代理出口，每个账号都通过自己独立的浏览器身份、自己选定的代理完成登录。规范仓库地址是 [github.com/Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login)。**
 
-![The Providers tab: the three-tab header, search, one-time browser setup and the first provider cards](assets/screenshot-providers.png)
+![供应商页：三个标签页的页头、搜索框、一次性浏览器准备，以及最前面的供应商卡片](assets/screenshot-providers.png)
 
-> **Unofficial plugin.** Clean Login is built and maintained here, at [Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login). It is **not** published by `magpie-community`, and nobody has reviewed it but you. Read the code, open an issue, send a pull request — all three are welcome.
+> **非官方插件。** 干净登录就在 [Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login) 这里开发和维护，**不是** `magpie-community` 发布的，除了你自己没有人审阅过它。读代码、提 issue、发 pull request —— 三件都欢迎。
 
-<details>
-<summary><strong>简体中文 · 安装与快速开始</strong></summary>
+<a id="contents"></a>
 
-Clean Login 是 magpie 的一个非官方页面插件：在一个页面里管理代理出口和各家供应商的登录。每个账号都用自己的浏览器身份、固定的浏览器指纹，以及你指定的代理完成登录 —— 登录页不会进入你日常用的浏览器，同一个供应商的两个账号也不会被看成同一台机器。
+## 目录
 
-**安装**
+- [为什么用它](#why)
+- [环境要求](#requirements)
+- [安装](#install)
+- [快速开始](#quick-start)
+- [三个标签页](#tabs)
+- [功能](#features)
+- [命令行与 agent](#cli)
+- [排查问题](#troubleshooting)
+- [隐私与数据存放位置](#privacy)
+- [参与贡献](#contributing)
+- [许可](#license)
 
-1. 打开 magpie → **Plugins** → **Discover** → **Unofficial**。
-2. 找到 **Gruu6y** 发布的 **Clean Login**，点 **Install**；列表没同步出来就点 **Retry**。
-3. 从侧栏打开 **Clean Login**。目前只支持 **Windows x64**，需要 Bun ≥ 1.4.2。
+<a id="why"></a>
 
-**第一次使用**
+## 为什么用它
 
-1. 插件会下载一次约 **170 MB** 的独立浏览器运行时（带 sha256 校验），之后全部离线运行。
-2. 到 **Proxy IPs（出口 IP）** 添加代理，逐条点 **Test**，确认出口 IP 和地区符合预期；需要第二意见可以再取一个信任分。
-3. 到 **Providers（供应商）** 选中供应商 → 选代理 → **Add account**。
-4. 需要浏览器登录时，会弹出独立浏览器窗口，照常登录即可，完成后自动收尾；关掉窗口就是取消。
-5. 如果插件要求先填一个值（例如手机号），在对话框里填好再点 **Start sign-in**；插件发来验证码时，在同一个对话框输入并点 **Submit code**。
+- **一个账号就是一台机器。** 浏览器配置、cookie 和指纹从不共用，所以同一家供应商的两个账号不会被看成同一个浏览器。退出登录不会丢掉这个身份，再次登录还是用它。
+- **你选的出口就是真正的出口。** 登录浏览器**和**插件自己发出的请求都走你选的那条代理。选**直连**就是真直连 —— 不会悄悄退回 magpie 的全局代理。
+- **不用维护一份供应商名单。** 干净登录直接读你已经装好的供应商插件和 magpie 市场目录，只要某个插件提供了登录方式，这里就给出入口。往 magpie 里加一个供应商，它就会出现在这一页。
 
-**命令行**（脚本 / agent 用同一套服务，不依赖界面）：
+<a id="requirements"></a>
 
-```sh
-bun bin/clean-login.mjs agent                 # 整个服务的一份紧凑 JSON 摘要
-bun bin/clean-login.mjs signin start --provider workbuddy --proxy hk-home-1 --wait
-bun bin/clean-login.mjs signin code 123456
-```
-
-数据全部留在本机：代理、账号、浏览器配置都在 `~/.config/magpie/magpie-clean-login/`，没有遥测，代理密码不会显示在页面上、也不会写进日志。四语言界面跟随 magpie 的语言设置：English / 简体中文 / 繁體中文 / 日本語。
-
-</details>
-
-## Contents
-
-- [Why](#why)
-- [Requirements](#requirements)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [The three tabs](#the-three-tabs)
-- [Features](#features)
-- [Command line and agents](#command-line-and-agents)
-- [Troubleshooting](#troubleshooting)
-- [Privacy and where your data lives](#privacy-and-where-your-data-lives)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Why
-
-- **One account, one machine.** Profiles, cookies and fingerprints are never shared, so two accounts of the same provider never look like the same browser. Signing out keeps the identity; signing back in reuses it.
-- **The exit you picked really is the exit.** The login browser *and* the plugin's own requests both go through the chosen proxy. Choosing **Direct** means direct — it does not silently fall back to magpie's global proxy.
-- **No provider list to maintain.** Clean Login reads the provider plugins you already installed and the magpie market catalogue, and offers an entry wherever a plugin exposes a sign-in. Add a provider to magpie and it shows up here.
-
-## Requirements
+## 环境要求
 
 | | |
 | --- | --- |
-| Host | [magpie](https://usemagpie.ai), with its Plugins panel |
-| OS | **Windows x64** — the bundled login browser is a Windows-only Camoufox build |
-| Runtime | Bun **≥ 1.4.2** |
-| Disk | ≈ 170 MB download, ≈ 616 MB on disk, ≈ 1.02 GB free to install — once |
-| Network | Only for the calls you start: proxy tests, the trust-score and identity-check pages, the runtime download, and the provider's own sign-in |
+| 宿主 | [magpie](https://usemagpie.ai)，带 Plugins 面板 |
+| 系统 | **Windows x64** —— 随插件下载的登录浏览器是只有 Windows 版的 Camoufox 构建 |
+| 运行时 | Bun **≥ 1.4.2** |
+| 磁盘 | 下载约 170 MB，落盘约 616 MB，安装时需要约 1.02 GB 可用空间 —— 只需一次 |
+| 网络 | 只用于你自己发起的动作：代理测速、信任分与身份检测页面、运行时下载，以及供应商自己的登录 |
 
-Other platforms are not supported yet; platform requests belong in the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues).
+其他平台暂时不支持；平台支持的需求请提到 [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues)。
 
-## Install
+<a id="install"></a>
 
-1. Open magpie → **Plugins** → **Discover** → **Unofficial**.
-2. Find **Clean Login** by **Gruu6y** and press **Install**. If the list has not caught up yet, press **Retry** — magpie caches what GitHub told it.
-3. Open **Clean Login** from the sidebar.
+## 安装
 
-Every version is tagged (`v0.1.x`) in this repository; the [tag list](https://github.com/Gruu6y/magpie-clean-login/tags) is the version history.
+1. 打开 magpie → **Plugins** → **Discover** → **Unofficial**（非官方插件）。
+2. 找到 **Gruu6y** 发布的 **Clean Login**，点 **Install**（安装）。列表还没同步出来就点 **Retry** —— magpie 缓存的是 GitHub 告诉它的结果。
+3. 从侧栏打开 **Clean Login**。
 
-## Quick start
+每个版本都在本仓库打了 tag（`v0.1.x`）；[tag 列表](https://github.com/Gruu6y/magpie-clean-login/tags)就是版本历史。
 
-The first time you sign in, Clean Login downloads its own browser runtime — about **170 MB**, once, verified by a pinned sha256 digest. Everything after that runs offline from your machine.
+<a id="quick-start"></a>
 
-1. **Proxy IPs** → add the exits you want to log in through.
-2. Press **Test** on each one and check the exit IP and region look right. Add a trust score if you want a second opinion.
-3. **Providers** → pick a provider → choose its proxy → **Add account**.
-4. If the provider's sign-in opens a browser, a separate browser window appears: sign in there as usual; it finishes by itself and the account appears in magpie. Close the window to cancel instead.
-5. If the provider asks for a value first (a phone number, for instance), fill it in the dialog and press **Start sign-in**. When the plugin sends a one-time code, type it in the same dialog and press **Submit code**.
+## 快速开始
 
-> A provider needs a sign-in magpie can drive. A card without **Add account** has no runnable sign-in method from an installed plugin — a market offer that is not installed yet, for example — and the card says why.
+第一次登录时，干净登录会下载它自己的浏览器运行时 —— 约 **170 MB**，只下一次，用固定的 sha256 摘要校验。之后全部在你的机器上离线运行。
 
-## The three tabs
+1. 到 **Proxy IPs（出口 IP）** 添加你想用来登录的出口。
+2. 逐条点 **Test**（测试），确认出口 IP 和地区符合预期。想要第二意见，可以再取一个信任分。
+3. 到 **Providers（供应商）** 选中供应商 → 选代理 → **Add account**（添加账号）。
+4. 如果这家供应商的登录会打开浏览器，就会弹出一个独立浏览器窗口：照常在里面登录，完成后它自己收尾，账号随即出现在 magpie 里。想取消就直接关掉那个窗口。
+5. 如果供应商要求先填一个值（比如手机号），在对话框里填好再点 **Start sign-in**（开始登录）。插件发来一次性验证码时，在同一个对话框里输入并点 **Submit code**（提交验证码）。
 
-**Proxy IPs** — test an exit through a real connection, read the exit IP, region and latency, then filter by region, latency and the tags in the name (家宽 / 静态). No direct-connection fallback: if a test fails, you see why.
+> 一家供应商需要有 magpie 能驱动的登录方式。没有 **Add account** 的卡片，说明已安装的插件里没有可运行的登录方式 —— 比如一个还没安装的市场条目 —— 卡片上会写清原因。
 
-![The Proxy IPs tab: region and latency filters, tested exits and per-row actions](assets/screenshot-proxies.png)
+<a id="tabs"></a>
 
-**Accounts** — every account, its pinned fingerprint, the last login, and the verdict from the third-party identity check. The A/B/C/D verdict is from `who.1ms.dog`; it is not a provider risk-control conclusion and not a fingerprint score of our own.
+## 三个标签页
 
-![The Accounts tab: verdict key, pinned fingerprints, last login and status](assets/screenshot-accounts.png)
+**Proxy IPs（出口 IP）** —— 用一条真实连接测试出口，读出出口 IP、地区和延迟，然后按地区、延迟区间以及名字里的标签（家宽 / 静态）筛选。不会退回直连：测试失败就把失败原因摆给你看。测速目标可以选「通用（出口检测）」，也可以选某家供应商，直接测到它的 API 主机。
 
-> Screenshots above were rendered from a local Clean Login instance using **synthetic accounts** and documentation-range IP addresses (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`). No real credentials appear in this repository.
+![代理 IP 页：地区与延迟筛选、已测出口，以及每行的操作](assets/screenshot-proxies.png)
 
-## Features
+**Accounts（账号）** —— 每个账号、它固定的指纹、最近一次登录，以及第三方身份检测给出的结论。A/B/C/D 结论来自 `who.1ms.dog`，**不是**供应商的风控结论，也不是我们自己给的指纹分。
 
-**Sign-ins**
+![账号页：结论图例、固定指纹、最近登录与状态](assets/screenshot-accounts.png)
 
-- Reads the provider plugins you have installed and offers **Add account** wherever one exposes a runnable sign-in — a login page, a form, or a one-time code. One plugin exposing several providers gets one card per provider.
-- Providers that ship with magpie itself have no plugin to read, so the entry runs magpie's own sign-in instead. With magpie's sign-in pages off, that sign-in prints its link and Clean Login opens it for you.
-- When a provider offers several routes — a per-site login, a team plan, reusing the desktop session, pasting a key — you choose, and each route is labelled with its kind before you start.
-- Values the plugin asks for are collected in the dialog; a code the plugin sends comes back to the same dialog. No browser window opens when there is nothing to open.
-- **Report a problem** on a card opens a GitHub issue with the title and body already written — you only press **Create** ([how it works](docs/reporting.md)).
+> 上面这些截图是从一个本地干净登录实例渲染的，用的是**合成账号**和文档保留段 IP（`203.0.113.x`、`198.51.100.x`、`192.0.2.x`）。本仓库里不出现任何真实凭据。
 
-**Exits and identity**
+<a id="features"></a>
 
-- Choose the proxy in the add-account dialog and the whole sign-in uses it: the browser window, and the plugin's requests to mint the link and exchange the code. A **SOCKS** exit carries the browser window but not the plugin's own requests — the runtime's proxy support speaks HTTP/HTTPS only.
-- Test an exit to see its real IP, region and latency. Optionally fetch the Claude trust score (`ip.net.coffee/claude`, 0–100) through that very proxy and keep it on the row.
-- Filter the proxy list by region, latency range and name tags; filter accounts by status; search providers by name, id or the words on their cards. A match inside the collapsed section opens that section for you.
-- Signing an account out does not throw its browser identity away — signing back in reuses the same one.
+## 功能
 
-**Everyday use**
+**登录**
 
-- **Four languages**: English, 简体中文, 繁體中文, 日本語, following magpie's language setting.
-- Everything stays on this computer: no account, no telemetry. Stored proxy passwords are never shown to the page and never written to a log.
+- 读你已安装的供应商插件，只要其中暴露了可运行的登录方式 —— 登录页、表单，或一次性验证码 —— 就给出 **Add account**。一个插件暴露多家供应商时，每家一张卡。
+- magpie 自带的供应商没有插件可读，入口改为走 magpie 自己的登录。magpie 的登录页被关掉时，那条登录会把链接打印出来，由干净登录替你打开。
+- 一家供应商提供多条路径时（按站点登录、团队版、复用桌面端会话、粘贴密钥），由你来选，而且每条路径在开始前都标好了类型。
+- 插件要求填的值在对话框里收集；插件发来的验证码回到同一个对话框。没有窗口可开时就不会开浏览器窗口。
+- 卡片上的 **Report a problem**（反馈问题）会打开一个 GitHub issue，标题和正文都已经替你写好 —— 你只需要点 **Create**（[它是怎么工作的](docs/reporting.md)）。
 
-## Command line and agents
+**出口与身份**
 
-The page is built for a person with a mouse. A script or an agent can drive the same service without the UI, using the bundled CLI:
+- 在添加账号对话框里选定代理，整次登录都用它：浏览器窗口，以及插件用来生成链接、交换验证码的那些请求。**SOCKS** 出口只能带浏览器窗口，带不了插件自己的请求 —— 运行时的代理支持只认 HTTP/HTTPS。
+- 添加账号时的出口下拉会显示每条出口的实测延迟，并把**这家供应商还没用过的**排在前面，用过的垫底。
+- 测试一条出口就能看到它真实的 IP、地区和延迟。还可以选择通过这条代理去取 Claude 信任分（`ip.net.coffee/claude`，0–100）并留在行上。测速目标选到某家供应商时，测的是到它 API 主机的往返；如果只完成了 TLS 握手而没拿到 HTTP 响应，那个数字会明确标成握手耗时，不冒充请求延迟。
+- 代理列表可按地区、延迟区间和名字标签筛选；账号可按状态筛选；供应商可按名称、id 或卡片上的词搜索。命中折叠区里的条目时，会替你把那一区展开。
+- 把账号退出登录不会丢掉它的浏览器身份 —— 再次登录复用同一个。
+
+**日常使用**
+
+- **四种语言**：English、简体中文、繁體中文、日本語，跟随 magpie 的语言设置。
+- 界面深浅色跟随 magpie 的主题设置，页面开着的时候切换也会立即跟上。
+- 一切都留在这台电脑上：没有账号，没有遥测。存下来的代理密码不会显示到页面上，也不会写进任何日志。
+
+<a id="cli"></a>
+
+## 命令行与 agent
+
+这一页是给拿鼠标的人做的。脚本或者 agent 可以不用界面、驱动同一套服务，用随插件带的 CLI：
 
 ```sh
-bun bin/clean-login.mjs agent       # compact digest of the whole service, as JSON
-bun bin/clean-login.mjs providers   # just the provider cards
-bun bin/clean-login.mjs proxies     # just the exits, without credentials
-bun bin/clean-login.mjs accounts    # just the accounts
+bun bin/clean-login.mjs agent       # 整个服务的一份紧凑 JSON 摘要
+bun bin/clean-login.mjs providers   # 只看供应商卡片
+bun bin/clean-login.mjs proxies     # 只看出口，不含凭据
+bun bin/clean-login.mjs accounts    # 只看账号
 ```
 
-The CLI finds the service at `127.0.0.1:3492` (override with `--port` or `--url`), reads the per-process page token from the page it serves, and never prints that token. It has no dependencies beyond the runtime's `fetch`, so it starts in milliseconds and does not load the browser modules.
+CLI 默认在 `127.0.0.1:3492` 找服务（用 `--port` 或 `--url` 覆盖），从服务自己送出的页面里读取每进程一份的页面 token，并且从不把这个 token 打印出来。除了运行时的 `fetch` 它没有任何依赖，所以毫秒级启动，也不会加载浏览器模块。
 
-Two things keep a program from having to poll:
+有两件事让程序不必轮询：
 
-- **`GET /api/agent`** returns one compact, self-describing digest: the version, the service port, the command catalog, and the merged provider cards, proxies, accounts and running job states. It does not carry the four-language descriptions, notices or capability reasons the page needs, and never carries a password.
-- **`?wait=<ms>`** on the async status routes (`/api/signin`, `/api/native-signin`, `/api/proxy-score`, `/api/environment/job`, `/api/accounts/:provider/:key/check`) blocks inside the service until the job settles or the bound elapses. One request replaces the browser's poll loop. A state that needs the caller to act — a one-time code, a pasted value — ends the wait immediately instead of holding the connection open.
+- **`GET /api/agent`** 返回一份紧凑、自描述的摘要：版本、服务端口、命令目录，以及合并后的供应商卡片、代理、账号和正在跑的任务状态。它不带页面需要的四语言描述、提示和能力原因，也从不带密码。
+- 异步状态路由上的 **`?wait=<ms>`**（`/api/signin`、`/api/native-signin`、`/api/proxy-score`、`/api/environment/job`、`/api/accounts/:provider/:key/check`）会在服务内部阻塞，直到任务落定或者时限用完。一个请求就替掉了浏览器那套轮询循环。需要调用方动手的状态 —— 一次性验证码、要粘贴的值 —— 会立刻结束等待，而不是把连接一直挂着。
 
 ```sh
 bun bin/clean-login.mjs signin start --provider workbuddy --proxy hk-home-1 --wait
@@ -151,30 +140,38 @@ bun bin/clean-login.mjs signin code 123456
 bun bin/clean-login.mjs proxy score hk-home-1 --wait
 ```
 
-Run `bun bin/clean-login.mjs help` for the full command list. A remote service (`magpie web`) has no loopback page to read, so pass `--token` there explicitly; the token is the one embedded in the page the service serves.
+完整命令列表跑 `bun bin/clean-login.mjs help`。远程服务（`magpie web`）没有回环页面可读，那里要显式传 `--token`；token 就是服务送出的那个页面里嵌的那一份。
 
-## Troubleshooting
+<a id="troubleshooting"></a>
 
-| Symptom | What to do |
+## 排查问题
+
+| 现象 | 怎么办 |
 | --- | --- |
-| A provider card has no **Add account** | The card says why. Market offers need their plugin installed in magpie; plugin-only providers need a plugin that exposes a browser sign-in. |
-| The login browser says *not installed* / download failed | The first run fetches a ≈170 MB Windows x64 archive. Check disk space and network, then retry from the Providers tab. The archive is sha256-verified before unpacking. |
-| A sign-in failed with `no_url` or `method_input_required` | The plugin asked for a value (a phone number, a site, a key) that the dialog did not collect. Fill the field and retry; if it keeps failing, use **Report a problem** on the card. |
-| Proxy test fails | The test makes a real connection through that exit and never falls back to a direct one. Check the host, port, credentials and whether the exit allows the target. |
-| A signed-in account looks like a new machine | Check its pinned fingerprint on **Accounts**. Signing back in reuses the same identity; deleting the account data removes it. |
-| Something else | Open an [issue](https://github.com/Gruu6y/magpie-clean-login/issues) with what you expected, what happened, and which provider or proxy was involved. A screenshot of the message is worth a lot. Please never paste real tokens or proxy passwords into an issue. |
+| 某张供应商卡没有 **Add account** | 卡片上写了原因。市场条目需要先在 magpie 里装上它的插件；只有插件的供应商需要一个暴露了浏览器登录方式的插件。 |
+| 登录浏览器显示*未安装* / 下载失败 | 首次运行会取一个约 170 MB 的 Windows x64 压缩包。检查磁盘空间和网络，然后从供应商页重试。压缩包在解包前会做 sha256 校验。 |
+| 登录失败，报 `no_url` 或 `method_input_required` | 插件要一个值（手机号、站点、密钥），而对话框没收集到。把那个字段填好再试；要是一直失败，用卡片上的 **Report a problem**。 |
+| 代理测试失败 | 测试是通过那条出口建立真实连接，绝不退回直连。检查主机、端口、凭据，以及这条出口是否允许访问目标。 |
+| 已登录的账号看起来像一台新机器 | 到 **Accounts** 看它固定的指纹。再次登录会复用同一个身份；删掉账号数据才会把它移除。 |
+| 其他情况 | 提一个 [issue](https://github.com/Gruu6y/magpie-clean-login/issues)，写清你预期什么、实际发生了什么、涉及哪家供应商或哪条代理。一张报错截图很有价值。**请永远不要把真实 token 或代理密码贴进 issue。** |
 
-## Privacy and where your data lives
+<a id="privacy"></a>
 
-- There is no telemetry and no account. The only network calls are the ones you start: the proxy test, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
-- Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalogue is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`).
-- The login browser is unpacked into `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows (`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
-- Stored proxy passwords never reach the page and are never written to a log. The page token is per-process and lives in the served page.
+## 隐私与数据存放位置
 
-## Contributing
+- 没有遥测，也没有账号。唯一的网络调用就是你自己发起的那些：代理测试、信任分页面、身份检测页面、运行时下载，以及供应商自己的登录。
+- 代理、账号、指纹和浏览器配置都在 `~/.config/magpie/magpie-clean-login/`（用 `MAGPIE_CLEAN_LOGIN_DATA` 覆盖；配置根本身用 `MAGPIE_CONFIG_DIR`）。市场目录从 `~/.cache/magpie/` 读取（`MAGPIE_CACHE_DIR`）。
+- 登录浏览器在 Windows 上解包到 `%LOCALAPPDATA%/magpie-clean-login/camoufox`（`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`）。
+- 存下来的代理密码不会到达页面，也不会写进日志。页面 token 每进程一份，只存在于服务送出的页面里。
 
-Pull requests are welcome. The suite is the contract: `bun test` runs everything, and a change without a test is a change nobody can trust later. `node scripts/check-version-bump.mjs` decides whether a change to `lib/`, `ui/`, `page/` or `index.mjs` needs a version bump; docs-only changes do not. Read [AGENTS.md](AGENTS.md) before you start.
+<a id="contributing"></a>
 
-## License
+## 参与贡献
 
-[MIT](LICENSE) © 2026 Gruu6y. [Tag list / version history](https://github.com/Gruu6y/magpie-clean-login/tags) · [Reporting a problem](docs/reporting.md) · [CI](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
+欢迎 pull request。测试套件就是契约：`bun test` 跑全部，一个没有测试的改动就是以后没人敢信的改动。`node scripts/check-version-bump.mjs` 决定改 `lib/`、`ui/`、`page/` 或 `index.mjs` 是否需要升版本；只改文档不需要。动手前先读 [AGENTS.md](AGENTS.md)。
+
+<a id="license"></a>
+
+## 许可
+
+[MIT](LICENSE) © 2026 Gruu6y. [tag 列表 / 版本历史](https://github.com/Gruu6y/magpie-clean-login/tags) · [反馈问题](docs/reporting.md) · [CI](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
