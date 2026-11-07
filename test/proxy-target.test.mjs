@@ -17,6 +17,7 @@ import {
   EMPTY_TARGETS,
   GENERIC_TARGET_ID,
   findTarget,
+  latencyMarker,
   normalizeProxyTargets,
   providerLatency,
   proxyForTarget,
@@ -25,6 +26,7 @@ import {
   targetStatusSuffix,
   withProbeResult,
 } from "../ui/proxy-target.js";
+import { statusView } from "../ui/proxy-state.js";
 import { filterProxies } from "../ui/proxy-filter.js";
 import { formatSignInProxyOption } from "../ui/signin-state.js";
 import { normalizeLatencyMap, publicProxy } from "../lib/proxies.mjs";
@@ -246,6 +248,63 @@ test("the latency filter follows the selected target without changing the defaul
   expect(filterProxies(rows, { maxLatency: "100", latencyOf: byProvider }).map((row) => row.id)).toEqual(["b"]);
   // An unmeasured provider row is excluded rather than treated as 0 ms.
   expect(filterProxies(rows, { minLatency: "1", latencyOf: byProvider }).map((row) => row.id)).toEqual(["a", "b"]);
+});
+
+// A probe that only reached the TLS handshake is a lower bound, not a request
+// time. The flag has to survive storage, the public projection and the page's
+// copy, or the table prints a WAF's handshake as if it were the provider's
+// latency -- the exact honesty gap the first shipped version left open.
+test("a handshake-only measurement keeps its flag all the way to the text", () => {
+  const entries = normalizeLatencyMap({
+    "qoder-cn": { ms: 512, host: "gateway.qoder.com.cn", at: "2026-11-08T00:00:00.000Z", handshake: true },
+  });
+  expect(entries["qoder-cn"]).toEqual({
+    ms: 512,
+    host: "gateway.qoder.com.cn",
+    at: "2026-11-08T00:00:00.000Z",
+    handshake: true,
+  });
+
+  const record = { id: "p1", status: "ok", latency: 41, latencyByProvider: entries };
+  expect(providerLatency(record, "qoder-cn").handshake).toBe(true);
+
+  const decorated = proxyForTarget(record, "qoder-cn", CATALOGUE);
+  expect(decorated.latency).toBe(512);
+  expect(decorated.latencyTarget.handshake).toBe(true);
+  expect(latencyMarker(decorated)).toBe("~");
+
+  const labels = { statusOk: "可用" };
+  expect(statusView(decorated, labels).detail).toBe("~512 ms");
+  // The generic row of the same record is untouched, character for character.
+  expect(statusView(record, labels).detail).toBe("41 ms");
+  expect(latencyMarker(record)).toBe("");
+
+  // A persisted flag that was not literally `true` is not a handshake.
+  const stringy = normalizeLatencyMap({ x: { ms: 5, host: "h", handshake: "yes" } });
+  expect(stringy.x).toEqual({ ms: 5, host: "h", at: "" });
+});
+
+test("a sweep result marked as handshake-only stores the caveat locally too", () => {
+  const result = {
+    ok: true,
+    latency: 188,
+    tlsOnly: true,
+    checkedAt: "2026-11-08T01:00:00.000Z",
+    target: { kind: "provider", provider: "qoder", host: "api3.qoder.sh" },
+  };
+  const next = withProbeResult(RECORD, result);
+  expect(next.latencyByProvider.qoder).toEqual({
+    ms: 188,
+    host: "api3.qoder.sh",
+    at: "2026-11-08T01:00:00.000Z",
+    handshake: true,
+  });
+  // Without tlsOnly the entry keeps its old three fields.
+  expect(withProbeResult(RECORD, { ...result, tlsOnly: false }).latencyByProvider.qoder).toEqual({
+    ms: 188,
+    host: "api3.qoder.sh",
+    at: "2026-11-08T01:00:00.000Z",
+  });
 });
 
 test("the stored latency map is bounded and survives a public projection", () => {

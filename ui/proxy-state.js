@@ -1,6 +1,8 @@
 // Small pure helpers used by the page. Keeping them out of app.js lets the
 // tests exercise confirmation and stale-result behaviour without a DOM.
 
+import { latencyMarker } from "./proxy-target.js";
+
 export function normalizeProxyForm(values = {}) {
   return {
     name: String(values.name ?? "").trim(),
@@ -30,10 +32,14 @@ export function statusView(proxy = {}, labels = {}, testing = false) {
     return { state: "testing", label: labels.statusTesting || "Testing…", detail: "" };
   }
   if (proxy.status === "ok") {
+    // A provider measurement that only reached the TLS handshake is a lower
+    // bound, so it prints as `~233 ms`. Every other row keeps its old text.
     return {
       state: "ok",
       label: labels.statusOk || "Available",
-      detail: Number.isFinite(proxy.latency) ? `${proxy.latency} ms` : "",
+      detail: Number.isFinite(proxy.latency)
+        ? `${latencyMarker(proxy)}${proxy.latency} ms`
+        : "",
     };
   }
   if (proxy.status === "error") {

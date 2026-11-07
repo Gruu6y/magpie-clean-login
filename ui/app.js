@@ -206,6 +206,8 @@ const messages = {
     testTargetLabel: "Test target",
     testTargetGeneric: "Generic (exit check)",
     testTargetNote: "Latency is measured to {target} · {host}",
+    testTargetHandshake:
+      "only the TLS handshake was measured — this provider did not answer the probe in HTTP",
     connecting: "Connecting…",
     ready: "Local service connected",
     failed: "Local service unavailable",
@@ -578,6 +580,7 @@ const messages = {
     testTargetLabel: "测速目标",
     testTargetGeneric: "通用（出口检测）",
     testTargetNote: "延迟测到 {target} · {host}",
+    testTargetHandshake: "只测到 TLS 握手——该供应商没有用 HTTP 回应探测",
     connecting: "正在连接…",
     ready: "本地服务已连接",
     failed: "本地服务不可用",
@@ -950,6 +953,7 @@ const messages = {
     testTargetLabel: "測速目標",
     testTargetGeneric: "通用（出口檢測）",
     testTargetNote: "延遲測到 {target} · {host}",
+    testTargetHandshake: "只測到 TLS 握手——該供應商沒有用 HTTP 回應探測",
     connecting: "正在連線…",
     ready: "本機服務已連線",
     failed: "本機服務無法使用",
@@ -1322,6 +1326,7 @@ const messages = {
     testTargetLabel: "測定先",
     testTargetGeneric: "汎用（出口確認）",
     testTargetNote: "{target} · {host} への遅延を測定",
+    testTargetHandshake: "TLS ハンドシェイクのみ測定 — このプロバイダは HTTP で応答しませんでした",
     connecting: "接続中…",
     ready: "ローカルサービスに接続しました",
     failed: "ローカルサービスを利用できません",
@@ -2161,10 +2166,14 @@ function proxyRow(proxy) {
   if (proxy.latencyTarget?.id) {
     const target = document.createElement("small");
     target.className = "proxy-status-target";
-    target.textContent = proxy.latencyTarget.id;
-    const detail = proxy.latencyTarget.host
+    const handshake = proxy.latencyTarget.handshake === true;
+    // "TLS" is a protocol name, not a word, so it reads the same in every
+    // language and still fits the narrow column the id alone fitted in.
+    target.textContent = handshake ? `${proxy.latencyTarget.id} · TLS` : proxy.latencyTarget.id;
+    let detail = proxy.latencyTarget.host
       ? `${proxy.latencyTarget.id} · ${proxy.latencyTarget.host}`
       : proxy.latencyTarget.id;
+    if (handshake) detail = `${detail} · ${text.testTargetHandshake}`;
     status.title = detail;
     target.title = detail;
     statusCell.append(target);
@@ -4325,13 +4334,13 @@ function showTestResult(result) {
     return;
   }
   if (result.ok) {
-    setTestResult(
-      "ok",
-      text.testSuccess
-        .replace("{ip}", result.exitIp || text.unknown)
-        .replace("{region}", result.region || text.unknown)
-        .replace("{latency}", String(result.latency ?? "?")),
-    );
+    const line = text.testSuccess
+      .replace("{ip}", result.exitIp || text.unknown)
+      .replace("{region}", result.region || text.unknown)
+      .replace("{latency}", String(result.latency ?? "?"));
+    // A provider probe that only reached the handshake is not a request time.
+    // Saying so here is what keeps the number in the table honest.
+    setTestResult("ok", result.tlsOnly === true ? `${line} · ${text.testTargetHandshake}` : line);
     return;
   }
   setTestResult("error", text.testFailure.replace("{error}", testErrorText(result)));
