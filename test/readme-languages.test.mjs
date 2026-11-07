@@ -50,10 +50,51 @@ test("both READMEs keep the same title, badges and screenshots", () => {
     expect(markdown.startsWith("# Magpie Clean Login · 干净登录\n")).toBe(true);
     expect(markdown).toContain("img.shields.io/github/v/tag/Gruu6y/magpie-clean-login");
     expect(markdown).toContain("actions/workflows/ci.yml/badge.svg");
-    for (const shot of ["providers", "proxies", "accounts"]) {
+    for (const shot of ["providers", "proxies", "accounts", "guide"]) {
       expect(markdown).toContain(`assets/screenshot-${shot}.png`);
     }
   }
+});
+
+// The screenshots show invented accounts on documentation-reserved IPs. That
+// is fine -- publishing a real user's accounts and exits would not be -- but
+// only while the page says so. A future edit must not be able to quietly drop
+// the disclosure and let demo data read as somebody's real setup.
+test("both READMEs disclose that the screenshot records are demo data", () => {
+  expect(zh).toContain("演示数据");
+  expect(en).toContain("demo data");
+  for (const markdown of [zh, en]) {
+    // The reserved ranges themselves, so the claim is checkable, not vague.
+    expect(markdown).toContain("203.0.113");
+    expect(markdown).toContain("198.51.100");
+    expect(markdown).toContain("192.0.2");
+    // And the generator, so a reader can reproduce the images rather than
+    // take the claim on trust.
+    expect(markdown).toContain("scripts/shoot-readme-screenshots.mjs");
+  }
+  expect(existsSync(join(root, "scripts/shoot-readme-screenshots.mjs"))).toBe(true);
+  for (const shot of ["providers", "proxies", "accounts", "guide"]) {
+    expect(existsSync(join(root, "assets", `screenshot-${shot}.png`)), `screenshot-${shot}.png`).toBe(true);
+  }
+});
+
+// The generator must not become a way to publish somebody's real setup: it
+// seeds only reserved ranges and demo credentials, and it writes into a
+// throwaway directory rather than the user's config.
+test("the screenshot generator seeds reserved ranges into a throwaway directory", () => {
+  const source = read("scripts/shoot-readme-screenshots.mjs");
+  expect(source).toContain("mkdtempSync");
+  expect(source).toContain("MAGPIE_CLEAN_LOGIN_DATA");
+  expect(source).toContain("MAGPIE_CONFIG_DIR");
+  expect(source).toContain("not-a-real-password");
+  expect(source).toContain("demo-not-a-real-token");
+  for (const range of ["203.0.113.", "198.51.100.", "192.0.2."]) {
+    expect(source).toContain(range);
+  }
+  // It renders the shipped page; it must not assemble its own markup.
+  expect(source).toContain("startServer");
+  expect(source).not.toContain("setContent");
+  expect(source).not.toContain("innerHTML");
 });
 
 test("every relative link in either README points at a file that exists", () => {
@@ -95,4 +136,21 @@ test("the two languages carry the same factual limits", () => {
     expect(markdown).toContain("GET /api/agent");
     expect(markdown).toContain("?wait=<ms>");
   }
+});
+
+// A rewrite for beginners must not quietly drop a feature that already ships.
+// "Renew fingerprint" is the one that is easy to lose, because the whole point
+// of the page is that identities are KEPT -- so the escape hatch has to be
+// spelled out, in both languages, under the label the UI actually uses.
+test("both READMEs still document renewing a fingerprint", () => {
+  expect(zh).toContain("更换指纹");
+  expect(en).toContain("Renew fingerprint");
+  const app = read("ui/app.js");
+  // The labels above must be the shipped ones, not invented prose.
+  expect(app).toContain('accountRotate: "Renew fingerprint"');
+  expect(app).toContain('accountRotate: "更换指纹"');
+  // And the distinction that makes the feature understandable: an ordinary
+  // sign-in again keeps the old fingerprint.
+  expect(zh).toContain("沿用旧指纹");
+  expect(en).toContain("reuses the old fingerprint");
 });

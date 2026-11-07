@@ -6,122 +6,216 @@
 [![ci](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml/badge.svg)](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-**Magpie Clean Login (CL · 干净登录) is an unofficial [magpie](https://usemagpie.ai) plugin for provider sign-ins: one page to manage proxy exits, where every account signs in through its own isolated browser identity and its own chosen proxy. The canonical repository is [github.com/Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login).**
+**One sentence: when you sign in to several accounts inside magpie, this makes each one look like its own computer on its own network.**
 
-![The Providers tab: the header, search, one-time browser setup and the first provider cards](assets/screenshot-providers.png)
+If you only ever use one account, magpie alone is enough. If you have several — two Claude accounts, three WorkBuddy accounts — this is what you need.
 
-> **Unofficial plugin.** Clean Login is built and maintained here, at [Gruu6y/magpie-clean-login](https://github.com/Gruu6y/magpie-clean-login). It is **not** published by `magpie-community`, and nobody has reviewed it but you. Read the code, open an issue, send a pull request — all three are welcome.
+![The providers page: four tabs, the one-time login browser setup, and provider cards you can sign in to directly](assets/screenshot-providers.png)
 
-> **中文读者：** 完整的简体中文文档在 [README.md](README.md)，这一份是英文版。
+> **This is an unofficial plugin.** Built and maintained by [Gruu6y](https://github.com/Gruu6y/magpie-clean-login), **not** published by magpie or `magpie-community`. All the code is public — read it, open issues, send pull requests.
+
+<a id="contents"></a>
 
 ## Contents
 
-- [Why](#why)
+- [What problem this actually solves](#what)
+- [Why use it](#why)
 - [Requirements](#requirements)
 - [Install](#install)
 - [Quick start](#quick-start)
 - [The four tabs](#the-four-tabs)
 - [Features](#features)
-- [Command line and agents](#command-line-and-agents)
+- [Command line and agents](#cli)
 - [Troubleshooting](#troubleshooting)
-- [Privacy and where your data lives](#privacy-and-where-your-data-lives)
+- [Privacy and where data lives](#privacy)
 - [Contributing](#contributing)
 - [License](#license)
 
-## Why
+<a id="what"></a>
 
-- **One account, one machine.** Profiles, cookies and fingerprints are never shared, so two accounts of the same provider never look like the same browser. Signing out keeps the identity; signing back in reuses it. When a genuinely new machine is what you want, use **Renew fingerprint** on the account row.
-- **The exit you picked really is the exit.** The login browser *and* the plugin's own requests both go through the chosen proxy. Choosing **Direct** means direct — it does not silently fall back to magpie's global proxy.
-- **No provider list to maintain.** Clean Login reads the provider plugins you already installed and the magpie market catalogue, and offers an entry wherever a plugin exposes a sign-in. Add a provider to magpie and it shows up here.
+## What problem this actually solves
+
+Signing in to an AI service inside magpie normally goes: a browser opens → you type your credentials → you are signed in → the credential lands in magpie.
+
+With one account that is fine. **The trouble starts with the second one.**
+
+Providers (Claude, OpenAI, the various Chinese services) record which computer and which network a sign-in came from. They look at more than your IP: they read the browser fingerprint — your GPU model, your installed fonts, your screen resolution, the tiny differences in how your machine renders a canvas. Together those are close to a serial number for your computer.
+
+So:
+
+- You sign in to account A in the same browser you use for account B — the provider sees **two accounts on one computer**.
+- Worse is **renewal**. When a credential expires and refreshes, it travels through the same browser identity again, which reminds the provider every so often that these two accounts belong together.
+- When one account gets in trouble, the others are easy to take down with it.
+
+**What Clean Login does is simple: it puts every account in its own browser.**
+
+| | Without Clean Login | With Clean Login |
+| --- | --- | --- |
+| Browser identity | Every account shares one fingerprint | One per account, pinned after sign-in |
+| Network exit | Follows your system / magpie global setting | Each account uses the proxy you picked |
+| Signing out and back in | Can look like a brand-new computer | Same computer as before, identity kept |
+| Renewal | One identity showing up over and over | Each on its own identity and exit |
+
+<a id="why"></a>
+
+## Why use it
+
+**Because magpie does not do this itself.** magpie's maintainers do not want to work against the providers, so nothing in magpie hides the fact that one machine signed in to many accounts. That is not a bug — it is their choice.
+
+Clean Login fills exactly that gap, in three ways:
+
+1. **One account is one machine.** Browser profile, cookies and fingerprint are never shared. Signing out does not throw the identity away; the next sign-in reuses it, so the provider sees an old computer coming back rather than a new one appearing. When a genuinely new machine is what you want, use **Renew fingerprint** on the account row.
+2. **The exit you pick is the exit that is used.** Both the login browser **and** the requests the plugin makes itself go through the proxy you chose. Picking "direct" really means direct — it never quietly falls back to magpie's global proxy.
+3. **No provider list to maintain.** It reads the provider plugins you already installed and magpie's market catalog. Add a provider to magpie and a card appears here.
+
+> **The boundary, stated plainly:** one account, one fingerprint, one exit. What a provider does with its service is still up to the provider — **this plugin bypasses no verification and does not register accounts for you.**
+
+<a id="requirements"></a>
 
 ## Requirements
 
 | | |
 | --- | --- |
-| Host | [magpie](https://usemagpie.ai), with its Plugins panel |
-| OS | **Windows x64** — the bundled login browser is a Windows-only Camoufox build |
+| Host | [magpie](https://usemagpie.ai) with the Plugins panel |
+| OS | **Windows x64** — the login browser downloaded with the plugin is a Windows-only Camoufox build |
 | Runtime | Bun **≥ 1.4.2** |
-| Disk | ≈ 170 MB download, ≈ 616 MB on disk, ≈ 1.02 GB free to install — once |
-| Network | Only for the calls you start: proxy tests, the trust-score and identity-check pages, the runtime download, and the provider's own sign-in |
+| Disk | ~170 MB download, ~616 MB on disk, ~1.02 GB free during install — once |
+| Network | Only for actions you start: proxy tests, the trust-score and identity-check pages, the runtime download, and the provider's own sign-in |
 
-Other platforms are not supported yet; platform requests belong in the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues).
+Other platforms are not supported yet; ask on the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues) if you need one.
+
+<a id="install"></a>
 
 ## Install
 
 1. Open magpie → **Plugins** → **Discover** → **Unofficial**.
-2. Find **Clean Login** by **Gruu6y** and press **Install**. If the list has not caught up yet, press **Retry** — magpie caches what GitHub told it.
-3. Open **Clean Login** from the sidebar.
+2. Find **Clean Login** by **Gruu6y** and click **Install**. If the list has not synced, click **Retry** — magpie caches whatever GitHub told it.
+3. Open **Clean Login** from the sidebar. You get the page in the screenshot above.
 
-Every version is tagged (`v0.1.x`) in this repository; the [tag list](https://github.com/Gruu6y/magpie-clean-login/tags) is the version history.
+Every release is tagged in this repository (`v0.1.x`); the [tag list](https://github.com/Gruu6y/magpie-clean-login/tags) is the version history.
+
+<a id="quick-start"></a>
 
 ## Quick start
 
-The first time you sign in, Clean Login downloads its own browser runtime — about **170 MB**, once, verified by a pinned sha256 digest. Everything after that runs offline from your machine.
+Four steps and you have one cleanly signed-in account. About five minutes, most of it waiting for a browser to download.
 
-1. **Proxy IPs** → add the exits you want to log in through.
-2. Press **Test** on each one and check the exit IP and region look right. Add a trust score if you want a second opinion.
-3. **Providers** → pick a provider → choose its proxy → **Add account**.
-4. If the provider's sign-in opens a browser, a separate browser window appears: sign in there as usual; it finishes by itself and the account appears in magpie. Close the window to cancel instead.
-5. If the provider asks for a value first (a phone number, for instance), fill it in the dialog and press **Start sign-in**. When the plugin sends a one-time code, type it in the same dialog and press **Submit code**.
+### Step 1: prepare the login browser (once)
 
-> A provider needs a sign-in magpie can drive. A card without **Add account** has no runnable sign-in method from an installed plugin — a market offer that is not installed yet, for example — and the card says why.
+At the top of the providers page there is a **Login browser setup** block. Click **Prepare browser** and let it finish.
+
+- The download is about **170 MB**, verified against a pinned sha256, fetched once.
+- When it is done the block reads **Ready** — that is the state in the first screenshot.
+- If it fails you can retry; nothing else is affected.
+
+This installs a **separate browser**, not the one you use every day. Every sign-in happens inside it, so your normal browser stays untouched.
+
+### Step 2: add a proxy exit
+
+Switch to **Proxy IPs** → click **Add Proxy** at the top right → fill in a name, the type (HTTP / HTTPS / SOCKS5), host and port, plus username and password if it needs them.
+
+Then click **Test** on that row. It really connects out through that proxy and tells you **the exit IP, the region, and the latency in milliseconds**.
+
+![The Proxy IPs page: the test target picker at the top right, measured results per exit, region filters and row actions](assets/screenshot-proxies.png)
+
+Three details worth reading in that screenshot:
+
+- The **Test target** picker at the top right can be "Generic (exit check)" or a specific provider. Pick a provider and the number is the latency **to that provider's API host**, not to a generic test site.
+- The `JP 静态 01` row reads `~512 ms` with `qoder-cn · TLS` underneath. **The tilde means something:** only the TLS handshake completed and no HTTP response came back, so that number is handshake time, not real request latency. The plugin will not dress it up as a nicer number.
+- A failed test **never** falls back to a direct connection silently. It shows you why it failed.
+
+### Step 3: pick a provider and sign in
+
+Back on **Providers**, find the service you want and click **Add account** on its card.
+
+In the dialog:
+
+1. **Pick a proxy** — the dropdown shows each exit's measured latency and puts the ones **this provider has not used yet** first.
+2. If the provider needs a value first (a phone number, a site address, a key), the dialog gives you the field. Fill it in, then click **Start sign-in**.
+3. For browser sign-in a separate window opens. Sign in there as usual; it closes itself when done and the account appears in magpie. Want out? Just close that window.
+4. If the provider sends a one-time code, type it into the same dialog and click **Submit code**.
+
+On success you get: **Signed in. The credential was written to magpie.**
+
+> No **Add account** button on a card? The card says why — usually the provider's plugin is not installed in magpie yet, or that plugin exposes no drivable sign-in method.
+
+### Step 4: check that it really is clean
+
+Switch to **Accounts**. You see the account you just signed in to, its pinned fingerprint, and the exit used last time.
+
+For a second opinion, click **Check** on that row, then **Start check**. The plugin visits the third-party site `who.1ms.dog` through that account's exit and reports an A/B/C/D verdict.
+
+![The Accounts page: the A/B/C/D legend, each account's pinned fingerprint, and the region and exit of its last sign-in](assets/screenshot-accounts.png)
+
+- **A clean · usable** / **B usable · traces** / **C consider another exit** / **D do not use this exit**
+- A C or D means that exit is not clean enough. Switch proxies and sign that account in again.
+- To make the account **genuinely a different computer** (rather than just a different exit), click **Renew fingerprint** on that row: it signs the same account in again on a freshly drawn fingerprint and deletes the old browser profile. The account and its credential stay. An ordinary "Sign in again" reuses the old fingerprint — the two are not the same thing.
+
+> **This is the third-party site who.1ms.dog's verdict. It is not a provider risk-control conclusion, and it is not a fingerprint score we built ourselves.** It is a second opinion, nothing more.
+
+<a id="the-four-tabs"></a>
 
 ## The four tabs
 
-**Guide** — an in-page manual written for a first-time user: ten sections that cover why this plugin exists, preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and handing the whole thing to your own agent when you would rather not click. Each of the four languages is written out on its own, not machine-translated English. It is a text page: no network, no downloads, nothing executed.
+**Providers** — which services you can sign in to. Cards come from your installed plugins and magpie's market catalog, and you start a sign-in right on the card. The search box matches name, id or plugin name.
 
-**Proxy IPs** — test an exit through a real connection, read the exit IP, region and latency, then filter by region, latency and the tags in the name (家宽 / 静态). No direct-connection fallback: if a test fails, you see why. The measurement target can be the general exit check or a specific provider, measured straight to its API host.
+**Proxy IPs** — manage the exits used for sign-in and later requests, and test them. Filter by region, latency range, or a tag in the name (residential / static). See step 2 above.
 
-![The Proxy IPs tab: region and latency filters, tested exits and per-row actions](assets/screenshot-proxies.png)
+**Accounts** — every account you signed in to, the browser fingerprint pinned to it, and what the third-party site thinks of that identity. See step 4 above.
 
-**Accounts** — every account, its pinned fingerprint, the last login, and the verdict from the third-party identity check. The A/B/C/D verdict is from `who.1ms.dog`; it is not a provider risk-control conclusion and not a fingerprint score of our own.
+**Guide** — an in-page manual written for a first-time user: ten sections covering why this plugin exists, preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and handing the whole thing to your own agent when you would rather not click. Written separately in all four languages, not machine-translated from English. Plain text: no network, no downloads, nothing executed.
 
-![The Accounts tab: verdict key, pinned fingerprints, last login and status](assets/screenshot-accounts.png)
+![The Guide tab: the first of ten in-page sections, explaining why this plugin exists](assets/screenshot-guide.png)
 
-> Screenshots above were rendered from a local Clean Login instance using **synthetic accounts** and documentation-range IP addresses (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`). No real credentials appear in this repository.
+> **About these screenshots:** all four are rendered by this repository's current code in a real Chrome — nothing hand-drawn, nothing composited, no page element substituted. The **account and proxy records are demo data**, using documentation-reserved IPs (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`) and invented account names, because publishing the author's real accounts, exits and credentials in a public repository would be a leak. The provider cards, logos, browser-setup state and interface text are real. The generator is [`scripts/shoot-readme-screenshots.mjs`](scripts/shoot-readme-screenshots.mjs); run `bun scripts/shoot-readme-screenshots.mjs` to reproduce all four.
+
+<a id="features"></a>
 
 ## Features
 
-**Sign-ins**
+**Signing in**
 
-- Reads the provider plugins you have installed and offers **Add account** wherever one exposes a runnable sign-in — a login page, a form, or a one-time code. One plugin exposing several providers gets one card per provider.
-- Providers that ship with magpie itself have no plugin to read, so the entry runs magpie's own sign-in instead. With magpie's sign-in pages off, that sign-in prints its link and Clean Login opens it for you.
-- When a provider offers several routes — a per-site login, a team plan, reusing the desktop session, pasting a key — you choose, and each route is labelled with its kind before you start.
-- Values the plugin asks for are collected in the dialog; a code the plugin sends comes back to the same dialog. No browser window opens when there is nothing to open.
-- **Report a problem** on a card opens a GitHub issue with the title and body already written — you only press **Create** ([how it works](docs/reporting.md)).
+- Reads your installed provider plugins and offers **Add account** for any that expose a runnable sign-in method (a login page, a form, a one-time code). One plugin exposing several providers gets one card each.
+- Providers built into magpie have no plugin to read, so their entry point goes through magpie's own sign-in. When magpie's login page is closed, that sign-in prints the link and Clean Login opens it for you.
+- When a provider offers several paths (per-site sign-in, team edition, reusing a desktop session, pasting a key), you choose, and each path is labelled with its type before it starts.
+- **Report a problem** on a card opens a GitHub issue with the title and body already written; you only click **Create** ([how it works](docs/reporting.md)).
 
 **Exits and identity**
 
-- Choose the proxy in the add-account dialog and the whole sign-in uses it: the browser window, and the plugin's requests to mint the link and exchange the code. A **SOCKS** exit carries the browser window but not the plugin's own requests — the runtime's proxy support speaks HTTP/HTTPS only.
-- The exit picker in that dialog shows each exit's measured latency and puts the ones **this provider has not used yet** first, with the used ones last.
-- Test an exit to see its real IP, region and latency. Optionally fetch the Claude trust score (`ip.net.coffee/claude`, 0–100) through that very proxy and keep it on the row. With a provider selected as the target, the number is the round trip to that provider's API host; if only the TLS handshake completed and no HTTP response arrived, the number is labelled as a handshake time instead of passing for a request latency.
-- Filter the proxy list by region, latency range and name tags; filter accounts by status; search providers by name, id or the words on their cards. A match inside the collapsed section opens that section for you.
-- Signing an account out does not throw its browser identity away — signing back in reuses the same one.
+- The proxy you pick when adding an account is used for the whole sign-in: the browser window, and the requests the plugin makes to mint links and exchange codes. **A SOCKS exit can only carry the browser window**, not the plugin's own requests — the runtime's proxy support is HTTP/HTTPS only.
+- The exit dropdown shows each exit's measured latency and puts the ones this provider has not used first.
+- You can fetch a Claude trust score (`ip.net.coffee/claude`, 0–100) through that proxy and keep it on the row.
+- With a provider selected as the test target, the number is the round trip to its API host. When only the TLS handshake completes and no HTTP response arrives, that number is explicitly marked as handshake time (`~`) rather than passed off as request latency.
+- Signing an account out does not throw away its browser identity; signing in again reuses the same one. When you really do want a different machine, **Renew fingerprint** on the account row signs it in on a new fingerprint, deletes the old profile, and keeps the account and credential.
 
 **Everyday use**
 
-- Each provider card carries the brand mark **magpie** itself ships, recoloured to follow the theme. Nothing is fetched to draw them: the set is copied into `assets/icons/`, with what it was taken from written in `assets/icons/index.json` and the ownership note in `assets/icons/NOTICES.md`.
+- Every provider card carries the brand mark magpie itself publishes, recoloured for the theme. Drawing them needs no network fetch: the set is copied into `assets/icons/`, where it came from is recorded in `assets/icons/index.json`, and the attribution is in `assets/icons/NOTICES.md`.
 - **Four languages**: English, 简体中文, 繁體中文, 日本語, following magpie's language setting.
-- Light and dark follow magpie's theme setting, and switching it while the page is open takes effect immediately.
-- Everything stays on this computer: no account, no telemetry, no request out for a logo. Stored proxy passwords are never shown to the page and never written to a log.
+- Light and dark follow magpie's theme setting, and switching while the page is open is picked up immediately.
+- Everything stays on this computer: no account, no telemetry, and no outbound request just to draw a logo.
+
+<a id="cli"></a>
 
 ## Command line and agents
 
-The page is built for a person with a mouse. A script or an agent can drive the same service without the UI, using the bundled CLI:
+**Not sure where to start? Tell your agent and let it drive.**
+
+This page is built for someone holding a mouse, but the plugin also ships a command line and an agent interface. The agent you already talk to can drive the same service directly:
 
 ```sh
-bun bin/clean-login.mjs agent       # compact digest of the whole service, as JSON
-bun bin/clean-login.mjs providers   # just the provider cards
-bun bin/clean-login.mjs proxies     # just the exits, without credentials
-bun bin/clean-login.mjs accounts    # just the accounts
+bun bin/clean-login.mjs agent       # one compact JSON summary of the whole service
+bun bin/clean-login.mjs providers   # provider cards only
+bun bin/clean-login.mjs proxies     # exits only, no credentials
+bun bin/clean-login.mjs accounts    # accounts only
 ```
 
-The CLI finds the service at `127.0.0.1:3492` (override with `--port` or `--url`), reads the per-process page token from the page it serves, and never prints that token. It has no dependencies beyond the runtime's `fetch`, so it starts in milliseconds and does not load the browser modules.
+The CLI looks for the service on `127.0.0.1:3492` by default (override with `--port` or `--url`), reads the per-process page token from the page the service itself serves, and never prints that token. It has no dependency beyond the runtime's `fetch`, so it starts in milliseconds and never loads the browser modules.
 
 Two things keep a program from having to poll:
 
-- **`GET /api/agent`** returns one compact, self-describing digest: the version, the service port, the command catalog, and the merged provider cards, proxies, accounts and running job states. It does not carry the four-language descriptions, notices or capability reasons the page needs, and never carries a password.
-- **`?wait=<ms>`** on the async status routes (`/api/signin`, `/api/native-signin`, `/api/proxy-score`, `/api/environment/job`, `/api/accounts/:provider/:key/check`) blocks inside the service until the job settles or the bound elapses. One request replaces the browser's poll loop. A state that needs the caller to act — a one-time code, a pasted value — ends the wait immediately instead of holding the connection open.
+- **`GET /api/agent`** returns a compact, self-describing summary: version, service port, command catalogue, and the merged provider cards, proxies, accounts and running-job state. It omits the four-language descriptions the page needs and never includes passwords.
+- **`?wait=<ms>`** on the asynchronous routes (`/api/signin`, `/api/native-signin`, `/api/proxy-score`, `/api/environment/job`, `/api/accounts/:provider/:key/check`) blocks inside the service until the job settles or the deadline runs out. One request replaces a polling loop. States that need the caller to act (a one-time code, a value to paste) end the wait immediately.
 
 ```sh
 bun bin/clean-login.mjs signin start --provider workbuddy --proxy hk-home-1 --wait
@@ -129,31 +223,41 @@ bun bin/clean-login.mjs signin code 123456
 bun bin/clean-login.mjs proxy score hk-home-1 --wait
 ```
 
-Run `bun bin/clean-login.mjs help` for the full command list. A remote service (`magpie web`) has no loopback page to read, so pass `--token` there explicitly; the token is the one embedded in the page the service serves.
+Run `bun bin/clean-login.mjs help` for the full command list. A remote service (`magpie web`) has no loopback page to read, so pass `--token` explicitly there.
+
+<a id="troubleshooting"></a>
 
 ## Troubleshooting
 
 | Symptom | What to do |
 | --- | --- |
-| A provider card has no **Add account** | The card says why. Market offers need their plugin installed in magpie; plugin-only providers need a plugin that exposes a browser sign-in. |
-| The login browser says *not installed* / download failed | The first run fetches a ≈170 MB Windows x64 archive. Check disk space and network, then retry from the Providers tab. The archive is sha256-verified before unpacking. |
-| A sign-in failed with `no_url` or `method_input_required` | The plugin asked for a value (a phone number, a site, a key) that the dialog did not collect. Fill the field and retry; if it keeps failing, use **Report a problem** on the card. |
-| Proxy test fails | The test makes a real connection through that exit and never falls back to a direct one. Check the host, port, credentials and whether the exit allows the target. |
-| A signed-in account looks like a new machine | Check its pinned fingerprint on **Accounts**. Signing back in reuses the same identity; deleting the account data removes it. |
+| A provider card has no **Add account** | The card says why. Market entries need their plugin installed in magpie first; plugin-only providers need a plugin that exposes a browser sign-in method. |
+| The login browser reads *not installed* / the download failed | The first run fetches a ~170 MB Windows x64 archive. Check disk space and network, then retry from the providers page. The archive is sha256-verified before it is unpacked. |
+| Sign-in fails with `no_url` or `method_input_required` | The plugin wants a value (phone number, site, key) that the dialog did not collect. Fill that field and try again; if it keeps failing use **Report a problem** on the card. |
+| A proxy test fails | The test opens a real connection through that exit and never falls back to direct. Check host, port, credentials, and whether that exit is allowed to reach the target. |
+| There is a `~` in front of the latency | That is handshake time, not request latency: the target completed the TLS handshake but returned no HTTP response (a WAF blocking the probe is the usual cause). Try another exit. |
+| A signed-in account looks like a new machine | Check its pinned fingerprint on the **Accounts** page. Signing in again reuses the same identity; only deleting the account data removes it. |
 | You want an account to really be a new machine | Use **Renew fingerprint** on its signed-in row in **Accounts**: it signs the same account in again on a freshly drawn fingerprint and deletes the old browser profile. The account and its credential stay. An ordinary "Sign in again" reuses the old fingerprint. |
-| Something else | Open an [issue](https://github.com/Gruu6y/magpie-clean-login/issues) with what you expected, what happened, and which provider or proxy was involved. A screenshot of the message is worth a lot. Please never paste real tokens or proxy passwords into an issue. |
+| The identity check returns C or D | That exit is not clean. Switch proxies and sign that account in again. |
+| Anything else | Open an [issue](https://github.com/Gruu6y/magpie-clean-login/issues) saying what you expected, what happened, and which provider or proxy was involved. A screenshot of the error helps. **Never paste a real token or proxy password into an issue.** |
 
-## Privacy and where your data lives
+<a id="privacy"></a>
 
-- There is no telemetry and no account. The only network calls are the ones you start: the proxy test, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
-- Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalogue is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`).
-- The login browser is unpacked into `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows (`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
-- Stored proxy passwords never reach the page and are never written to a log. The page token is per-process and lives in the served page.
+## Privacy and where data lives
+
+- No telemetry and no account. The only network calls are the ones you start: proxy tests, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
+- Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalog is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`).
+- The login browser unpacks to `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows (`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
+- Stored proxy passwords never reach the page and are never logged. The page token is per-process and exists only in the page the service serves.
+
+<a id="contributing"></a>
 
 ## Contributing
 
-Pull requests are welcome. The suite is the contract: `bun test` runs everything, and a change without a test is a change nobody can trust later. `node scripts/check-version-bump.mjs` decides whether a change to `lib/`, `ui/`, `page/` or `index.mjs` needs a version bump; docs-only changes do not. Read [AGENTS.md](AGENTS.md) before you start.
+Pull requests are welcome. The test suite is the contract: `bun test` runs all of it, and a change without a test is a change nobody will dare trust later. `node scripts/check-version-bump.mjs` decides whether touching `lib/`, `ui/`, `page/` or `index.mjs` requires a version bump; docs-only changes do not. Read [AGENTS.md](AGENTS.md) before you start.
+
+<a id="license"></a>
 
 ## License
 
-[MIT](LICENSE) © 2026 Gruu6y. [Tag list / version history](https://github.com/Gruu6y/magpie-clean-login/tags) · [Reporting a problem](docs/reporting.md) · [CI](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
+[MIT](LICENSE) © 2026 Gruu6y. [Tags / version history](https://github.com/Gruu6y/magpie-clean-login/tags) · [Reporting a problem](docs/reporting.md) · [CI](https://github.com/Gruu6y/magpie-clean-login/actions/workflows/ci.yml)
