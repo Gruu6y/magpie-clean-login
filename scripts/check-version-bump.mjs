@@ -8,7 +8,21 @@
 // "0.1.63 != 0.1.68" used to pass here while silently downgrading what users
 // are offered. Equal to main is rejected too -- that number is already released.
 //
-//   node scripts/check-version-bump.mjs [--base <git-ref>]
+// Who bumps the version depends on the event, because two branches each
+// guessing the next patch used to collide on package.json and force repeated
+// rebases and version giveaways:
+//
+//   pull_request  A branch does NOT bump. The merger assigns the next version on
+//                 the branch at the merge point (docs/releasing.md), so a
+//                 shipped-code change that leaves the version alone passes
+//                 here. A version the branch *does* declare is still checked
+//                 for a downgrade or a number main already released.
+//   push (main)   The merge commit must carry the version it releases. A merge
+//                 that lost that bump has to fail here, not ship silently.
+//
+// With no event (a local run) the strict main rule applies.
+//
+//   node scripts/check-version-bump.mjs [--base <git-ref>] [--event <event>]
 //
 // The base ref comes from --base, then BASE_REF, then GITHUB_BASE_SHA, then
 // origin/$GITHUB_BASE_REF, then origin/main. If the checkout is shallow and the
@@ -53,7 +67,7 @@ function option(name) {
 }
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("usage: node scripts/check-version-bump.mjs [--base <git-ref>]");
+  console.log("usage: node scripts/check-version-bump.mjs [--base <git-ref>] [--event <event>]");
   process.exit(0);
 }
 
@@ -62,6 +76,12 @@ const baseRef =
   process.env.BASE_REF ||
   process.env.GITHUB_BASE_SHA ||
   (process.env.GITHUB_BASE_REF ? `origin/${process.env.GITHUB_BASE_REF}` : "origin/main");
+
+// The event decides who owns the version number. See the header: a pull request
+// leaves it to the merger, a push to main must already carry it. --event wins,
+// then GITHUB_EVENT_NAME (set by the actions runner); anything else is strict.
+const event = option("--event") || process.env.GITHUB_EVENT_NAME || "";
+const isPullRequest = event === "pull_request";
 
 function resolveCommit(ref) {
   if (!ref || ZERO_SHA.test(ref)) return null;
@@ -232,6 +252,17 @@ if (current !== forkVersion) {
   process.exit(0);
 }
 
+// A pull request is expected to leave the version alone: the merger assigns it
+// when merging. Only a push to main has to already carry it.
+if (isPullRequest) {
+  console.log(
+    `[version-check] OK (pull_request): ${relevant.length} release-relevant file(s) changed; ` +
+      `this branch leaves package.json at ${current}. The merger assigns the released version ` +
+      "at the merge point (docs/releasing.md).",
+  );
+  process.exit(0);
+}
+
 console.error(
   `[version-check] FAIL: release-relevant files changed but package.json version is still ${current} ` +
     `(base ${compare.slice(0, 12)} has ${forkVersion}).`,
@@ -240,5 +271,6 @@ for (const file of relevant) console.error(`  changed: ${file}`);
 console.error("");
 console.error('magpie decides whether a plugin has an update by comparing the package.json "version"');
 console.error("string. Users will not see this update until the version is bumped.");
-console.error("Bump it with `node scripts/release.mjs --patch` (or --minor / an explicit version).");
+console.error("A merge into main must carry the version it releases: the merger assigns that number");
+console.error("on the pull request branch before merging (docs/releasing.md).");
 process.exit(1);

@@ -266,7 +266,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 
 ## Contributing
 
-Pull requests are welcome. The test suite is the contract: `bun test` runs all of it, and a change without a test is a change nobody will dare trust later. `node scripts/check-version-bump.mjs` decides whether touching `lib/`, `ui/`, `page/` or `index.mjs` requires a version bump; docs-only changes do not. Read [AGENTS.md](AGENTS.md) before you start.
+Pull requests are welcome. The test suite is the contract: `bun test` runs all of it, and a change without a test is a change nobody will dare trust later. Touching `lib/`, `ui/`, `page/` or `index.mjs` does **not** require a version bump of your own -- the merger assigns the version at the merge point; `node scripts/check-version-bump.mjs` still refuses a downgrade or a number already released. Read [AGENTS.md](AGENTS.md) and [docs/releasing.md](docs/releasing.md) before you start.
 
 <a id="license"></a>
 

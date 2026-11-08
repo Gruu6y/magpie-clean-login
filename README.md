@@ -266,7 +266,7 @@ bun bin/clean-login.mjs proxy score hk-home-1 --wait
 
 ## 参与贡献
 
-欢迎 pull request。测试套件就是契约：`bun test` 跑全部，一个没有测试的改动就是以后没人敢信的改动。`node scripts/check-version-bump.mjs` 决定改 `lib/`、`ui/`、`page/` 或 `index.mjs` 是否需要升版本；只改文档不需要。动手前先读 [AGENTS.md](AGENTS.md)。
+欢迎 pull request。测试套件就是契约：`bun test` 跑全部，一个没有测试的改动就是以后没人敢信的改动。改 `lib/`、`ui/`、`page/` 或 `index.mjs` **不需要自己升版本号**——版本由合并方在合并点分配；`node scripts/check-version-bump.mjs` 仍会拒绝降级或等于已发布的版本号。动手前先读 [AGENTS.md](AGENTS.md) 与 [docs/releasing.md](docs/releasing.md)。
 
 <a id="license"></a>
 

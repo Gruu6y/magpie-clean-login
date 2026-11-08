@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buttonIds } from "./button-ids.mjs";
 
 const root = join(import.meta.dir, "..");
 // Read the version instead of pinning it here: the suite should not need an
@@ -489,63 +490,9 @@ test("static files exist and carry no mock data or dead action buttons", () => {
   // Four tabs, the one-time browser setup, the proxy dialog, delete
   // confirmation, the add-account dialog, and the accounts page v2 toolbar,
   // filter chips and both account dialogs. Every button is wired in app.js.
-  const buttonIds = [
-    "tab-providers",
-    "tab-proxies",
-    "tab-accounts",
-    "tab-guide",
-    "retry",
-    "add-proxy",
-    "add-proxy-empty",
-    "environment-prepare",
-    "environment-cancel",
-    "environment-retry",
-    "filter-reset",
-    "score-cancel",
-    "proxy-close",
-    "test-proxy",
-    "proxy-cancel",
-    "save-proxy",
-    "confirm-close",
-    "confirm-cancel",
-    "confirm-action",
-    "signin-close",
-    "signin-cancel",
-    "signin-close-footer",
-    "signin-start",
-    "signin-submit-code",
-    "accounts-refresh",
-    "account-filter-all",
-    "account-filter-signed-in",
-    "account-filter-signed-out",
-    "account-detail-close",
-    "account-detail-dismiss",
-    "account-detail-check",
-    "account-detail-note-save",
-    "account-check-close",
-    "account-check-dismiss",
-    "account-check-cancel",
-    "account-check-reexit",
-    "account-check-details",
-    "account-check-change-exit",
-    "account-check-start",
-    "account-check-again",
-    "account-check-retry",
-    "account-hosting-close",
-    "account-hosting-dismiss",
-    "account-hosting-cancel",
-    "account-hosting-run",
-    "account-hosting-toggle",
-    "hosting-alert-open",
-    "hosting-alert-dismiss",
-    "accounts-import",
-    "accounts-import-confirm",
-    "accounts-import-cancel",
-    "report-close",
-    "report-cancel",
-    "report-copy-body",
-    "report-open",
-  ];
+  // The id list itself lives in test/button-ids.mjs: one copy, so two open
+  // pull requests that each add a button no longer collide on a hand-merged
+  // array.
   expect((html.match(/<button\b/g) || []).length).toBe(buttonIds.length);
   for (const id of buttonIds) expect(html).toContain(`id="${id}"`);
   expect(html).not.toMatch(/preview-badge|data-add|account-menu|mock/i);

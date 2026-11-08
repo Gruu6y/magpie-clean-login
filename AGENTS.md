@@ -27,14 +27,15 @@
 
 - 新功能、修 bug 必须带测试；修 bug 的测试要能复现原问题。
 - 测试不写仓库、不写用户目录，运行完自行清理临时目录。
-- 改动 `lib/`、`ui/`、`page/` 或 `index.mjs` 时，必须 bump `package.json` 的 `version`。
-  否则 `scripts/check-version-bump.mjs` 会让 CI 失败。本地可先跑：
-  `bun scripts/check-version-bump.mjs --base origin/main`
+- 改动 `lib/`、`ui/`、`page/` 或 `index.mjs` 时，**不要**自己改 `package.json` 的 `version`：
+  版本号由合并方在合并点统一分配，`pull_request` 事件下 `scripts/check-version-bump.mjs` 不再要求 bump。
+  本地想复核可以跑：`bun scripts/check-version-bump.mjs --base origin/main --event pull_request`。
+  若你确实写了一个版本，门禁仍会拒绝降级、以及等于 `main` 已发布号。
 
 ## 发布纪律
 
 - magpie 判断插件有没有新版本，比的是 `package.json` 的 `version` 字符串；不 bump 版本，用户端就看不到这次更新。
-- 发布 = bump version + 打 tag `vX.Y.Z`，用一条命令完成：
-  `bun scripts/release.mjs --patch`（或 `--minor`、显式 `X.Y.Z`）
-- 默认不 push；确认后加 `--push`。先 `--dry-run` 预览。
+- 版本号只有一处分配：**合并方在合并点**。贡献线的 PR 不改 `version`；合并方在合并前把它设为「当前 `main` 版本 +1」，让合并提交自带新版本号，合并后在 `main` 尖上打 annotated tag `vX.Y.Z`。
+- **一个 PR 只占一格版本、只打一个 tag。** 完整流程与检查清单见 [docs/releasing.md](docs/releasing.md)。
+- `scripts/release.mjs` 仍可用于手工/应急发布（默认不 push，先 `--dry-run` 预览），常规发版不再经过它。
 - 不要自动写 CHANGELOG；发布提交只包含 `package.json` 的版本变更。
