@@ -24,9 +24,10 @@ const dirs = [];
 function fixture(overrides = {}) {
   const worktreePath = mkdtempSync(join(tmpdir(), "cl-merge-release-test-"));
   dirs.push(worktreePath);
-  writeFileSync(join(worktreePath, "package.json"), '{\n  "name": "fixture",\n  "version": "0.1.91"\n}\n');
+  writeFileSync(join(worktreePath, "package.json"), `{\n  "name": "fixture",\n  "version": "${overrides.manifestVersion ?? "0.1.91"}"\n}\n`);
   const calls = { gh: [], git: [], run: [], tags: [], merges: [] };
   let merged = false;
+  let headPolls = 0;
   const checks = overrides.checks ?? [
     { name: "test", status: "completed", conclusion: "success" },
     { name: "version-bump", status: "completed", conclusion: "success" },
@@ -55,6 +56,11 @@ function fixture(overrides = {}) {
       if (key.startsWith("show --numstat")) return overrides.numstat ?? "1\t1\tpackage.json";
       if (key.startsWith("log --oneline")) return "51bcac6 author's CI fix";
       if (key.startsWith("status --porcelain")) return "";
+      // The branch ref is what `git push` updates synchronously; the PR head
+      // ref below can lag behind it.
+      if (key.startsWith("ls-remote origin refs/heads/")) {
+        return `${overrides.branchAfterBump ?? BUMP}\trefs/heads/${info.headRefName}`;
+      }
       return "";
     },
     gitRun: (args) => {
@@ -66,7 +72,9 @@ function fixture(overrides = {}) {
     ghJson: (args) => {
       calls.gh.push(args);
       if (args[0] === "pr" && args[1] === "view" && args.at(-1).includes("headRefOid") && !args.at(-1).includes("state")) {
-        return { headRefOid: overrides.headAfterBump ?? BUMP };
+        headPolls += 1;
+        const lagging = overrides.headLagPolls != null && headPolls <= overrides.headLagPolls;
+        return { headRefOid: lagging ? (overrides.headAfterBump ?? MAIN) : BUMP };
       }
       if (args[0] === "pr" && args[1] === "merge") {
         calls.merges.push(args);
@@ -279,11 +287,53 @@ test("a rejected push stops and reports the author's new commits; it never force
 });
 
 test("someone pushing after the bump is detected before the merge", async () => {
-  const { deps, calls } = fixture({ headAfterBump: "1111111111111111111111111111111111111111" });
+  const { deps, calls } = fixture({ branchAfterBump: "1111111111111111111111111111111111111111" });
   const error = await runMergeRelease({ pr: 64 }, deps).catch((e) => e);
   expect(error).toBeInstanceOf(Stopped);
   expect(error.stage).toBe("wait-for-ci");
+  expect(error.message).toContain("someone pushed while this ran");
   expect(calls.merges.length).toBe(0);
+});
+
+test("a lagging PR head is waited out, not mistaken for someone pushing", async () => {
+  // This is the real failure this guard was written for: the push succeeded,
+  // the branch ref already carried the bump, but `gh pr view` still answered
+  // with the pre-bump head. The old code stopped and called it a foreign push.
+  const { deps, calls } = fixture({ headLagPolls: 2, headAfterBump: MAIN });
+  const result = await runMergeRelease({ pr: 64 }, deps);
+  expect(result.mergeCommit).toBe(MERGED);
+  expect(result.tag).toBe("v0.1.92");
+  expect(calls.merges.length).toBe(1);
+});
+
+test("a PR head that never catches up stops before merging a head without the version", async () => {
+  let clock = 0;
+  const { deps, calls } = fixture({ headLagPolls: Number.MAX_SAFE_INTEGER, headAfterBump: MAIN, now: () => (clock += 2_000) });
+  const error = await runMergeRelease({ pr: 64 }, deps).catch((e) => e);
+  expect(error).toBeInstanceOf(Stopped);
+  expect(error.stage).toBe("wait-for-ci");
+  expect(error.message).toContain("refusing to merge a head without the version");
+  expect(calls.merges.length).toBe(0);
+  expect(calls.tags.length).toBe(0);
+});
+
+test("a rerun reuses a head that already carries the assigned version", async () => {
+  // The previous run pushed 0.1.92 and then stopped while waiting for CI.
+  // Replacing the version line with itself would leave nothing to commit.
+  const { deps, calls, worktreePath } = fixture({ manifestVersion: "0.1.92" });
+  const result = await runMergeRelease({ pr: 64 }, deps);
+  expect(result.version).toBe("0.1.92");
+  expect(result.mergeCommit).toBe(MERGED);
+  expect(calls.git.filter((a) => a[0] === "commit").length).toBe(0);
+  expect(JSON.parse(readFileSync(join(worktreePath, "package.json"), "utf8")).version).toBe("0.1.92");
+  expect(calls.run).toEqual(["install", "test"]);
+  expect(calls.merges.length).toBe(1);
+});
+
+test("the foreign-push decision reads the branch ref, not the lagging PR head", () => {
+  const runner = readFileSync(join(import.meta.dir, "..", "scripts", "merge-release.mjs"), "utf8");
+  expect(runner).toContain('gitText(["ls-remote", "origin", `refs/heads/${info.headRefName}`])');
+  expect(runner).toContain("refusing to merge a head without the version");
 });
 
 test("a merge-point commit that touches more than package.json is refused", async () => {
