@@ -205,14 +205,22 @@ async function mergeReleaseCore(options, deps, stages) {
     step("version");
     const manifestPath = join(worktreePath, "package.json");
     const manifest = readFileSync(manifestPath, "utf8");
-    const bumped = manifest.replace(/^(\s*"version"\s*:\s*")[^"]*(")/m, `$1${version}$2`);
-    if (bumped === manifest) throw new Stopped(stage(), `package.json in the PR head has no version line to replace`);
-    writeFileSync(manifestPath, bumped);
-    must(["add", "package.json"], inWorktree);
-    must(["commit", "-m", `chore(release): assign ${version} at the merge point`], inWorktree);
-    bumpSha = gitText(["rev-parse", "HEAD"], inWorktree);
-    const guard = checkVersionOnlyChange(gitText(["show", "--numstat", "--format=", "HEAD"], inWorktree));
-    if (!guard.ok) throw new Stopped(stage(), `the merge-point commit is not version-only: ${guard.reason}`);
+    if (versionOf(manifest) === version) {
+      // A previous run already pushed this exact version and then stopped (for
+      // example while waiting for CI). Replacing the line with itself leaves
+      // nothing to commit, so reuse the head that is already there. The full
+      // suite below still runs on it, and CI still has to go green.
+      log(`   the PR head already carries ${version}; reusing it`);
+    } else {
+      const bumped = manifest.replace(/^(\s*"version"\s*:\s*")[^"]*(")/m, `$1${version}$2`);
+      if (bumped === manifest) throw new Stopped(stage(), `package.json in the PR head has no version line to replace`);
+      writeFileSync(manifestPath, bumped);
+      must(["add", "package.json"], inWorktree);
+      must(["commit", "-m", `chore(release): assign ${version} at the merge point`], inWorktree);
+      bumpSha = gitText(["rev-parse", "HEAD"], inWorktree);
+      const guard = checkVersionOnlyChange(gitText(["show", "--numstat", "--format=", "HEAD"], inWorktree));
+      if (!guard.ok) throw new Stopped(stage(), `the merge-point commit is not version-only: ${guard.reason}`);
+    }
   } else {
     step("version-skipped");
   }
@@ -240,13 +248,30 @@ async function mergeReleaseCore(options, deps, stages) {
   const deadline = deps.now() + timeoutMs;
   let checks = null;
   for (;;) {
-    const head = ghJson(["pr", "view", String(pr), "--json", "headRefOid"]);
-    if (head.headRefOid !== bumpSha) {
-      throw new Stopped(stage(), `the PR head is now ${short(head.headRefOid)}, not the reviewed head ${short(bumpSha)}; someone pushed while this ran`);
+    // The branch ref is authoritative: `git push` updates it synchronously,
+    // while `gh pr view --json headRefOid` can keep answering with the old head
+    // for a while afterwards. Reading that lagging value here once reported
+    // "someone pushed" for the bump commit this script had just pushed itself.
+    const remote = gitText(["ls-remote", "origin", `refs/heads/${info.headRefName}`]);
+    const branchSha = String(remote ?? "").split(/\s+/)[0] || null;
+    if (branchSha !== bumpSha) {
+      throw new Stopped(stage(), `the branch is now ${short(branchSha)}, not the reviewed head ${short(bumpSha)}; someone pushed while this ran`);
     }
     checks = summarizeChecks(ghJson(["api", `repos/__REPO__/commits/${bumpSha}/check-runs`]));
     if (checks.failed.length > 0) throw new Stopped(stage(), `checks failed: ${checks.failed.join(", ")}`);
-    if (checks.green) break;
+    if (checks.green) {
+      // `gh pr merge --rebase` merges whatever the PR points at, and that ref
+      // lags the branch we just pushed. Merging before it catches up would
+      // silently drop the version commit, so wait for the two to agree.
+      const head = ghJson(["pr", "view", String(pr), "--json", "headRefOid"]);
+      if (head?.headRefOid === bumpSha) break;
+      if (deps.now() >= deadline) {
+        throw new Stopped(stage(), `checks are green but the PR head is still ${short(head?.headRefOid)}, not ${short(bumpSha)}; refusing to merge a head without the version`);
+      }
+      log(`   checks green; waiting for the PR head to reach ${short(bumpSha)}`);
+      await sleep(pollMs);
+      continue;
+    }
     if (deps.now() >= deadline) throw new Stopped(stage(), `timed out waiting for: ${checks.pending.join(", ") || "no checks reported"}`);
     log(`   waiting on ${checks.pending.join(", ") || "no checks reported"}`);
     await sleep(pollMs);
