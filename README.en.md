@@ -143,9 +143,11 @@ On success you get: **Signed in. The credential was written to magpie.**
 
 Switch to **Accounts**. You see the account you just signed in to, its pinned fingerprint, and the exit used last time.
 
+Once you have several accounts, **View by provider** narrows the table to one provider: the main row carries the busiest ones and **More providers** holds the rest, searchable by name or id. It combines with the status filter, the search box and sorting, and **Clear filters** resets all of them at once.
+
 For a second opinion, click **Check** on that row, then **Start check**. The plugin visits the third-party site `who.1ms.dog` through that account's exit and reports an A/B/C/D verdict.
 
-![The Accounts page: the A/B/C/D legend, each account's pinned fingerprint, and the region and exit of its last sign-in](assets/screenshot-accounts.png)
+![The Accounts page: the provider filter, the A/B/C/D legend, each account's pinned fingerprint, and the region and exit of its last sign-in](assets/screenshot-accounts.png)
 
 - **A clean · usable** / **B usable · traces** / **C consider another exit** / **D do not use this exit**
 - A C or D means that exit is not clean enough. Switch proxies and sign that account in again.
@@ -163,9 +165,9 @@ For a second opinion, click **Check** on that row, then **Start check**. The plu
 
 **Accounts** — every account you signed in to, the browser fingerprint pinned to it, and what the third-party site thinks of that identity. See step 4 above.
 
-**Guide** — an in-page manual written for a first-time user: ten sections covering why this plugin exists, preparing the browser, adding a proxy, signing an account in, reading the identity verdict, and handing the whole thing to your own agent when you would rather not click. Written separately in all four languages, not machine-translated from English. Plain text: no network, no downloads, nothing executed.
+**Guide** — an in-page manual written for a first-time user: eleven sections covering why this plugin exists, preparing the browser, adding a proxy, signing an account in, reading the identity verdict, hosted renewal, and handing the whole thing to your own agent when you would rather not click. Written separately in all four languages, not machine-translated from English. Plain text: no network, no downloads, nothing executed.
 
-![The Guide tab: the first of ten in-page sections, explaining why this plugin exists](assets/screenshot-guide.png)
+![The Guide tab: the first of eleven in-page sections, explaining why this plugin exists](assets/screenshot-guide.png)
 
 > **About these screenshots:** all four are rendered by this repository's current code in a real Chrome — nothing hand-drawn, nothing composited, no page element substituted. Four things in them are demo data, because the alternative would put the generating machine's details in a public repository: the **account and proxy records** use documentation-reserved IPs (`203.0.113.x`, `198.51.100.x`, `192.0.2.x`) and invented account names, and the **install path and free-disk figure in the login-browser panel** are neutral values (`C:\Users\Public\…` and a round 256 GB) rather than this machine's OS account name and how full its drive is. The badge state, the download size and the required space are computed by the shipped code. The provider cards, logos and interface text are real. The generator is [`scripts/shoot-readme-screenshots.mjs`](scripts/shoot-readme-screenshots.mjs); run `bun scripts/shoot-readme-screenshots.mjs` to reproduce all four.
 
