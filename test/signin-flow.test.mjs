@@ -97,6 +97,7 @@ async function harness(overrides = {}) {
     callbackTimeoutMs: overrides.callbackTimeoutMs,
     writeFlowMarker: overrides.writeFlowMarker,
     clearFlowMarker: overrides.clearFlowMarker,
+    syncAccountProxy: overrides.syncAccountProxy,
   });
   return { dir, env, entries, client, clientCalls, browser, state, controller };
 }
@@ -844,5 +845,26 @@ test("a silent sign-in refuses a non-browser category with not_hostable", async 
   const { controller } = await harness({ methods });
   await expect(controller.startSignIn({ provider: "workbuddy", silent: true })).rejects.toMatchObject({
     code: "not_hostable",
+  });
+});
+
+test("a finished sign-in forwards the credential-free registration report in proxySync", async () => {
+  const { controller } = await harness({
+    syncAccountProxy: async () => ({
+      ok: true,
+      reason: "synced",
+      changed: ["me"],
+      registration: { ok: true, state: "never_offered", action: "added" },
+    }),
+  });
+  await controller.startSignIn({ provider: "workbuddy" });
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.state).toBe("done");
+  expect(flow.proxySync).toEqual({
+    ok: true,
+    reason: "synced",
+    changed: 1,
+    registration: { ok: true, state: "never_offered", action: "added", reason: null },
   });
 });
