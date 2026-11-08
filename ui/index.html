@@ -253,6 +253,33 @@
           </div>
         </div>
         <div class="proxy-filters account-filters" id="account-filters">
+          <div class="filter-group account-provider-group" id="account-provider-group" role="group"
+            aria-labelledby="account-provider-filter-label" hidden>
+            <div class="provider-filter-head">
+              <span class="filter-label" id="account-provider-filter-label">View by provider</span>
+              <span class="provider-filter-hint" id="account-provider-filter-hint"></span>
+            </div>
+            <div class="account-provider-row">
+              <div class="filter-chips account-provider-chips" id="account-provider-chips" role="group"
+                aria-labelledby="account-provider-filter-label"></div>
+              <div class="provider-more-wrap" id="account-provider-more-wrap">
+                <button class="provider-more-toggle" id="account-provider-more-toggle" type="button"
+                  aria-expanded="false" aria-controls="account-provider-panel" hidden>
+                  <span id="account-provider-more-label">More providers</span>
+                  <span class="filter-chip-count" id="account-provider-more-count">0</span>
+                </button>
+                <div class="provider-more-panel" id="account-provider-panel" hidden>
+                  <label class="provider-search-label" for="account-provider-search"
+                    id="account-provider-search-label">Search providers</label>
+                  <input id="account-provider-search" class="provider-search-input" type="search"
+                    autocomplete="off" spellcheck="false" placeholder="Search providers" aria-label="Search providers">
+                  <div class="provider-more-list" id="account-provider-options" role="group"
+                    aria-labelledby="account-provider-search-label"></div>
+                  <p class="provider-more-empty" id="account-provider-empty" hidden>No matching providers.</p>
+                </div>
+              </div>
+            </div>
+          </div>
           <div class="filter-group" role="group" aria-labelledby="account-filter-label">
             <span class="filter-label" id="account-filter-label">Status</span>
             <div class="filter-chips" id="account-filter-chips">
@@ -265,6 +292,8 @@
             </div>
           </div>
           <div class="filter-actions">
+            <span class="active-filter-summary" id="account-active-filters"></span>
+            <button class="clear-filters" id="account-filter-reset" type="button" hidden></button>
             <span class="filter-count" id="account-filter-count"></span>
           </div>
         </div>
