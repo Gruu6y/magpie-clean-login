@@ -29,12 +29,19 @@ function commit(cwd, message) {
   }
 }
 
-function runGate(cwd) {
-  return spawnSync(process.execPath, [join(cwd, "scripts", "check-version-bump.mjs"), "--base", "main"], {
-    cwd,
-    encoding: "utf8",
-    windowsHide: true,
-  });
+function runGate(cwd, ...extra) {
+  return spawnSync(
+    process.execPath,
+    [join(cwd, "scripts", "check-version-bump.mjs"), "--base", "main", ...extra],
+    {
+      cwd,
+      encoding: "utf8",
+      windowsHide: true,
+      // The actions runner injects this. Clearing it keeps the strict "no event"
+      // tests below meaning the same thing on a CI machine as on a laptop.
+      env: { ...process.env, GITHUB_EVENT_NAME: "" },
+    },
+  );
 }
 
 const manifest = (version) => `${JSON.stringify({ name: "fixture", version }, null, 2)}\n`;
@@ -185,6 +192,67 @@ test("a shipped-code change with an unchanged version still fails as before", ()
   });
 });
 
+// Two branches each guessing the next patch is what collided four times. The
+// fix is that only the merger ever assigns it, so a pull request is allowed to
+// ship shipped-code changes and leave package.json exactly as it found it.
+test("a pull request may leave the released version to the merger", () => {
+  withFixture((dir) => {
+    git(dir, ["checkout", "-q", "-b", "topic"]);
+    writeFileSync(join(dir, "lib", "existing.mjs"), "export const a = 3;\n");
+    git(dir, ["add", "-A"]);
+    commit(dir, "change lib without a bump");
+
+    const pullRequest = runGate(dir, "--event", "pull_request");
+    expect(pullRequest.status).toBe(0);
+    expect(pullRequest.stdout).toContain("OK (pull_request)");
+    expect(pullRequest.stdout).toContain("0.1.62");
+
+    // The same branch, seen as the merge landing on main, still fails: the
+    // merge commit has to carry the version it releases.
+    const mainPush = runGate(dir, "--event", "push");
+    expect(mainPush.status).toBe(1);
+    expect(mainPush.stderr).toContain("version is still 0.1.62");
+  });
+});
+
+// Relaxing the bump requirement must not also relax the ordering checks: a
+// branch that does name a version still cannot name a downgrade.
+test("a pull request that declares its own version is still checked", () => {
+  withFixture((dir) => {
+    git(dir, ["checkout", "-q", "-b", "topic"]);
+    writeFileSync(join(dir, "package.json"), manifest("0.1.61"));
+    writeFileSync(join(dir, "lib", "existing.mjs"), "export const a = 3;\n");
+    git(dir, ["add", "-A"]);
+    commit(dir, "declare a version below main");
+    const result = runGate(dir, "--event", "pull_request");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("went backwards");
+  });
+});
+
+// CI relies on the event reaching the script through the environment, not
+// through an argument the workflow would have to remember to pass.
+test("the gate reads the event from GITHUB_EVENT_NAME when --event is absent", () => {
+  withFixture((dir) => {
+    git(dir, ["checkout", "-q", "-b", "topic"]);
+    writeFileSync(join(dir, "lib", "existing.mjs"), "export const a = 3;\n");
+    git(dir, ["add", "-A"]);
+    commit(dir, "change lib without a bump");
+    const result = spawnSync(
+      process.execPath,
+      [join(dir, "scripts", "check-version-bump.mjs"), "--base", "main"],
+      {
+        cwd: dir,
+        encoding: "utf8",
+        windowsHide: true,
+        env: { ...process.env, GITHUB_EVENT_NAME: "pull_request" },
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("OK (pull_request)");
+  });
+});
+
 test("the gate script actually wires the ordering check into its decision", () => {
   expect(gateSource).toContain('import { compareVersions } from "./version-order.mjs";');
   expect(gateSource).toContain("const mainVersion = versionAt(baseCommit) || forkVersion;");
@@ -194,4 +262,9 @@ test("the gate script actually wires the ordering check into its decision", () =
   expect(gateSource).toContain("if (order === 0) {");
   expect(gateSource).toContain("already released");
   expect(gateSource).toContain("went backwards");
+  // The event split is what lets a pull request skip the bump while a main push
+  // still has to carry one.
+  expect(gateSource).toContain('const event = option("--event") || process.env.GITHUB_EVENT_NAME || "";');
+  expect(gateSource).toContain('const isPullRequest = event === "pull_request";');
+  expect(gateSource).toContain("OK (pull_request)");
 });

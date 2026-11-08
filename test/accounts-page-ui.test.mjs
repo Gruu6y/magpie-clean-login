@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { buttonIds } from "./button-ids.mjs";
 
 const root = join(import.meta.dir, "..");
 const html = readFileSync(join(root, "ui", "index.html"), "utf8");
@@ -12,25 +13,9 @@ const css = readFileSync(join(root, "ui", "style.css"), "utf8");
 const view = readFileSync(join(root, "ui", "account-view.js"), "utf8");
 const state = readFileSync(join(root, "ui", "account-state.js"), "utf8");
 
-const buttonIds = [
-  "tab-providers", "tab-proxies", "tab-accounts", "tab-guide", "retry", "add-proxy",
-  "add-proxy-empty", "environment-prepare", "environment-cancel",
-  "environment-retry", "filter-reset", "score-cancel", "proxy-close",
-  "test-proxy", "proxy-cancel", "save-proxy", "confirm-close", "confirm-cancel",
-  "confirm-action", "signin-close", "signin-cancel", "signin-close-footer",
-  "signin-start", "signin-submit-code", "accounts-refresh",
-  "accounts-import", "accounts-import-confirm", "accounts-import-cancel",
-  "account-filter-all", "account-filter-signed-in", "account-filter-signed-out",
-  "account-detail-close", "account-detail-dismiss", "account-detail-check",
-  "account-detail-note-save", "account-check-close", "account-check-dismiss",
-  "account-check-cancel", "account-check-reexit", "account-check-details",
-  "account-check-change-exit", "account-check-start", "account-check-again",
-  "account-check-retry",
-  "account-hosting-close", "account-hosting-dismiss", "account-hosting-cancel",
-  "account-hosting-run", "account-hosting-toggle",
-  "hosting-alert-open", "hosting-alert-dismiss",
-  "report-close", "report-cancel", "report-copy-body", "report-open",
-];
+// Every <button> id in ui/index.html. The list lives in test/button-ids.mjs so
+// this suite and test/server.test.mjs cannot drift into two copies only one of
+// which a pull request updated.
 
 test("the accounts tab and panel ship every control", () => {
   for (const id of [
