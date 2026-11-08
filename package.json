@@ -1,6 +1,6 @@
 {
   "name": "@gruu6y/page-clean-login",
-  "version": "0.1.92",
+  "version": "0.1.93",
   "description": "在 magpie 中管理代理 IP 与供应商登录，每个账号通过独立浏览器身份登录；一个带仅回环主机服务的页面插件。",
   "license": "MIT",
   "type": "module",
