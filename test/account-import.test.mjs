@@ -35,7 +35,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOKEN_HEADER, startServer } from "../lib/server.mjs";
-import { accountDir, writeAccountMeta } from "../lib/account-identity.mjs";
+import { accountDir, ensureIdentity, writeAccountMeta } from "../lib/account-identity.mjs";
 import { providerOf } from "../lib/account-keys.mjs";
 import { planImport, importAccounts } from "../lib/account-import.mjs";
 
@@ -188,6 +188,17 @@ async function startService(env) {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   return { service, api };
+}
+
+// The HTTP write path draws a real pin, which needs the camoufox model a test
+// environment does not install. Pre-drawing the pin with the stub leaves the
+// route's own `ensureIdentity` a no-op, so these tests exercise the route's
+// behaviour -- selection, ledger, response -- without depending on that model.
+async function preDrawPins(env, targets) {
+  const { identity } = stubDeps();
+  for (const [provider, key] of targets) {
+    await ensureIdentity(accountDir(env, provider, key), { generate: async () => identity });
+  }
 }
 
 function assertNoSecrets(text) {
@@ -448,12 +459,17 @@ test("selecting only a built-in key imports exactly that account", async () => {
 
 test("the POST route narrows to a built-in key instead of dropping it", async () => {
   const { env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  await preDrawPins(env, [["antigravity", NATIVE_KEY]]);
   const { api } = await startService(env);
   const res = await api("POST", "/api/accounts/import", { keys: [NATIVE_KEY] });
   expect(res.status).toBe(200);
   const report = await res.json();
   expect(report.items.map((item) => item.key)).toEqual([NATIVE_KEY]);
   expect(report.counts.new).toBe(1);
+  // Narrowing must not import the neighbours: the other Antigravity account
+  // and the plugin accounts stay untouched.
+  expect(existsSync(join(accountDir(env, "antigravity", NATIVE_KEY_2), "account.json"))).toBe(false);
+  expect(existsSync(join(accountDir(env, "quill", "quill"), "account.json"))).toBe(false);
 });
 
 test("an absent logins.json is stated as missing, and the plugin import still works", async () => {
@@ -506,7 +522,10 @@ test("no built-in credential reaches the plan, the response or any written file"
     expect(content).not.toContain("access_token");
     expect(content).not.toContain("refresh_token");
   }
+  // A second import through the route: everything already has a pin and a
+  // ledger, so this asserts the response body without needing the model.
   const post = await api("POST", "/api/accounts/import", {});
+  expect(post.status).toBe(200);
   assertNoSecrets(await post.text());
 });
 
