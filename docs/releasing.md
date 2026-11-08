@@ -54,6 +54,41 @@
   各自内联一份、顺序还不一样，谁加按钮谁撞尾部。现在统一在
   `test/button-ids.mjs`，两处 import 同一个清单。
 
+## 机械段由脚本代跑
+
+`scripts/merge-release.mjs <PR号>` 把上面清单里**纯机械**的步骤串成一条命令：
+索取 PR 状态 → 校验它基于最新 `main` → 独立 worktree 检出 → `bun install` →
+把 `version` 设为 `main +1` 并提交 → 在最终 head 上跑一次全量 `bun test` →
+推分支 → 等 PR CI 双绿 → rebase 合并 → 在新 `main` 尖打 annotated tag 并推送 →
+等 `main` push CI → 同步本地 `main`。
+
+```
+node scripts/merge-release.mjs 64 --dry-run    # 只打印计划，零副作用
+node scripts/merge-release.mjs 64              # 真跑
+node scripts/merge-release.mjs 64 --version 0.2.0 --no-tag
+```
+
+`GH` 与 `BUN` 环境变量指向可执行文件（Windows 上两者常不在 PATH）；`CL_REPO`
+可覆盖仓库 slug。`--keep-worktree` 留着复核现场，`--timeout <秒>` 控制等 CI 的上限。
+
+**只改文档、测试或工具的 PR 不会凭空多一个版本**：脚本读 PR 的变更文件，若没有
+`lib/`、`ui/`、`page/`、`index.mjs`（与 `check-version-bump.mjs` 同一套判定），就跳过
+bump、分支推送和 tag，只做复核跑测、等 CI、合并。文件列表读不到时**按需要发版处理**，
+宁可多占一格也不漏发。`--release` / `--no-release` 可显式覆盖这个判断。
+
+脚本只代跑机械段，**不代替复核**：读 diff、按风险分级决定是否要额外破坏性验证、
+以及判断这次改动是否属于该发版的范畴，仍然是合并方的责任。护栏都在
+`test/merge-release.test.mjs` 里，且有真实红过的用例：
+
+* 分支落后于 `main`、PR 不是 OPEN/MERGEABLE、有人在你推版本之后又推了提交 → 停；
+* 推送被拒（non fast-forward）→ **打印对方的新提交并停，绝不 `--force`**；
+* 全量测试或 `bun install` 失败 → 停在推分支之前；
+* 合并点提交不只改了 `package.json` 一行 → 停；
+* PR CI 不全绿或超时 → 不合并；
+* tag 已存在于远端 → 停在打 tag 之前；
+* 任何 git 失败都带它发生在哪个阶段，不静默吞掉。
+* 判定「这个 PR 要不要发版」的模式与门禁共用一套字面量，有测试盯着两边不漂移。
+
 ## 合并方检查清单
 
 - [ ] PR 的 CI 双绿（`test` + `version-bump`）

@@ -37,5 +37,6 @@
 - magpie 判断插件有没有新版本，比的是 `package.json` 的 `version` 字符串；不 bump 版本，用户端就看不到这次更新。
 - 版本号只有一处分配：**合并方在合并点**。贡献线的 PR 不改 `version`；合并方在合并前把它设为「当前 `main` 版本 +1」，让合并提交自带新版本号，合并后在 `main` 尖上打 annotated tag `vX.Y.Z`。
 - **一个 PR 只占一格版本、只打一个 tag。** 完整流程与检查清单见 [docs/releasing.md](docs/releasing.md)。
+- 合并方的机械步骤可用 `node scripts/merge-release.mjs <PR号> --dry-run` 预览、去掉 `--dry-run` 执行；它不代替读 diff 与风险分级。
 - `scripts/release.mjs` 仍可用于手工/应急发布（默认不 push，先 `--dry-run` 预览），常规发版不再经过它。
 - 不要自动写 CHANGELOG；发布提交只包含 `package.json` 的版本变更。
