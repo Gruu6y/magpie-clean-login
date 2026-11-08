@@ -3,6 +3,7 @@
 // dependencies allows comprehensive headless testing.
 
 import { accountLabel } from "./account-state.js";
+import { ALL_PROVIDERS, UNKNOWN_PROVIDER } from "./account-provider-filter.js";
 
 export function accountView(account) {
   const value = account && typeof account === "object" ? account : {};
@@ -167,7 +168,7 @@ export function formatCheckSummary(check, labels = {}) {
   return lines;
 }
 
-export function filterAccounts(accounts, { query = "", filter = "all" } = {}) {
+export function filterAccounts(accounts, { query = "", filter = "all", provider = ALL_PROVIDERS } = {}) {
   const list = Array.isArray(accounts) ? accounts : [];
   const normalizedQuery = typeof query === "string" ? query.trim().toLowerCase() : "";
 
@@ -175,6 +176,14 @@ export function filterAccounts(accounts, { query = "", filter = "all" } = {}) {
     const view = accountView(account);
     if (filter === "signedIn" && !view.signedIn) return false;
     if (filter === "signedOut" && view.signedIn) return false;
+    if (provider !== ALL_PROVIDERS) {
+      const accountProvider = typeof view.provider === "string" ? view.provider.trim() : "";
+      if (provider === UNKNOWN_PROVIDER) {
+        if (accountProvider) return false;
+      } else if (accountProvider !== provider) {
+        return false;
+      }
+    }
 
     if (!normalizedQuery) return true;
 

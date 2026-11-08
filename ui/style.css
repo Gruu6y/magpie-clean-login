@@ -859,6 +859,124 @@ main { flex: 1; }
 .filter-count { color: var(--muted); font: 500 10.5px/1.4 var(--mono); letter-spacing: 0.05em; white-space: nowrap; }
 .proxy-filter-empty { margin: 0; padding: 24px 16px; color: var(--muted); font-size: 12.5px; text-align: center; }
 
+/* --- account provider navigation --------------------------------------- */
+
+.account-provider-group { flex: 1 1 360px; min-width: 0; }
+.provider-filter-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; }
+.provider-filter-hint { color: var(--faint); font-size: 11px; line-height: 1.4; }
+.account-provider-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-width: 0; }
+.account-provider-chips { flex: 1 1 auto; }
+.account-provider-chips .provider-chip { max-width: min(220px, 70vw); overflow: hidden; }
+.provider-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A provider promoted out of the collapsed catalog is marked with a dashed
+   edge so its origin is obvious, and it keeps the ink outline the active chip
+   already carries once selected. */
+.provider-chip.is-selected-extra { border-style: double; border-width: 3px; }
+.provider-chip.is-selected-extra.is-active { border-style: solid; border-width: 1px; }
+.provider-chip .filter-chip-count { flex: none; }
+.provider-more-wrap { position: relative; flex: 0 1 auto; min-width: 0; }
+.provider-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 27px;
+  padding: 4px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+.provider-more-toggle[hidden] { display: none; }
+.provider-more-toggle:hover,
+.provider-more-toggle[aria-expanded="true"] {
+  border-color: var(--ink);
+  border-style: solid;
+  color: var(--ink);
+}
+.provider-more-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  /* Anchored to the toggle's LEFT edge, not its right: the toggle sits at the
+     start of a fresh row, so growing rightwards stays on screen, while
+     right:0 would push a 340px panel off the left edge of the viewport. */
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-3);
+  box-shadow: 0 12px 32px var(--shadow);
+}
+.provider-more-panel[hidden] { display: none; }
+.provider-search-label { color: var(--muted); font: 600 9px/1.4 var(--mono); letter-spacing: 0.15em; text-transform: uppercase; }
+.provider-search-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper-3);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.provider-search-input:focus { outline: none; border-color: var(--ink); background: var(--paper); }
+.provider-more-list { display: flex; flex-direction: column; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
+.provider-more-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+}
+.provider-more-option:first-child { border-top: 0; }
+.provider-more-option:hover { background: var(--paper-3); color: var(--ink); }
+.provider-more-option.is-active { color: var(--ink); font-weight: 650; }
+.provider-more-option-label { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.provider-more-option-id { display: block; color: var(--faint); font: 500 10px/1.5 var(--mono); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provider-more-option-main { display: block; min-width: 0; }
+.provider-more-option .filter-chip-count { flex: none; }
+.provider-more-empty { margin: 2px 0 0; padding: 8px 0; color: var(--muted); font-size: 12px; }
+.provider-more-empty[hidden] { display: none; }
+.active-filter-summary {
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: right;
+}
+.active-filter-summary:empty { display: none; }
+.active-filter-summary strong { color: var(--ink-2); font-weight: 650; }
+.clear-filters {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--red);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.clear-filters[hidden] { display: none; }
+.clear-filters:hover { background: var(--red); color: var(--paper); }
+
 /* --- score bar ---------------------------------------------------------- */
 
 .proxy-score-bar {
@@ -1610,6 +1728,20 @@ main { flex: 1; }
   .search-field { width: 100%; min-width: 0; }
   .proxy-filters { align-items: stretch; }
   .filter-actions { margin-left: 0; width: 100%; justify-content: space-between; }
+  /* The provider row owns a full line on a phone: four chips plus the catalog
+     toggle cannot share a row with the status chips at 320px without wrapping
+     into an unreadable stack. */
+  .account-provider-group { flex: 1 1 100%; }
+  .account-provider-chips { flex: 1 1 100%; }
+  .account-provider-chips .provider-chip { max-width: 100%; }
+  .provider-more-wrap { flex: 1 1 100%; }
+  .provider-more-toggle { width: 100%; justify-content: center; }
+  /* Anchored to the wrap, which is now full width, so the panel can never hang
+     off the right edge of a narrow viewport. */
+  .provider-more-panel { left: 0; right: 0; width: auto; }
+  .provider-more-list { max-height: 220px; }
+  .active-filter-summary { max-width: none; text-align: left; }
+  .filter-actions { flex-wrap: wrap; gap: 8px; }
   .empty { min-height: 220px; padding: 28px 18px; }
   .form-row { grid-template-columns: 1fr; }
   .dialog-head { padding: 18px 17px 0; }

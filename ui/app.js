@@ -62,6 +62,15 @@ import {
   sortAccounts,
 } from "./account-view.js";
 import {
+  ALL_PROVIDERS,
+  UNKNOWN_PROVIDER,
+  accountProviderOptions,
+  activeAccountFilterLabels,
+  filterAccountProviderOptions,
+  normalizeSelectedAccountProvider,
+  partitionAccountProviders,
+} from "./account-provider-filter.js";
+import {
   environmentPercent,
   environmentPhase,
   formatBytes,
@@ -363,6 +372,17 @@ const messages = {
     accountSearchPlaceholder: "Search accounts",
     accountSortLabel: "Sort",
     accountSortLastLogin: "Recent login",
+    accountProviderFilterLabel: "View by provider",
+    accountProviderFilterHint: "Pick a provider to see only its accounts.",
+    accountProviderAll: "All providers",
+    accountProviderMore: "More providers",
+    accountProviderSearchLabel: "Search providers",
+    accountProviderSearchPlaceholder: "Search provider name or id...",
+    accountProviderNoMatches: "No providers match \"{query}\"",
+    accountProviderUnknown: "Unknown provider",
+    accountFilterSummaryLabel: "Filters:",
+    accountFilterSearchTag: "Search \"{query}\"",
+    accountFilterReset: "Clear filters",
     accountSortName: "Account name",
     accountSortProvider: "Provider",
     accountSortGrade: "Check grade",
@@ -821,6 +841,17 @@ const messages = {
     accountSearchPlaceholder: "搜索账号",
     accountSortLabel: "排序",
     accountSortLastLogin: "最近登录",
+    accountProviderFilterLabel: "按供应商查看",
+    accountProviderFilterHint: "选一个供应商，只看它的账号。",
+    accountProviderAll: "全部供应商",
+    accountProviderMore: "更多供应商",
+    accountProviderSearchLabel: "搜索供应商",
+    accountProviderSearchPlaceholder: "搜索供应商名称或标识...",
+    accountProviderNoMatches: "未找到与 \"{query}\" 匹配的供应商",
+    accountProviderUnknown: "未知供应商",
+    accountFilterSummaryLabel: "当前筛选：",
+    accountFilterSearchTag: "搜索「{query}」",
+    accountFilterReset: "清除筛选",
     accountSortName: "账号名",
     accountSortProvider: "供应商",
     accountSortGrade: "检测评级",
@@ -1279,6 +1310,17 @@ const messages = {
     accountSearchPlaceholder: "搜尋帳號",
     accountSortLabel: "排序",
     accountSortLastLogin: "最近登入",
+    accountProviderFilterLabel: "按供應商檢視",
+    accountProviderFilterHint: "選一個供應商，只看它的帳號。",
+    accountProviderAll: "全部供應商",
+    accountProviderMore: "更多供應商",
+    accountProviderSearchLabel: "搜尋供應商",
+    accountProviderSearchPlaceholder: "搜尋供應商名稱或識別碼...",
+    accountProviderNoMatches: "未找到與 \"{query}\" 匹配的供應商",
+    accountProviderUnknown: "未知供應商",
+    accountFilterSummaryLabel: "目前篩選：",
+    accountFilterSearchTag: "搜尋「{query}」",
+    accountFilterReset: "清除篩選",
     accountSortName: "帳號名稱",
     accountSortProvider: "供應商",
     accountSortGrade: "檢測評級",
@@ -1737,6 +1779,17 @@ const messages = {
     accountSearchPlaceholder: "アカウントを検索",
     accountSortLabel: "並び替え",
     accountSortLastLogin: "最近のログイン",
+    accountProviderFilterLabel: "プロバイダーで絞り込む",
+    accountProviderFilterHint: "プロバイダーを選ぶと、そのアカウントだけを表示します。",
+    accountProviderAll: "すべてのプロバイダー",
+    accountProviderMore: "その他のプロバイダー",
+    accountProviderSearchLabel: "プロバイダーを検索",
+    accountProviderSearchPlaceholder: "プロバイダー名または ID を検索...",
+    accountProviderNoMatches: "「{query}」に一致するプロバイダーは見つかりませんでした",
+    accountProviderUnknown: "不明なプロバイダー",
+    accountFilterSummaryLabel: "適用中の絞り込み：",
+    accountFilterSearchTag: "検索「{query}」",
+    accountFilterReset: "絞り込みを解除",
     accountSortName: "アカウント名",
     accountSortProvider: "プロバイダー",
     accountSortGrade: "判定ランク",
@@ -2001,6 +2054,15 @@ let providerQuery = "";
 let accountQuery = "";
 let accountFilter = "all";
 let accountSort = "lastLogin";
+// The provider the accounts table is narrowed to. Kept here for the same reason
+// as providerQuery: a data refresh must re-render the same selection instead of
+// silently widening the list back to every account.
+let accountProvider = ALL_PROVIDERS;
+// What the collapsed provider catalog is being narrowed to. It is transient:
+// choosing a provider closes the panel and clears this, so reopening it always
+// starts from the full list.
+let accountProviderQuery = "";
+let accountProviderPanelOpen = false;
 let accountsNotice = "";
 let importPlan = null;
 let importBusy = false;
@@ -2233,6 +2295,14 @@ function applyText() {
   byId("account-sort-provider").textContent = text.accountSortProvider;
   byId("account-sort-grade").textContent = text.accountSortGrade;
   byId("account-filter-label").textContent = text.accountFilterLabel;
+  byId("account-filter-reset").textContent = text.accountFilterReset;
+  byId("account-provider-filter-label").textContent = text.accountProviderFilterLabel;
+  byId("account-provider-filter-hint").textContent = text.accountProviderFilterHint;
+  byId("account-provider-more-label").textContent = text.accountProviderMore;
+  byId("account-provider-search-label").textContent = text.accountProviderSearchLabel;
+  byId("account-provider-search").placeholder = text.accountProviderSearchPlaceholder;
+  byId("account-provider-search").setAttribute("aria-label", text.accountProviderSearchLabel);
+  byId("account-provider-more-toggle").setAttribute("aria-label", text.accountProviderMore);
   byId("account-filter-all-label").textContent = text.accountFilterAll;
   byId("account-filter-signed-in-label").textContent = text.accountFilterSignedIn;
   byId("account-filter-signed-out-label").textContent = text.accountFilterSignedOut;
@@ -5201,6 +5271,17 @@ function accountDisplay(account) {
   return accountView({ ...account, providerLabel: entry?.name || view.providerLabel || view.provider });
 }
 
+// Filtering and sorting need the provider's display name, which the raw
+// identity does not carry. This spreads the original record and only adds the
+// label, so searching for "Qoder CN" matches and "sort by provider" orders by
+// that name, while every field the row and its action handlers read is left
+// exactly as the service returned it.
+function accountForList(account) {
+  const view = accountView(account);
+  const entry = accountProviderEntry(view.provider);
+  return { ...account, providerLabel: entry?.name || view.providerLabel || view.provider };
+}
+
 // The account row shows the name, the provider and the key. It used to add an
 // "unverified flow" tag for accounts that came from a provider whose sign-in
 // was still marked pending. That tag is gone: nothing a user does can ever
@@ -5368,6 +5449,169 @@ function renderHostingAlert() {
   banner.hidden = false;
 }
 
+// --- accounts page: provider picker ---------------------------------------
+//
+// The chips are built from the identities the service already returned, so this
+// is navigation over data the page has, not a second endpoint. Counts describe
+// the whole account set on purpose: a chip must not move or vanish under the
+// pointer while the user types in the search box or switches status.
+
+function accountProviderChip(option, active, extra) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "filter-chip provider-chip";
+  button.dataset.provider = option.provider;
+  button.classList.toggle("is-active", active);
+  // A provider picked out of the collapsed catalog joins the main row so the
+  // current filter is always visible without reopening the list.
+  button.classList.toggle("is-selected-extra", Boolean(extra));
+  button.setAttribute("aria-pressed", String(active));
+  const label = document.createElement("span");
+  label.className = "provider-chip-label";
+  label.textContent = option.label;
+  const count = document.createElement("span");
+  count.className = "filter-chip-count";
+  count.textContent = String(option.count);
+  button.append(label, count);
+  button.addEventListener("click", () => setAccountProvider(option.provider));
+  return button;
+}
+
+function renderAccountProviderOptions(options) {
+  const list = byId("account-provider-options");
+  // The collapsed region is exhaustive: it lists every provider, including the
+  // ones already promoted into the main row, so nothing is only reachable by
+  // remembering which chip used to be where.
+  const all = { provider: ALL_PROVIDERS, label: text.accountProviderAll, count: accountIdentities.length };
+  const shown = filterAccountProviderOptions([all, ...options], accountProviderQuery);
+  list.textContent = "";
+  for (const option of shown) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "provider-more-option";
+    button.dataset.provider = option.provider;
+    const active = accountProvider === option.provider;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    const main = document.createElement("span");
+    main.className = "provider-more-option-main";
+    const label = document.createElement("span");
+    label.className = "provider-more-option-label";
+    label.textContent = option.label;
+    main.append(label);
+    // The raw id is shown under the name so two providers with a similar
+    // display name stay tellable apart, and searching by id has a visible
+    // match. "All providers" has no id, and an unknown bucket's id is a
+    // synthetic marker that would only confuse.
+    if (option.provider !== ALL_PROVIDERS && option.provider !== UNKNOWN_PROVIDER) {
+      const id = document.createElement("span");
+      id.className = "provider-more-option-id";
+      id.textContent = option.provider;
+      main.append(id);
+    }
+    const count = document.createElement("span");
+    count.className = "filter-chip-count";
+    count.textContent = String(option.count);
+    button.append(main, count);
+    button.addEventListener("click", () => setAccountProvider(option.provider));
+    list.append(button);
+  }
+  const empty = byId("account-provider-empty");
+  empty.hidden = shown.length > 0;
+  empty.textContent = text.accountProviderNoMatches.replace("{query}", accountProviderQuery.trim());
+}
+
+function renderAccountProviderFilter() {
+  const options = accountProviderOptions(accountIdentities, providerCatalog, {
+    unknownLabel: text.accountProviderUnknown,
+  });
+  // A provider can disappear when identities are re-read or one is deleted.
+  // Falling back to "all" keeps the table honest instead of showing an empty
+  // list under a chip that no longer exists.
+  accountProvider = normalizeSelectedAccountProvider(accountProvider, options);
+  const group = byId("account-provider-group");
+  group.hidden = options.length === 0;
+  if (options.length === 0) {
+    setAccountProviderPanel(false);
+    return;
+  }
+  const { primary, overflow, promoted } = partitionAccountProviders(options, accountProvider);
+  const row = byId("account-provider-chips");
+  row.textContent = "";
+  row.append(accountProviderChip(
+    { provider: ALL_PROVIDERS, label: text.accountProviderAll, count: accountIdentities.length },
+    accountProvider === ALL_PROVIDERS,
+  ));
+  for (const option of primary) {
+    row.append(accountProviderChip(option, accountProvider === option.provider, promoted?.provider === option.provider));
+  }
+  const toggle = byId("account-provider-more-toggle");
+  toggle.hidden = overflow.length === 0;
+  byId("account-provider-more-count").textContent = String(overflow.length);
+  if (overflow.length === 0) setAccountProviderPanel(false);
+  renderAccountProviderOptions(options);
+}
+
+function setAccountProviderPanel(open) {
+  accountProviderPanelOpen = Boolean(open) && !byId("account-provider-more-toggle").hidden;
+  byId("account-provider-panel").hidden = !accountProviderPanelOpen;
+  byId("account-provider-more-toggle").setAttribute("aria-expanded", String(accountProviderPanelOpen));
+  if (accountProviderPanelOpen) byId("account-provider-search").focus();
+}
+
+function setAccountProvider(value) {
+  accountProvider = value;
+  accountProviderQuery = "";
+  byId("account-provider-search").value = "";
+  setAccountProviderPanel(false);
+  renderAccounts();
+}
+
+// One summary line for every narrowing that is in force, so a short table is
+// never a mystery: the provider, the status and the search term are all named,
+// and one control clears all three at once.
+function renderAccountFilterSummary() {
+  const options = accountProviderOptions(accountIdentities, providerCatalog, {
+    unknownLabel: text.accountProviderUnknown,
+  });
+  const selected = options.find((item) => item.provider === accountProvider);
+  const active = activeAccountFilterLabels({
+    provider: accountProvider,
+    status: accountFilter,
+    query: accountQuery,
+    unknownLabel: text.accountProviderUnknown,
+    providerLabel: selected?.label,
+    allLabel: text.accountSearchLabel,
+    statusLabels: {
+      signedIn: text.accountFilterSignedIn,
+      signedOut: text.accountFilterSignedOut,
+    },
+  });
+  const summary = byId("account-active-filters");
+  summary.textContent = "";
+  if (active.length) {
+    const label = document.createElement("span");
+    label.textContent = text.accountFilterSummaryLabel;
+    const value = document.createElement("strong");
+    value.textContent = active.join(" · ");
+    summary.append(label, value);
+  }
+  byId("account-filter-reset").hidden = active.length === 0;
+}
+
+function resetAccountFilters() {
+  accountProvider = ALL_PROVIDERS;
+  accountFilter = "all";
+  accountQuery = "";
+  accountSort = "lastLogin";
+  accountProviderQuery = "";
+  byId("account-search").value = "";
+  byId("account-sort").value = "lastLogin";
+  byId("account-provider-search").value = "";
+  setAccountProviderPanel(false);
+  renderAccounts();
+}
+
 function renderAccounts() {
   const list = byId("accounts-list");
   const table = byId("account-table");
@@ -5390,10 +5634,22 @@ function renderAccounts() {
     chip.classList.toggle("is-active", active);
     chip.setAttribute("aria-pressed", String(active));
   }
+  // The picker normalizes the selection first: a provider that disappeared on
+  // re-read falls back to "all" before the table is filtered, so the rows and
+  // the highlighted chip can never disagree.
+  renderAccountProviderFilter();
+  // Filter and sort run on the same display projection the rows show, so a
+  // search for the provider's human name matches and "sort by provider" orders
+  // by that name rather than by the raw id.
   const visible = sortAccounts(
-    filterAccounts(accountIdentities, { query: accountQuery, filter: accountFilter }),
+    filterAccounts(accountIdentities.map(accountForList), {
+      query: accountQuery,
+      filter: accountFilter,
+      provider: accountProvider,
+    }),
     accountSort,
   );
+  renderAccountFilterSummary();
   byId("account-filter-count").textContent = text.accountFilterCount
     .replace("{shown}", String(visible.length))
     .replace("{total}", String(total));
@@ -6473,6 +6729,33 @@ byId("account-sort").addEventListener("change", () => {
 byId("account-filter-all").addEventListener("click", () => setAccountFilter("all"));
 byId("account-filter-signed-in").addEventListener("click", () => setAccountFilter("signedIn"));
 byId("account-filter-signed-out").addEventListener("click", () => setAccountFilter("signedOut"));
+byId("account-provider-more-toggle").addEventListener("click", () => {
+  setAccountProviderPanel(!accountProviderPanelOpen);
+});
+// The catalog search narrows only the collapsed list. It never touches the
+// account query, so the two searches cannot silently overwrite each other.
+for (const event of ["input", "search"]) {
+  byId("account-provider-search").addEventListener(event, (nativeEvent) => {
+    accountProviderQuery = nativeEvent.target.value;
+    renderAccountProviderOptions(accountProviderOptions(accountIdentities, providerCatalog, {
+      unknownLabel: text.accountProviderUnknown,
+    }));
+  });
+}
+byId("account-filter-reset").addEventListener("click", resetAccountFilters);
+// The catalog is a popover, not a <details>: the page is hosted in a sandboxed
+// frame and the markup contract allows exactly one <details>. Both dismissals
+// below mirror what a native disclosure would do.
+document.addEventListener("click", (nativeEvent) => {
+  if (!accountProviderPanelOpen) return;
+  if (byId("account-provider-more-wrap").contains(nativeEvent.target)) return;
+  setAccountProviderPanel(false);
+});
+document.addEventListener("keydown", (nativeEvent) => {
+  if (nativeEvent.key !== "Escape" || !accountProviderPanelOpen) return;
+  setAccountProviderPanel(false);
+  byId("account-provider-more-toggle").focus();
+});
 byId("account-detail-close").addEventListener("click", closeAccountDetail);
 byId("account-detail-dismiss").addEventListener("click", closeAccountDetail);
 byId("account-detail-check").addEventListener("click", openCheckFromDetail);
