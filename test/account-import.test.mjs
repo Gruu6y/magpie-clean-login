@@ -39,9 +39,48 @@ import { accountDir, writeAccountMeta } from "../lib/account-identity.mjs";
 import { providerOf } from "../lib/account-keys.mjs";
 import { planImport, importAccounts } from "../lib/account-import.mjs";
 
-// The three strings the fixture buries in credential fields. No response and
-// no file written by the import may ever contain any of them.
-const SECRETS = ["ACCESS-SECRET", "REFRESH-SECRET", "KEY-SECRET"];
+// The strings the fixture buries in credential fields -- three in
+// plugin-auth.json and two in logins.json. No response and no file written by
+// the import may ever contain any of them.
+const SECRETS = [
+  "ACCESS-SECRET",
+  "REFRESH-SECRET",
+  "KEY-SECRET",
+  "NATIVE-ACCESS-SECRET",
+  "NATIVE-REFRESH-SECRET",
+];
+
+// magpie's second store. The built-in agents live ONLY here: reading
+// plugin-auth.json alone is what made an Antigravity account invisible to the
+// import. Shaped like the real ledger, credentials included, so the
+// containment assertions below are tested against something that could leak.
+// Built independently of the module under test: the expected key is magpie's
+// agent plus its own record id.
+const NATIVE_KEY = ["antigravity", "d13e957af937ea32"].join("#");
+const NATIVE_KEY_2 = ["antigravity", "4f7b6ee36df76116"].join("#");
+const LOGINS_FIXTURE = [
+  {
+    id: "d13e957af937ea32",
+    agent: "antigravity",
+    user: "first@example.com",
+    plan: "Google AI Pro",
+    auth: { access_token: SECRETS[3], refresh_token: SECRETS[4], expiry_date: 1794000000000 },
+  },
+  {
+    id: "4f7b6ee36df76116",
+    agent: "antigravity",
+    user: "second@example.com",
+    auth: { access_token: SECRETS[3], refresh_token: SECRETS[4] },
+  },
+  // Mirrors a plugin-auth key; it must not be imported a second time under a
+  // derived key.
+  {
+    id: "ffffffffffffffff",
+    agent: "plugin:quill",
+    user: "q@example.com",
+    auth: { access_token: SECRETS[3] },
+  },
+];
 
 const AUTH_FIXTURE = {
   quill: {
@@ -105,7 +144,7 @@ const services = [];
 // fixture plugin-auth.json and an on-disk data directory holding the account
 // layout. `ledger: true` pre-writes the workbuddy ledger so that entry counts
 // as existing; `auth: null` leaves plugin-auth.json absent.
-async function realEnv({ auth = AUTH_FIXTURE, ledger = true } = {}) {
+async function realEnv({ auth = AUTH_FIXTURE, ledger = true, logins } = {}) {
   const root = await mkdtemp(join(tmpdir(), "clean-login-account-import-"));
   tempDirs.push(root);
   const configDir = join(root, "magpie-config");
@@ -113,6 +152,7 @@ async function realEnv({ auth = AUTH_FIXTURE, ledger = true } = {}) {
   await mkdir(configDir, { recursive: true });
   await mkdir(dataDir, { recursive: true });
   if (auth) await writeFile(join(configDir, "plugin-auth.json"), JSON.stringify(auth));
+  if (logins !== undefined) await writeFile(join(configDir, "logins.json"), logins);
   const env = { MAGPIE_CONFIG_DIR: configDir, MAGPIE_CLEAN_LOGIN_DATA: dataDir };
   if (ledger) await writeAccountMeta(accountDir(env, "workbuddy", "workbuddy"), WORKBUDDY_LEDGER);
   return { root, configDir, dataDir, env };
@@ -340,4 +380,160 @@ test("both import routes answer 409 when plugin-auth.json is missing or unreadab
   const brokenPost = await api("POST", "/api/accounts/import", { keys: ["quill"] });
   expect(brokenPost.status).toBe(409);
   expect(codeOf(await brokenPost.json())).toMatch(/^auth_(missing|unreadable|invalid)$/);
+});
+// --- 8. magpie's second store: the built-in accounts ----------------------
+//
+// The bug this section pins: an Antigravity account signed in through magpie
+// itself lives only in logins.json, so an import that read plugin-auth.json
+// alone reported it as nonexistent -- and the same blind spot made the account
+// table call it signed out and the sweep treat its directory as an orphan.
+
+test("the plan offers a built-in account that exists only in logins.json", async () => {
+  const { env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { api } = await startService(env);
+  const res = await api("GET", "/api/accounts/import/plan");
+  expect(res.status).toBe(200);
+  const plan = await res.json();
+
+  const native = plan.items.filter((item) => item.provider === "antigravity");
+  expect(native.map((item) => item.key)).toEqual([NATIVE_KEY, NATIVE_KEY_2]);
+  for (const item of native) {
+    expect(item.state).toBe("new");
+    // magpie holds the login, so magpie's own command line can re-login it.
+    expect(item.relogin).toBe("native");
+    expect(item.accountId).toBeNull();
+    expect(item.uid).toBeNull();
+  }
+  expect(native[0].email).toBe("first@example.com");
+  // The plugin mirror must not appear a second time under a derived key.
+  expect(plan.items.filter((item) => item.key === "quill")).toHaveLength(1);
+  expect(plan.items.some((item) => item.key.startsWith("quill#ffffffff"))).toBe(false);
+  expect(plan.counts).toEqual({ new: 5, existing: 1, skipped: 1 });
+  expect(plan.sources).toEqual({ auth: "ok", logins: "ok" });
+});
+
+test("importing a built-in account writes its pin and ledger, and a second import writes nothing", async () => {
+  const { dataDir, env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { deps } = stubDeps();
+  const first = await importAccounts(env, deps);
+  expect(first.items.find((item) => item.key === NATIVE_KEY).state).toBe("new");
+
+  const dir = accountDir(env, "antigravity", NATIVE_KEY);
+  const ledger = JSON.parse(readFileSync(join(dir, "account.json"), "utf8"));
+  expect(ledger.key).toBe(NATIVE_KEY);
+  expect(ledger.provider).toBe("antigravity");
+  // An import is still not a sign-in, whichever store the account came from.
+  expect(ledger.signedInAt).toBeNull();
+  expect(existsSync(join(dir, "identity.json"))).toBe(true);
+
+  // The key is derived from magpie's record id, so the second run must land on
+  // the same directory rather than drawing a fresh slot and duplicating it.
+  const before = snapshotTree(join(dataDir, "accounts"));
+  const second = await importAccounts(env, deps);
+  expect(second.counts.new).toBe(0);
+  expect(second.items.find((item) => item.key === NATIVE_KEY).state).toBe("existing");
+  expect(snapshotTree(join(dataDir, "accounts"))).toEqual(before);
+});
+
+test("selecting only a built-in key imports exactly that account", async () => {
+  const { env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { deps } = stubDeps();
+  const report = await importAccounts(env, { ...deps, keys: [NATIVE_KEY] });
+  expect(report.items.map((item) => item.key)).toEqual([NATIVE_KEY]);
+  expect(report.counts).toEqual({ new: 1, existing: 0, skipped: 0 });
+  expect(existsSync(accountDir(env, "antigravity", NATIVE_KEY))).toBe(true);
+  expect(existsSync(accountDir(env, "antigravity", NATIVE_KEY_2))).toBe(false);
+  expect(existsSync(accountDir(env, "quill", "quill"))).toBe(false);
+});
+
+test("the POST route narrows to a built-in key instead of dropping it", async () => {
+  const { env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { api } = await startService(env);
+  const res = await api("POST", "/api/accounts/import", { keys: [NATIVE_KEY] });
+  expect(res.status).toBe(200);
+  const report = await res.json();
+  expect(report.items.map((item) => item.key)).toEqual([NATIVE_KEY]);
+  expect(report.counts.new).toBe(1);
+});
+
+test("an absent logins.json is stated as missing, and the plugin import still works", async () => {
+  const { env } = await realEnv();
+  const { api } = await startService(env);
+  const res = await api("GET", "/api/accounts/import/plan");
+  expect(res.status).toBe(200);
+  const plan = await res.json();
+  expect(plan.sources).toEqual({ auth: "ok", logins: "missing" });
+  expect(plan.counts).toEqual({ new: 3, existing: 1, skipped: 1 });
+});
+
+test("both routes answer 409 when logins.json is unreadable or malformed, never an empty plan", async () => {
+  const { configDir, env } = await realEnv({ logins: "{ not json", ledger: false });
+  const { api } = await startService(env);
+  const codeOf = (body) => body.code ?? body.error;
+
+  const preview = await api("GET", "/api/accounts/import/plan");
+  expect(preview.status).toBe(409);
+  expect(codeOf(await preview.json())).toBe("logins_invalid");
+  const post = await api("POST", "/api/accounts/import", {});
+  expect(post.status).toBe(409);
+  expect(codeOf(await post.json())).toBe("logins_invalid");
+
+  // A directory where the file should be is a read failure, not "missing":
+  // treating it as missing is exactly how a live account disappears.
+  await rm(join(configDir, "logins.json"));
+  await mkdir(join(configDir, "logins.json"));
+  const unreadable = await api("GET", "/api/accounts/import/plan");
+  expect(unreadable.status).toBe(409);
+  expect(codeOf(await unreadable.json())).toBe("logins_unreadable");
+  const unreadablePost = await api("POST", "/api/accounts/import", { keys: [NATIVE_KEY] });
+  expect(unreadablePost.status).toBe(409);
+  expect(codeOf(await unreadablePost.json())).toBe("logins_unreadable");
+});
+
+test("no built-in credential reaches the plan, the response or any written file", async () => {
+  const { dataDir, env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { api } = await startService(env);
+  const preview = await api("GET", "/api/accounts/import/plan");
+  assertNoSecrets(await preview.text());
+
+  const { deps } = stubDeps();
+  const report = await importAccounts(env, deps);
+  assertNoSecrets(JSON.stringify(report));
+  const written = snapshotTree(join(dataDir, "accounts"));
+  expect(written.length).toBeGreaterThan(0);
+  for (const [, content] of written) {
+    assertNoSecrets(content);
+    expect(content).not.toContain("access_token");
+    expect(content).not.toContain("refresh_token");
+  }
+  const post = await api("POST", "/api/accounts/import", {});
+  assertNoSecrets(await post.text());
+});
+
+// --- 9. the same blind spot in the liveness reads -------------------------
+
+test("a built-in account reads as signed in, survives the sweep and cannot be deleted", async () => {
+  const { env } = await realEnv({ logins: JSON.stringify(LOGINS_FIXTURE) });
+  const { deps } = stubDeps();
+  await importAccounts(env, deps);
+  const { api } = await startService(env);
+
+  const listed = await (await api("GET", "/api/accounts")).json();
+  const rows = Array.isArray(listed) ? listed : listed.accounts;
+  const row = rows.find((account) => account.key === NATIVE_KEY);
+  expect(row).toBeTruthy();
+  // plugin-auth.json has no antigravity key at all; only logins.json proves
+  // this account is still signed in.
+  expect(row.signedIn).toBe(true);
+
+  const swept = await (await api("POST", "/api/accounts/prune", {})).json();
+  const report = swept.report ?? swept;
+  expect(report.removed.some((entry) => entry.key === NATIVE_KEY)).toBe(false);
+  expect(report.retired.some((entry) => entry.key === NATIVE_KEY)).toBe(false);
+
+  const path = `/api/accounts/antigravity/${encodeURIComponent(NATIVE_KEY)}`;
+  const removed = await api("DELETE", path);
+  expect(removed.status).toBe(409);
+  expect((await removed.json()).code ?? "signed_in").toBe("signed_in");
+  expect(existsSync(accountDir(env, "antigravity", NATIVE_KEY))).toBe(true);
 });
