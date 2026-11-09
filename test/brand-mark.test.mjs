@@ -22,8 +22,8 @@ describe("the editorial nameplate mark", () => {
     expect(html).toContain('id="brand-mark-cl"');
     expect(html).toContain('id="brand-mark-rule"');
     expect((html.match(/class="brand-icon"/g) || []).length).toBe(1);
-    // All three empty states keep their mark.
-    expect((html.match(/class="empty-mark"/g) || []).length).toBe(3);
+    // Every empty state keeps its mark (providers, proxies, accounts, assets).
+    expect((html.match(/class="empty-mark"/g) || []).length).toBe(4);
   });
 
   test("ink and vermilion come from the theme tokens, not baked-in hexes", () => {

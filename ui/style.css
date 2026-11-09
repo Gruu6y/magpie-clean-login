@@ -1661,6 +1661,74 @@ main { flex: 1; }
   }
 }
 
+/* --- assets page ------------------------------------------------------- */
+/* The assets table is a five-column sibling of the proxy/account tables: the
+   shared `.tbl` container owns `display: grid`, so only its own tracks and
+   cells are added here. Reuses the same tokens and card fallback below. */
+.asset-total {
+  margin: 6px 0 0;
+  color: var(--faint);
+  font: 500 11px/1.5 var(--mono);
+  letter-spacing: 0.06em;
+}
+.assets-table {
+  grid-template-columns:
+    minmax(120px, 0.9fr)
+    minmax(170px, 1.4fr)
+    minmax(150px, 1.2fr)
+    minmax(120px, 0.9fr)
+    150px;
+  column-gap: 12px;
+}
+.asset-type-cell { min-width: 0; color: var(--ink); font-size: 12.5px; }
+.asset-account-cell {
+  min-width: 0;
+  color: var(--ink);
+  font: 12px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+.asset-note-cell {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.asset-note-cell.is-empty { color: var(--faint); }
+.asset-created-cell { min-width: 0; color: var(--muted); font-size: 12.5px; }
+.assets-table .asset-actions { justify-content: flex-start; }
+
+@media (max-width: 940px) {
+  .asset-table .proxy-table-head { display: none; }
+  .asset-table .asset-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px 2px;
+  }
+  .asset-table .asset-row > div {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+  }
+  .asset-table .asset-row > div[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--faint);
+    font: 600 9px/1.7 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    flex: 0 0 82px;
+  }
+  .asset-table .asset-row > .asset-cell-actions {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    justify-content: flex-start;
+  }
+}
+
 /* The manual. Same editorial furniture as the rest of the page: a hairline
    above each section, a mono number in the margin, and a measure wide enough
    to read but short enough to track back to the start of the next line. No new

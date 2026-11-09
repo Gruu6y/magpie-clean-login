@@ -36,6 +36,10 @@
       <span class="rail-label" id="rail-accounts-label">Accounts</span>
       <span class="dot"></span>
     </div>
+    <div class="rail-item" id="rail-assets" data-rail="assets">
+      <span class="rail-label" id="rail-assets-label">Assets</span>
+      <span class="dot"></span>
+    </div>
     <div class="rail-item" id="rail-guide" data-rail="guide">
       <span class="rail-label" id="rail-guide-label">Guide</span>
       <span class="dot"></span>
@@ -65,6 +69,11 @@
         aria-selected="false" aria-controls="panel-accounts">
         <span id="tab-accounts-label">Accounts</span>
         <span class="tab-count" id="account-count">0</span>
+      </button>
+      <button class="tab" id="tab-assets" type="button" role="tab"
+        aria-selected="false" aria-controls="panel-assets">
+        <span id="tab-assets-label">Assets</span>
+        <span class="tab-count" id="asset-count">0</span>
       </button>
       <button class="tab" id="tab-guide" type="button" role="tab"
         aria-selected="false" aria-controls="panel-guide">
@@ -323,6 +332,56 @@
         </div>
       </section>
 
+      <section class="panel" id="panel-assets" role="tabpanel" aria-labelledby="tab-assets" hidden>
+        <div class="section-head">
+          <div>
+            <h2 id="assets-title">Assets</h2>
+            <p id="assets-copy">Mailboxes, phone numbers and IDs registered on this machine.</p>
+            <p class="asset-total" id="asset-total"></p>
+          </div>
+          <div class="section-actions">
+            <button class="button primary" id="asset-add" type="button">
+              <span aria-hidden="true">+</span>
+              <span id="asset-add-label">Register asset</span>
+            </button>
+          </div>
+        </div>
+        <div class="account-toolbar" id="asset-toolbar">
+          <div class="field account-toolbar-search">
+            <label for="asset-search" id="asset-search-label">Search assets</label>
+            <input id="asset-search" type="search" autocomplete="off" spellcheck="false"
+              placeholder="Account or note" aria-label="Search assets">
+          </div>
+          <div class="field account-toolbar-sort">
+            <label for="asset-filter" id="asset-filter-label">Type</label>
+            <select id="asset-filter">
+              <option value="all" id="asset-filter-all">All types</option>
+              <option value="google-mail" id="asset-type-google-mail">Google Mail</option>
+              <option value="microsoft-mail" id="asset-type-microsoft-mail">Microsoft Mail</option>
+              <option value="cn-phone" id="asset-type-cn-phone">CN phone number</option>
+              <option value="apple-id" id="asset-type-apple-id">Apple ID</option>
+            </select>
+          </div>
+        </div>
+        <p class="setup-note accounts-notice" id="asset-notice" role="status" hidden></p>
+        <div class="proxy-table assets-table tbl" id="asset-table" hidden>
+          <div class="proxy-table-head" aria-hidden="true">
+            <span id="asset-col-type">Type</span>
+            <span id="asset-col-account">Account</span>
+            <span id="asset-col-note">Note</span>
+            <span id="asset-col-created">Registered</span>
+            <span id="asset-col-actions">Actions</span>
+          </div>
+          <div class="tbl-body" id="assets-list"></div>
+        </div>
+        <div class="empty" id="assets-empty" hidden>
+          <svg class="empty-mark" viewBox="0 0 128 128" aria-hidden="true"><use class="brand-mark-cl" href="#brand-mark-cl"></use><use class="brand-mark-rule" href="#brand-mark-rule"></use></svg>
+          <strong id="assets-empty-title">No assets yet</strong>
+          <p id="assets-empty-copy">Register a mailbox, phone number or ID to keep it here.</p>
+          <button class="button primary" id="asset-add-empty" type="button">Register asset</button>
+        </div>
+      </section>
+
       <!-- The manual. Static prose for a first-time user, rendered from
            guide-content.js with textContent only: no markup, no remote
            resource, no control of its own. It reads the same four languages
@@ -331,7 +390,7 @@
         <div class="section-head">
           <div>
             <h2 id="guide-title">Guide</h2>
-            <p id="guide-copy">A first-time walkthrough of the three tabs.</p>
+            <p id="guide-copy">A first-time walkthrough of the five tabs.</p>
           </div>
         </div>
         <div class="guide" id="guide-body"></div>
@@ -643,6 +702,62 @@
       <button class="button" id="report-cancel" type="button">Cancel</button>
       <button class="button" id="report-copy-body" type="button">Copy text</button>
       <button class="button primary" id="report-open" type="button">Open on GitHub</button>
+    </div>
+  </dialog>
+
+  <dialog id="asset-dialog" class="dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="asset-dialog-title">Register asset</h3>
+        <p id="asset-dialog-copy">Pick a type, then give the account. Notes are optional.</p>
+      </div>
+      <button class="dialog-close" id="asset-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="asset-type" id="asset-type-label">Type</label>
+          <select id="asset-type">
+            <option value="google-mail" id="asset-type-option-google-mail">Google Mail</option>
+            <option value="microsoft-mail" id="asset-type-option-microsoft-mail">Microsoft Mail</option>
+            <option value="cn-phone" id="asset-type-option-cn-phone">CN phone number</option>
+            <option value="apple-id" id="asset-type-option-apple-id">Apple ID</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="asset-account" id="asset-account-label">Account</label>
+          <input id="asset-account" name="account" type="text" autocomplete="off"
+            spellcheck="false" maxlength="320" placeholder="name@mail.com or 13800138000">
+        </div>
+        <div class="field">
+          <label for="asset-note" id="asset-note-label">Note</label>
+          <textarea id="asset-note" name="note" rows="3" maxlength="200"
+            autocomplete="off" spellcheck="false"></textarea>
+          <p class="field-hint" id="asset-note-hint">Up to 200 characters.</p>
+        </div>
+      </div>
+      <p class="form-error" id="asset-error" role="alert" hidden></p>
+    </div>
+    <div class="dialog-footer">
+      <button class="button" id="asset-cancel" type="button">Cancel</button>
+      <button class="button primary" id="asset-save" type="button">Save</button>
+    </div>
+  </dialog>
+
+  <dialog id="asset-delete-dialog" class="dialog confirm-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="asset-delete-title">Delete asset?</h3>
+        <p id="asset-delete-copy"></p>
+      </div>
+      <button class="dialog-close" id="asset-delete-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="dialog-body">
+      <p class="form-error" id="asset-delete-error" role="alert" hidden></p>
+    </div>
+    <div class="dialog-footer">
+      <button class="button" id="asset-delete-cancel" type="button">Cancel</button>
+      <button class="button danger" id="asset-delete-confirm" type="button">Delete</button>
     </div>
   </dialog>
 

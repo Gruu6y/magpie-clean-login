@@ -63,6 +63,13 @@ import {
   sortAccounts,
 } from "./account-view.js";
 import {
+  ASSET_TYPES,
+  filterAssets,
+  formatAssetTime,
+  normalizeAssetAccount,
+  validateAssetForm,
+} from "./asset-view.js";
+import {
   ALL_PROVIDERS,
   UNKNOWN_PROVIDER,
   accountProviderOptions,
@@ -568,6 +575,51 @@ const messages = {
     toastCheckDone: "Check finished · grade {grade}.",
     toastCheckCancelled: "The check was cancelled.",
     toastRefreshed: "Accounts refreshed.",
+    assets: "Assets",
+    assetsTitle: "Assets",
+    assetsCopy: "Mailboxes, phone numbers and IDs registered on this machine.",
+    assetTotal: "{count} registered",
+    assetAdd: "Register asset",
+    assetSearchLabel: "Search assets",
+    assetSearchPlaceholder: "Account or note",
+    assetFilterLabel: "Type",
+    assetFilterAll: "All types",
+    assetTypeGoogleMail: "Google Mail",
+    assetTypeMicrosoftMail: "Microsoft Mail",
+    assetTypeCnPhone: "CN phone number",
+    assetTypeAppleId: "Apple ID",
+    assetColType: "Type",
+    assetColAccount: "Account",
+    assetColNote: "Note",
+    assetColCreated: "Registered",
+    assetColActions: "Actions",
+    assetEmpty: "No assets yet",
+    assetEmptyCopy: "Register a mailbox, phone number or ID to keep it here.",
+    assetNoMatch: "No asset matches this search.",
+    assetEdit: "Edit",
+    assetDelete: "Delete",
+    assetDialogTitle: "Register asset",
+    assetDialogEditTitle: "Edit asset",
+    assetDialogCopy: "Pick a type, then give the account. Notes are optional.",
+    assetTypeLabel: "Type",
+    assetAccountLabel: "Account",
+    assetAccountPlaceholder: "name@mail.com or 13800138000",
+    assetNoteLabel: "Note",
+    assetNoteHint: "Up to 200 characters.",
+    assetSave: "Save",
+    assetSaving: "Saving…",
+    assetCancel: "Cancel",
+    assetDeleteTitle: "Delete asset?",
+    assetDeleteCopy: "Delete {account}? This cannot be undone.",
+    assetDeleteConfirm: "Delete",
+    errorInvalidAssetType: "Choose a valid asset type.",
+    errorInvalidAssetAccount: "This account does not match the chosen type.",
+    errorInvalidAssetNote: "The note must be 200 characters or fewer.",
+    errorInvalidAssetBody: "The request was incomplete.",
+    errorAssetNotFound: "This asset no longer exists. Refresh the list.",
+    toastAssetSaved: "Asset saved.",
+    toastAssetDeleted: "Asset deleted.",
+    assetLoadFailed: "Could not load assets.",
   },
   "zh-Hans": {
     title: "干净登录",
@@ -1048,6 +1100,51 @@ const messages = {
     toastCheckDone: "检测完成 · 评级 {grade}。",
     toastCheckCancelled: "检测已取消。",
     toastRefreshed: "账号列表已刷新。",
+    assets: "资产",
+    assetsTitle: "资产",
+    assetsCopy: "登记在这台机器上的邮箱、手机号与账号。",
+    assetTotal: "已登记 {count} 项",
+    assetAdd: "登记资产",
+    assetSearchLabel: "搜索资产",
+    assetSearchPlaceholder: "账号或备注",
+    assetFilterLabel: "类型",
+    assetFilterAll: "全部类型",
+    assetTypeGoogleMail: "谷歌邮件服务",
+    assetTypeMicrosoftMail: "微软邮件服务",
+    assetTypeCnPhone: "境内手机号",
+    assetTypeAppleId: "苹果账号",
+    assetColType: "类型",
+    assetColAccount: "账号",
+    assetColNote: "备注",
+    assetColCreated: "登记时间",
+    assetColActions: "操作",
+    assetEmpty: "还没有资产",
+    assetEmptyCopy: "登记邮箱、手机号或账号，就会显示在这里。",
+    assetNoMatch: "没有符合条件的资产。",
+    assetEdit: "编辑",
+    assetDelete: "删除",
+    assetDialogTitle: "登记资产",
+    assetDialogEditTitle: "编辑资产",
+    assetDialogCopy: "先选类型，再填写账号。备注可选。",
+    assetTypeLabel: "类型",
+    assetAccountLabel: "账号",
+    assetAccountPlaceholder: "name@mail.com 或 13800138000",
+    assetNoteLabel: "备注",
+    assetNoteHint: "最多 200 个字符。",
+    assetSave: "保存",
+    assetSaving: "保存中…",
+    assetCancel: "取消",
+    assetDeleteTitle: "删除资产？",
+    assetDeleteCopy: "确定删除 {account}？此操作无法撤销。",
+    assetDeleteConfirm: "删除",
+    errorInvalidAssetType: "请选择有效的资产类型。",
+    errorInvalidAssetAccount: "该账号与所选类型不匹配。",
+    errorInvalidAssetNote: "备注不能超过 200 个字符。",
+    errorInvalidAssetBody: "请求内容不完整。",
+    errorAssetNotFound: "该资产已不存在，请刷新列表。",
+    toastAssetSaved: "已保存资产。",
+    toastAssetDeleted: "已删除资产。",
+    assetLoadFailed: "无法加载资产列表。",
   },
   "zh-Hant": {
     title: "乾淨登入",
@@ -1528,6 +1625,51 @@ const messages = {
     toastCheckDone: "檢測完成 · 評級 {grade}。",
     toastCheckCancelled: "檢測已取消。",
     toastRefreshed: "帳號清單已重新整理。",
+    assets: "資產",
+    assetsTitle: "資產",
+    assetsCopy: "登記在這台機器上的郵箱、手機號與帳號。",
+    assetTotal: "已登記 {count} 項",
+    assetAdd: "登記資產",
+    assetSearchLabel: "搜尋資產",
+    assetSearchPlaceholder: "帳號或備註",
+    assetFilterLabel: "類型",
+    assetFilterAll: "全部類型",
+    assetTypeGoogleMail: "谷歌郵件服務",
+    assetTypeMicrosoftMail: "微軟郵件服務",
+    assetTypeCnPhone: "境內手機號",
+    assetTypeAppleId: "蘋果帳號",
+    assetColType: "類型",
+    assetColAccount: "帳號",
+    assetColNote: "備註",
+    assetColCreated: "登記時間",
+    assetColActions: "操作",
+    assetEmpty: "還沒有資產",
+    assetEmptyCopy: "登記郵箱、手機號或帳號，就會顯示在這裡。",
+    assetNoMatch: "沒有符合條件的資產。",
+    assetEdit: "編輯",
+    assetDelete: "刪除",
+    assetDialogTitle: "登記資產",
+    assetDialogEditTitle: "編輯資產",
+    assetDialogCopy: "先選類型，再填寫帳號。備註可選。",
+    assetTypeLabel: "類型",
+    assetAccountLabel: "帳號",
+    assetAccountPlaceholder: "name@mail.com 或 13800138000",
+    assetNoteLabel: "備註",
+    assetNoteHint: "最多 200 個字元。",
+    assetSave: "儲存",
+    assetSaving: "儲存中…",
+    assetCancel: "取消",
+    assetDeleteTitle: "刪除資產？",
+    assetDeleteCopy: "確定刪除 {account}？此操作無法復原。",
+    assetDeleteConfirm: "刪除",
+    errorInvalidAssetType: "請選擇有效的資產類型。",
+    errorInvalidAssetAccount: "該帳號與所選類型不符。",
+    errorInvalidAssetNote: "備註不能超過 200 個字元。",
+    errorInvalidAssetBody: "請求內容不完整。",
+    errorAssetNotFound: "該資產已不存在，請重新整理列表。",
+    toastAssetSaved: "已儲存資產。",
+    toastAssetDeleted: "已刪除資產。",
+    assetLoadFailed: "無法載入資產列表。",
   },
   ja: {
     title: "クリーンログイン",
@@ -2008,6 +2150,51 @@ const messages = {
     toastCheckDone: "判定完了 · ランク {grade}。",
     toastCheckCancelled: "判定をキャンセルしました。",
     toastRefreshed: "アカウント一覧を更新しました。",
+    assets: "資産",
+    assetsTitle: "資産",
+    assetsCopy: "このマシンに登録したメールアドレス・電話番号・ID です。",
+    assetTotal: "{count} 件登録済み",
+    assetAdd: "資産を登録",
+    assetSearchLabel: "資産を検索",
+    assetSearchPlaceholder: "アカウントまたはメモ",
+    assetFilterLabel: "種類",
+    assetFilterAll: "すべての種類",
+    assetTypeGoogleMail: "Google メール",
+    assetTypeMicrosoftMail: "Microsoft メール",
+    assetTypeCnPhone: "中国本土の携帯番号",
+    assetTypeAppleId: "Apple ID",
+    assetColType: "種類",
+    assetColAccount: "アカウント",
+    assetColNote: "メモ",
+    assetColCreated: "登録日時",
+    assetColActions: "操作",
+    assetEmpty: "資産はまだありません",
+    assetEmptyCopy: "メールアドレス・電話番号・ID を登録するとここに表示されます。",
+    assetNoMatch: "条件に一致する資産はありません。",
+    assetEdit: "編集",
+    assetDelete: "削除",
+    assetDialogTitle: "資産を登録",
+    assetDialogEditTitle: "資産を編集",
+    assetDialogCopy: "種類を選び、アカウントを入力します。メモは任意です。",
+    assetTypeLabel: "種類",
+    assetAccountLabel: "アカウント",
+    assetAccountPlaceholder: "name@mail.com または 13800138000",
+    assetNoteLabel: "メモ",
+    assetNoteHint: "最大 200 文字。",
+    assetSave: "保存",
+    assetSaving: "保存中…",
+    assetCancel: "キャンセル",
+    assetDeleteTitle: "資産を削除しますか？",
+    assetDeleteCopy: "{account} を削除しますか？この操作は取り消せません。",
+    assetDeleteConfirm: "削除",
+    errorInvalidAssetType: "有効な資産の種類を選んでください。",
+    errorInvalidAssetAccount: "このアカウントは選択した種類と一致しません。",
+    errorInvalidAssetNote: "メモは 200 文字以内にしてください。",
+    errorInvalidAssetBody: "リクエストが不完全です。",
+    errorAssetNotFound: "この資産はもう存在しません。一覧を再読み込みしてください。",
+    toastAssetSaved: "資産を保存しました。",
+    toastAssetDeleted: "資産を削除しました。",
+    assetLoadFailed: "資産を読み込めませんでした。",
   },
 };
 
@@ -2089,6 +2276,19 @@ let environmentTimer = null;
 let accountIdentities = [];
 let accountIdentitiesError = "";
 let clearingAccount = false;
+// The asset registry (GET /api/assets): mailboxes, phone numbers and IDs kept
+// on this machine. Its view state lives only in this document, like the proxy
+// filters and the account table.
+let assets = [];
+let assetsError = "";
+let assetQuery = "";
+let assetFilterType = "all";
+// The dialog context: null while adding, or the row being edited. `saving`
+// guards re-entry so a double click cannot post twice.
+let assetDialogContext = null;
+let assetSaving = false;
+let assetDeleteContext = null;
+let assetDeleting = false;
 // The accounts table is the unified GET /api/accounts list; it is never
 // seeded with local rows. Its view state lives only in this document, like
 // the proxy filters.
@@ -2198,6 +2398,20 @@ const accountErrorKeys = {
 
 function accountErrorText(error) {
   return text[accountErrorKeys[error?.code]] || serverErrorText(error);
+}
+
+// The asset routes report their own codes. `not_found` means an asset row, not
+// an account, so it gets its own wording instead of the shared proxy text.
+const assetErrorKeys = {
+  invalid_type: "errorInvalidAssetType",
+  invalid_account: "errorInvalidAssetAccount",
+  invalid_note: "errorInvalidAssetNote",
+  invalid_body: "errorInvalidAssetBody",
+  not_found: "errorAssetNotFound",
+};
+
+function assetErrorText(error) {
+  return text[assetErrorKeys[error?.code]] || serverErrorText(error);
 }
 
 function testErrorText(result) {
@@ -2430,6 +2644,57 @@ function applyText() {
   byId("account-check-change-exit").textContent = text.accountCheckChangeExit;
   byId("account-check-cancel").textContent = text.accountCheckCancel;
   byId("account-check-dismiss").textContent = text.accountCheckDismiss;
+  // --- assets tab / panel ---
+  byId("tab-assets-label").textContent = text.assets;
+  byId("rail-assets-label").textContent = text.assets;
+  byId("assets-title").textContent = text.assetsTitle;
+  byId("assets-copy").textContent = text.assetsCopy;
+  byId("asset-add-label").textContent = text.assetAdd;
+  byId("asset-add-empty").textContent = text.assetAdd;
+  byId("asset-search-label").textContent = text.assetSearchLabel;
+  byId("asset-search").placeholder = text.assetSearchPlaceholder;
+  byId("asset-search").setAttribute("aria-label", text.assetSearchLabel);
+  byId("asset-filter-label").textContent = text.assetFilterLabel;
+  byId("asset-filter-all").textContent = text.assetFilterAll;
+  for (const [id, value] of [
+    ["asset-type-google-mail", text.assetTypeGoogleMail],
+    ["asset-type-microsoft-mail", text.assetTypeMicrosoftMail],
+    ["asset-type-cn-phone", text.assetTypeCnPhone],
+    ["asset-type-apple-id", text.assetTypeAppleId],
+    ["asset-type-option-google-mail", text.assetTypeGoogleMail],
+    ["asset-type-option-microsoft-mail", text.assetTypeMicrosoftMail],
+    ["asset-type-option-cn-phone", text.assetTypeCnPhone],
+    ["asset-type-option-apple-id", text.assetTypeAppleId],
+  ]) {
+    byId(id).textContent = value;
+  }
+  for (const [id, label] of [
+    ["asset-col-type", text.assetColType],
+    ["asset-col-account", text.assetColAccount],
+    ["asset-col-note", text.assetColNote],
+    ["asset-col-created", text.assetColCreated],
+    ["asset-col-actions", text.assetColActions],
+  ]) {
+    byId(id).textContent = label;
+    byId(id).setAttribute("data-label", label);
+  }
+  byId("assets-empty-title").textContent = text.assetEmpty;
+  byId("assets-empty-copy").textContent = text.assetEmptyCopy;
+  // --- asset dialog / delete dialog ---
+  byId("asset-dialog-title").textContent = text.assetDialogTitle;
+  byId("asset-dialog-copy").textContent = text.assetDialogCopy;
+  byId("asset-type-label").textContent = text.assetTypeLabel;
+  byId("asset-account-label").textContent = text.assetAccountLabel;
+  byId("asset-account").placeholder = text.assetAccountPlaceholder;
+  byId("asset-note-label").textContent = text.assetNoteLabel;
+  byId("asset-note-hint").textContent = text.assetNoteHint;
+  byId("asset-save").textContent = text.assetSave;
+  byId("asset-cancel").textContent = text.assetCancel;
+  byId("asset-close").setAttribute("aria-label", text.close);
+  byId("asset-delete-title").textContent = text.assetDeleteTitle;
+  byId("asset-delete-confirm").textContent = text.assetDeleteConfirm;
+  byId("asset-delete-cancel").textContent = text.assetCancel;
+  byId("asset-delete-close").setAttribute("aria-label", text.close);
 }
 
 function selectTab(name) {
@@ -2437,6 +2702,7 @@ function selectTab(name) {
     ["providers", "tab-providers", "panel-providers"],
     ["proxies", "tab-proxies", "panel-proxies"],
     ["accounts", "tab-accounts", "panel-accounts"],
+    ["assets", "tab-assets", "panel-assets"],
     ["guide", "tab-guide", "panel-guide"],
   ]) {
     const active = key === name;
@@ -3745,6 +4011,221 @@ async function loadAccountIdentities() {
   }
 }
 
+// --- assets page ----------------------------------------------------------
+//
+// The asset registry (GET /api/assets) backs this page's own list. The table,
+// the search and the type picker all work on the same small array in memory;
+// like the account table, the view state is per document and never persisted.
+
+const ASSET_TYPE_KEY = {
+  "google-mail": "assetTypeGoogleMail",
+  "microsoft-mail": "assetTypeMicrosoftMail",
+  "cn-phone": "assetTypeCnPhone",
+  "apple-id": "assetTypeAppleId",
+};
+
+function assetTypeLabel(type) {
+  return text[ASSET_TYPE_KEY[type]] || String(type || "");
+}
+
+function setAssetNotice(message, kind = "") {
+  const node = byId("asset-notice");
+  node.textContent = message || "";
+  node.hidden = !message;
+  node.dataset.kind = kind;
+}
+
+function setAssetError(message) {
+  const node = byId("asset-error");
+  node.textContent = message || "";
+  node.hidden = !message;
+}
+
+function setAssetDeleteError(message) {
+  const node = byId("asset-delete-error");
+  node.textContent = message || "";
+  node.hidden = !message;
+}
+
+function replaceAsset(asset) {
+  const index = assets.findIndex((item) => item?.id === asset?.id);
+  if (index >= 0) assets[index] = asset;
+  else assets.unshift(asset);
+}
+
+function assetRow(asset) {
+  const row = document.createElement("div");
+  row.className = "asset-row tbl-row";
+  row.dataset.assetId = String(asset?.id ?? "");
+
+  const typeField = accountCell("asset-type-cell asset-cell-type", text.assetColType);
+  typeField.textContent = assetTypeLabel(asset?.type);
+
+  const accountField = accountCell("asset-account-cell asset-cell-account", text.assetColAccount);
+  accountField.textContent = typeof asset?.account === "string" ? asset.account : "";
+
+  const noteField = accountCell("asset-note-cell asset-cell-note", text.assetColNote);
+  const note = typeof asset?.note === "string" ? asset.note : "";
+  if (note) {
+    noteField.textContent = note;
+  } else {
+    noteField.classList.add("is-empty");
+    noteField.textContent = "—";
+  }
+
+  const createdField = accountCell("asset-created-cell asset-cell-created", text.assetColCreated);
+  createdField.textContent = formatAssetTime(asset?.createdAt, langKey) || text.never;
+
+  const actions = accountCell("asset-actions asset-cell-actions", text.assetColActions);
+  actions.append(
+    miniButton(text.assetEdit, () => openAssetDialog(asset)),
+    miniButton(text.assetDelete, () => openAssetDeleteDialog(asset), true),
+  );
+
+  row.append(typeField, accountField, noteField, createdField, actions);
+  return row;
+}
+
+function renderAssets() {
+  const list = byId("assets-list");
+  const table = byId("asset-table");
+  const empty = byId("assets-empty");
+  const total = assets.length;
+  byId("asset-count").textContent = String(total);
+  byId("asset-total").textContent = text.assetTotal.replace("{count}", String(total));
+  setAssetNotice(assetsError, assetsError ? "error" : "");
+  const visible = filterAssets(assets, { query: assetQuery, type: assetFilterType });
+  empty.hidden = total > 0;
+  table.hidden = total === 0;
+  list.textContent = "";
+  if (total === 0) return;
+  if (!visible.length) {
+    const note = document.createElement("p");
+    note.className = "proxy-filter-empty";
+    note.textContent = text.assetNoMatch;
+    list.append(note);
+    return;
+  }
+  for (const asset of visible) list.append(assetRow(asset));
+}
+
+async function loadAssets() {
+  try {
+    const data = await api("api/assets");
+    assets = Array.isArray(data?.assets) ? data.assets : [];
+    assetsError = "";
+  } catch (error) {
+    assetsError = assetErrorText(error) || text.assetLoadFailed;
+  } finally {
+    renderAssets();
+  }
+}
+
+function openAssetDialog(asset = null) {
+  const dialog = byId("asset-dialog");
+  const editing = Boolean(asset);
+  assetDialogContext = editing ? { asset } : null;
+  byId("asset-dialog-title").textContent = editing ? text.assetDialogEditTitle : text.assetDialogTitle;
+  byId("asset-type").value = editing ? asset.type : ASSET_TYPES[0];
+  byId("asset-account").value = editing && typeof asset.account === "string" ? asset.account : "";
+  byId("asset-note").value = editing && typeof asset.note === "string" ? asset.note : "";
+  setAssetError("");
+  if (!dialog.open) dialog.showModal();
+  byId("asset-account").focus();
+}
+
+function closeAssetDialog() {
+  const dialog = byId("asset-dialog");
+  if (dialog.open) dialog.close();
+  assetDialogContext = null;
+}
+
+function assetFormValues() {
+  return {
+    type: byId("asset-type").value,
+    account: byId("asset-account").value,
+    note: byId("asset-note").value,
+  };
+}
+
+async function saveAsset() {
+  if (assetSaving) return;
+  const values = assetFormValues();
+  const code = validateAssetForm(values);
+  if (code) {
+    setAssetError(assetErrorText({ code }));
+    return;
+  }
+  const context = assetDialogContext;
+  // The service normalizes a phone number the same way; sending the normalized
+  // form keeps the response and the row identical.
+  const account = normalizeAssetAccount(values.type, values.account);
+  const note = typeof values.note === "string" ? values.note : "";
+  const button = byId("asset-save");
+  assetSaving = true;
+  button.disabled = true;
+  button.textContent = text.assetSaving;
+  try {
+    const data = context
+      ? await api(`api/assets/${encodeURIComponent(context.asset.id)}`, {
+          method: "PATCH",
+          body: { type: values.type, account, note },
+        })
+      : await api("api/assets", {
+          method: "POST",
+          body: { type: values.type, account, note },
+        });
+    if (data?.asset) replaceAsset(data.asset);
+    closeAssetDialog();
+    renderAssets();
+    toast(text.toastAssetSaved);
+  } catch (error) {
+    setAssetError(assetErrorText(error));
+  } finally {
+    assetSaving = false;
+    button.disabled = false;
+    button.textContent = text.assetSave;
+  }
+}
+
+function openAssetDeleteDialog(asset) {
+  assetDeleteContext = { asset };
+  byId("asset-delete-copy").textContent = text.assetDeleteCopy.replace(
+    "{account}",
+    typeof asset?.account === "string" ? asset.account : "",
+  );
+  setAssetDeleteError("");
+  byId("asset-delete-dialog").showModal();
+}
+
+function closeAssetDeleteDialog() {
+  const dialog = byId("asset-delete-dialog");
+  if (dialog.open) dialog.close();
+  assetDeleteContext = null;
+  setAssetDeleteError("");
+}
+
+async function confirmAssetDelete() {
+  if (assetDeleting || !assetDeleteContext) return;
+  const id = assetDeleteContext.asset?.id;
+  if (!id) return;
+  const button = byId("asset-delete-confirm");
+  assetDeleting = true;
+  button.disabled = true;
+  try {
+    await api(`api/assets/${encodeURIComponent(id)}`, { method: "DELETE" });
+    assets = assets.filter((item) => item?.id !== id);
+    closeAssetDeleteDialog();
+    renderAssets();
+    toast(text.toastAssetDeleted);
+  } catch (error) {
+    setAssetDeleteError(assetErrorText(error));
+  } finally {
+    assetDeleting = false;
+    button.disabled = false;
+  }
+}
+
 // --- provider sign-in dialog ----------------------------------------------
 //
 // One dialog per provider card. It chooses a proxy from the stored list (the
@@ -4947,6 +5428,7 @@ async function load() {
     loadEnvironment();
     loadScoreStatus();
     loadAccountIdentities();
+    loadAssets();
     loadRetryCount = 0;
   } catch (error) {
     // A refused connection is transient while the service takes the port over,
@@ -7093,6 +7575,34 @@ byId("account-check-dialog").addEventListener("close", cleanupAccountCheck);
 byId("account-check-dialog").addEventListener("cancel", (event) => {
   event.preventDefault();
   closeAccountCheck();
+});
+// --- assets tab / panel wiring ---
+byId("tab-assets").addEventListener("click", () => {
+  selectTab("assets");
+  loadAssets();
+});
+byId("asset-add").addEventListener("click", () => openAssetDialog());
+byId("asset-add-empty").addEventListener("click", () => openAssetDialog());
+byId("asset-search").addEventListener("input", () => {
+  assetQuery = byId("asset-search").value;
+  renderAssets();
+});
+byId("asset-filter").addEventListener("change", () => {
+  assetFilterType = byId("asset-filter").value || "all";
+  renderAssets();
+});
+byId("asset-save").addEventListener("click", saveAsset);
+byId("asset-cancel").addEventListener("click", closeAssetDialog);
+byId("asset-close").addEventListener("click", closeAssetDialog);
+byId("asset-dialog").addEventListener("close", () => {
+  assetDialogContext = null;
+});
+byId("asset-delete-confirm").addEventListener("click", confirmAssetDelete);
+byId("asset-delete-cancel").addEventListener("click", closeAssetDeleteDialog);
+byId("asset-delete-close").addEventListener("click", closeAssetDeleteDialog);
+byId("asset-delete-dialog").addEventListener("close", () => {
+  assetDeleteContext = null;
+  setAssetDeleteError("");
 });
 
 load();
