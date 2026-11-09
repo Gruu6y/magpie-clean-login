@@ -1490,6 +1490,12 @@ main { flex: 1; }
 }
 .grade-disclaimer { margin: 6px 0 12px; color: var(--faint); font-size: 11.5px; line-height: 1.6; max-width: 76ch; }
 
+/* The per-account exit field sits between the facts grid and the note. Both
+   blocks need the same vertical rhythm as the dialog's other sections, which
+   the shared `.field` rules deliberately leave at zero. */
+.account-exit-field { margin-top: 16px; }
+.account-note-field { margin-top: 14px; }
+
 .account-note-field textarea {
   width: 100%;
   padding: 9px 11px;

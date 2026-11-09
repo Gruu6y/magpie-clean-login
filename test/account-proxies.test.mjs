@@ -3,7 +3,7 @@
 
 import { afterEach, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,7 +12,9 @@ import {
   createAccountProxySync,
   providersFile,
   proxyUrlFor,
+  readAccountExit,
   syncSignInProxy,
+  writeAccountExit,
   writeAccountProxies,
 } from "../lib/account-proxies.mjs";
 import { writeAccountMeta } from "../lib/account-identity.mjs";
@@ -319,4 +321,318 @@ test("createAccountProxySync lazily resolves proxy store when given only an id",
   const doc = readProviders(cfg);
   const mm = doc.providers.find((p) => p.id === "minimax-code");
   expect(mm.accountProxies.lazyuser).toBe("http://127.0.0.1:17805");
+});
+
+// ---- readAccountExit / writeAccountExit ----
+
+test("readAccountExit reports inherit, direct and custom plus the provider proxy", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg, [
+    {
+      id: "read-me",
+      proxy: "http://127.0.0.1:17801",
+      accountProxies: {
+        directuser: "direct",
+        customuser: "socks5://127.0.0.1:1080",
+      },
+    },
+    { id: "read-null", accountProxies: {} },
+  ]);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+
+  const inherit = await readAccountExit({ env, provider: "read-me", accountId: "NoEntry" });
+  expect(inherit).toEqual({
+    ok: true,
+    mode: "inherit",
+    url: null,
+    key: "noentry",
+    providerProxy: "http://127.0.0.1:17801",
+  });
+
+  const direct = await readAccountExit({ env, provider: "read-me", accountId: "DirectUser" });
+  expect(direct.ok).toBeTrue();
+  expect(direct.mode).toBe("direct");
+  expect(direct.url).toBe("direct");
+  expect(direct.key).toBe("directuser");
+  expect(direct.providerProxy).toBe("http://127.0.0.1:17801");
+
+  const custom = await readAccountExit({ env, provider: "read-me", accountId: "CustomUser" });
+  expect(custom.ok).toBeTrue();
+  expect(custom.mode).toBe("custom");
+  expect(custom.url).toBe("socks5://127.0.0.1:1080");
+  expect(custom.providerProxy).toBe("http://127.0.0.1:17801");
+
+  // A provider without a provider-level proxy reports null, not undefined.
+  const nullProxy = await readAccountExit({ env, provider: "read-null", accountId: "NoEntry" });
+  expect(nullProxy.ok).toBeTrue();
+  expect(nullProxy.providerProxy).toBeNull();
+});
+
+test("writeAccountExit custom writes only the target account's entry", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+
+  const res = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "AlphaUser",
+    mode: "custom",
+    url: "http://127.0.0.1:17803",
+  });
+  expect(res.ok).toBeTrue();
+  expect(res.reason).toBe("written");
+  expect(res.changed).toBeTrue();
+  expect(res.mode).toBe("custom");
+  expect(res.before).toBeNull();
+  expect(res.after).toBe("http://127.0.0.1:17803");
+  expect(res.key).toBe("alphauser");
+
+  const doc = readProviders(cfg);
+  const mm = doc.providers.find((p) => p.id === "minimax-code");
+  expect(mm.accountProxies).toEqual({ alphauser: "http://127.0.0.1:17803" });
+  // Provider-wide proxy and other providers stay exactly as they were.
+  expect(mm.proxy).toBe("http://127.0.0.1:17801");
+  const wb = doc.providers.find((p) => p.id === "workbuddy");
+  expect(wb.accountProxies).toEqual({ "user-hand": "http://127.0.0.1:9999" });
+});
+
+test("writeAccountExit direct stores the literal direct marker", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+
+  const res = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "AlphaUser",
+    mode: "direct",
+  });
+  expect(res.ok).toBeTrue();
+  expect(res.reason).toBe("written");
+  expect(res.after).toBe("direct");
+
+  const read = await readAccountExit({ env, provider: "minimax-code", accountId: "AlphaUser" });
+  expect(read.mode).toBe("direct");
+  expect(read.url).toBe("direct");
+});
+
+test("writeAccountExit inherit removes only that key and keeps the empty map", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg, [
+    {
+      id: "multi",
+      accountProxies: { usera: "http://127.0.0.1:1", userb: "direct" },
+    },
+  ]);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+
+  const res = await writeAccountExit({
+    env,
+    provider: "multi",
+    accountId: "UserB",
+    mode: "inherit",
+  });
+  expect(res.ok).toBeTrue();
+  expect(res.reason).toBe("written");
+  expect(res.before).toBe("direct");
+  expect(res.after).toBeNull();
+
+  const doc = readProviders(cfg);
+  expect(doc.providers.find((p) => p.id === "multi").accountProxies).toEqual({
+    usera: "http://127.0.0.1:1",
+  });
+
+  // Deleting the last key must keep the (now empty) map, not drop the property.
+  const res2 = await writeAccountExit({
+    env,
+    provider: "multi",
+    accountId: "UserA",
+    mode: "inherit",
+  });
+  expect(res2.ok).toBeTrue();
+  const entry = readProviders(cfg).providers.find((p) => p.id === "multi");
+  expect(entry.accountProxies).toEqual({});
+  expect(Object.hasOwn(entry, "accountProxies")).toBeTrue();
+});
+
+test("writeAccountExit reports unchanged without rewriting the file", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg, [{ id: "idem", accountProxies: { usera: "http://127.0.0.1:1" } }]);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+  const file = join(cfg, "providers.json");
+  const beforeText = readFileSync(file, "utf8");
+  const beforeStat = await stat(file);
+
+  const res = await writeAccountExit({
+    env,
+    provider: "idem",
+    accountId: "UserA",
+    mode: "custom",
+    url: "http://127.0.0.1:1",
+  });
+  expect(res.ok).toBeTrue();
+  expect(res.changed).toBeFalse();
+  expect(res.reason).toBe("unchanged");
+  expect(res.before).toBe("http://127.0.0.1:1");
+  expect(res.after).toBe(res.before);
+
+  // An absent key inheriting is also a no-op.
+  const inherit = await writeAccountExit({
+    env,
+    provider: "idem",
+    accountId: "Ghost",
+    mode: "inherit",
+  });
+  expect(inherit.changed).toBeFalse();
+  expect(inherit.reason).toBe("unchanged");
+
+  expect(readFileSync(file, "utf8")).toBe(beforeText);
+  expect((await stat(file)).mtimeMs).toBe(beforeStat.mtimeMs);
+});
+
+test("writeAccountExit refuses unknown account names without touching the file", async () => {
+  const cfg = await tempDir();
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+  const file = join(cfg, "providers.json");
+  const names = ["", "   ", "__proto__", "constructor", "prototype"];
+
+  // Nothing seeded: validation must short-circuit before any file is created.
+  for (const accountId of names) {
+    const res = await writeAccountExit({
+      env,
+      provider: "minimax-code",
+      accountId,
+      mode: "custom",
+      url: "http://127.0.0.1:1",
+    });
+    expect(res.ok).toBeFalse();
+    expect(res.reason).toBe("account_name_unknown");
+    expect(res.key).toBe(accountProxyKey(accountId));
+  }
+  expect(() => readFileSync(file, "utf8")).toThrow();
+
+  // Same refusal on an existing file leaves it byte-for-byte unchanged.
+  await seedProvidersJson(cfg);
+  const beforeText = readFileSync(file, "utf8");
+  const constructorWrite = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "constructor",
+    mode: "direct",
+  });
+  expect(constructorWrite.reason).toBe("account_name_unknown");
+  expect(readFileSync(file, "utf8")).toBe(beforeText);
+});
+
+test("writeAccountExit rejects invalid mode and custom url", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+  const file = join(cfg, "providers.json");
+  const beforeText = readFileSync(file, "utf8");
+
+  const badMode = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "u1",
+    mode: "bogus",
+    url: "http://127.0.0.1:1",
+  });
+  expect(badMode.ok).toBeFalse();
+  expect(badMode.reason).toBe("invalid_mode");
+
+  for (const url of ["", "   ", "not-a-url", null, undefined]) {
+    const res = await writeAccountExit({
+      env,
+      provider: "minimax-code",
+      accountId: "u1",
+      mode: "custom",
+      url,
+    });
+    expect(res.ok).toBeFalse();
+    expect(res.reason).toBe("invalid_url");
+  }
+  expect(readFileSync(file, "utf8")).toBe(beforeText);
+});
+
+test("readAccountExit and writeAccountExit report missing, invalid and unknown providers", async () => {
+  const cfg = await tempDir();
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+  const file = join(cfg, "providers.json");
+
+  const missingRead = await readAccountExit({ env, provider: "minimax-code", accountId: "u1" });
+  expect(missingRead.ok).toBeFalse();
+  expect(missingRead.reason).toBe("providers_missing");
+  const missingWrite = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "u1",
+    mode: "direct",
+  });
+  expect(missingWrite.ok).toBeFalse();
+  expect(missingWrite.reason).toBe("providers_missing");
+
+  // A malformed file is never repaired: both calls must leave its bytes alone.
+  const raw = "NOT JSON {{ }}";
+  await writeFile(file, raw, "utf8");
+  const invalidRead = await readAccountExit({ env, provider: "minimax-code", accountId: "u1" });
+  expect(invalidRead.reason).toBe("providers_invalid");
+  const invalidWrite = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "u1",
+    mode: "direct",
+  });
+  expect(invalidWrite.reason).toBe("providers_invalid");
+  expect(readFileSync(file, "utf8")).toBe(raw);
+
+  // `providers` that is not an array is invalid too.
+  await writeFile(file, JSON.stringify({ providers: {} }), "utf8");
+  const notArray = await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "u1",
+    mode: "direct",
+  });
+  expect(notArray.reason).toBe("providers_invalid");
+
+  await seedProvidersJson(cfg);
+  const unknownRead = await readAccountExit({ env, provider: "nope", accountId: "u1" });
+  expect(unknownRead.ok).toBeFalse();
+  expect(unknownRead.reason).toBe("provider_missing");
+  const unknownWrite = await writeAccountExit({
+    env,
+    provider: "nope",
+    accountId: "u1",
+    mode: "direct",
+  });
+  expect(unknownWrite.ok).toBeFalse();
+  expect(unknownWrite.reason).toBe("provider_missing");
+});
+
+test("writeAccountExit round-trips: a written value reads back through readAccountExit", async () => {
+  const cfg = await tempDir();
+  await seedProvidersJson(cfg, [{ id: "round", proxy: "http://127.0.0.1:9" }]);
+  const env = { MAGPIE_CONFIG_DIR: cfg };
+
+  const written = await writeAccountExit({
+    env,
+    provider: "round",
+    accountId: "RoundUser",
+    mode: "custom",
+    url: "https://user:pass@exit.test:8443",
+  });
+  expect(written.ok).toBeTrue();
+  expect(written.reason).toBe("written");
+  expect(written.changed).toBeTrue();
+
+  const read = await readAccountExit({ env, provider: "round", accountId: "RoundUser" });
+  expect(read).toEqual({
+    ok: true,
+    mode: "custom",
+    url: "https://user:pass@exit.test:8443",
+    key: "rounduser",
+    providerProxy: "http://127.0.0.1:9",
+  });
 });

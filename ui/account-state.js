@@ -82,6 +82,12 @@ export function accountCheckPath(provider, key) {
   return `${accountIdentityPath(provider, key)}/check`;
 }
 
+// The per-account exit endpoint. Both segments are URL-encoded by
+// accountIdentityPath; magpie owns the accountProxies entry behind `/exit`.
+export function accountExitPath(provider, key) {
+  return `${accountIdentityPath(provider, key)}/exit`;
+}
+
 // Cancelling a running check is a distinct POST; failure/cancel writes no
 // history, so the previous verdict stays untouched.
 export function accountCheckCancelPath(provider, key) {

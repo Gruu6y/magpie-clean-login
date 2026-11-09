@@ -496,6 +496,12 @@
     </div>
     <div class="dialog-body">
       <dl class="setup-facts" id="account-detail-facts"></dl>
+      <div class="field account-exit-field">
+        <label for="account-detail-exit" id="account-detail-exit-label">Exit address</label>
+        <select id="account-detail-exit"></select>
+        <p class="field-hint" id="account-detail-exit-hint"></p>
+        <p class="setup-note" id="account-detail-exit-status" role="status" hidden></p>
+      </div>
       <div class="field account-note-field">
         <label for="account-detail-note" id="account-detail-note-label">Note</label>
         <textarea id="account-detail-note" rows="3" maxlength="200"
@@ -510,6 +516,7 @@
     <div class="dialog-footer">
       <button class="button" id="account-detail-dismiss" type="button">Close</button>
       <button class="button" id="account-detail-check" type="button">Check</button>
+      <button class="button" id="account-detail-exit-save" type="button">Save exit</button>
       <button class="button primary" id="account-detail-note-save" type="button">Save note</button>
     </div>
   </dialog>

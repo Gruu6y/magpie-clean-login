@@ -45,6 +45,7 @@ import {
 } from "./signin-state.js";
 import {
   accountCheckPath,
+  accountExitPath,
   accountIdentityPath,
   accountIdentityView,
   accountLabel,
@@ -441,6 +442,15 @@ const messages = {
     accountDetailNoteEmpty: "No note yet.",
     accountDetailSaved: "The note was saved.",
     accountDetailNoteTooLong: "The note is too long.",
+    accountDetailExitLabel: "Exit address",
+    accountDetailExitHint: "Saved as this account's own exit in magpie. It has nothing to do with the exit a check runs through.",
+    accountDetailExitSave: "Save exit",
+    accountDetailExitSaving: "Saving…",
+    accountDetailExitSaved: "Exit saved.",
+    accountDetailExitInherit: "Follow provider ({exit})",
+    accountDetailExitDirect: "Force direct",
+    accountDetailExitUnknownName: "magpie has no user name for this account, so it keeps the provider-level exit.",
+    accountDetailExitReadFailed: "Could not read the exit: {message}",
     accountDetailSigninHint: "This account is still signed in. Sign it out in magpie before clearing its identity.",
     accountDetailRetiredHint: "The fingerprint and the account's profile live together: unless you clear the identity, signing in again reuses the same fingerprint.",
     accountDetailHistoryTitle: "Check history",
@@ -553,6 +563,7 @@ const messages = {
     checkErrorUnknown: "The check stopped before it produced a verdict.",
     errorInvalidNote: "The note is not valid.",
     toastNoteSaved: "The note was saved.",
+    toastExitSaved: "Exit saved",
     toastCheckDone: "Check finished · grade {grade}.",
     toastCheckCancelled: "The check was cancelled.",
     toastRefreshed: "Accounts refreshed.",
@@ -910,6 +921,15 @@ const messages = {
     accountDetailNoteEmpty: "还没有备注。",
     accountDetailSaved: "备注已保存。",
     accountDetailNoteTooLong: "备注过长。",
+    accountDetailExitLabel: "出口地址",
+    accountDetailExitHint: "保存到 magpie 的按账号出口，只影响这个账号；与检测时选的出口无关。",
+    accountDetailExitSave: "保存出口",
+    accountDetailExitSaving: "保存中…",
+    accountDetailExitSaved: "出口已保存。",
+    accountDetailExitInherit: "跟随供应商（{exit}）",
+    accountDetailExitDirect: "强制直连",
+    accountDetailExitUnknownName: "这个账号没有 magpie 能识别的用户名，无法单独指定出口，将继续沿用供应商级出口。",
+    accountDetailExitReadFailed: "读取出口失败：{message}",
     accountDetailSigninHint: "该账号仍在登录状态。先在 magpie 中登出，这里才能清除它的身份。",
     accountDetailRetiredHint: "指纹与该账号的配置目录同生共死：只要不「清除身份」，再次登录会重用同一个指纹。",
     accountDetailHistoryTitle: "检测历史",
@@ -1022,6 +1042,7 @@ const messages = {
     checkErrorUnknown: "检测在产生判定之前中止了。",
     errorInvalidNote: "备注无效。",
     toastNoteSaved: "备注已保存。",
+    toastExitSaved: "出口已保存",
     toastCheckDone: "检测完成 · 评级 {grade}。",
     toastCheckCancelled: "检测已取消。",
     toastRefreshed: "账号列表已刷新。",
@@ -1379,6 +1400,15 @@ const messages = {
     accountDetailNoteEmpty: "還沒有備註。",
     accountDetailSaved: "備註已儲存。",
     accountDetailNoteTooLong: "備註過長。",
+    accountDetailExitLabel: "出口位址",
+    accountDetailExitHint: "儲存到 magpie 的按帳號出口，只影響這個帳號；與檢測時選的出口無關。",
+    accountDetailExitSave: "儲存出口",
+    accountDetailExitSaving: "儲存中…",
+    accountDetailExitSaved: "出口已儲存。",
+    accountDetailExitInherit: "跟隨供應商（{exit}）",
+    accountDetailExitDirect: "強制直連",
+    accountDetailExitUnknownName: "這個帳號沒有 magpie 能識別的使用者名稱，無法單獨指定出口，將繼續沿用供應商級出口。",
+    accountDetailExitReadFailed: "讀取出口失敗：{message}",
     accountDetailSigninHint: "該帳號仍在登入狀態。先在 magpie 中登出，這裡才能清除它的身分。",
     accountDetailRetiredHint: "指紋與該帳號的設定檔同生共死：只要不「清除身分」，再次登入會重用同一個指紋。",
     accountDetailHistoryTitle: "檢測歷史",
@@ -1491,6 +1521,7 @@ const messages = {
     checkErrorUnknown: "檢測在產生判定之前中止了。",
     errorInvalidNote: "備註無效。",
     toastNoteSaved: "備註已儲存。",
+    toastExitSaved: "出口已儲存",
     toastCheckDone: "檢測完成 · 評級 {grade}。",
     toastCheckCancelled: "檢測已取消。",
     toastRefreshed: "帳號清單已重新整理。",
@@ -1848,6 +1879,15 @@ const messages = {
     accountDetailNoteEmpty: "メモはまだありません。",
     accountDetailSaved: "メモを保存しました。",
     accountDetailNoteTooLong: "メモが長すぎます。",
+    accountDetailExitLabel: "出口アドレス",
+    accountDetailExitHint: "magpie にこのアカウント専用の出口として保存されます。影響はこのアカウントだけで、判定時に選ぶ出口とは無関係です。",
+    accountDetailExitSave: "出口を保存",
+    accountDetailExitSaving: "保存中…",
+    accountDetailExitSaved: "出口を保存しました。",
+    accountDetailExitInherit: "プロバイダに従う（{exit}）",
+    accountDetailExitDirect: "直接接続を強制",
+    accountDetailExitUnknownName: "このアカウントには magpie が認識できるユーザー名がないため、出口を個別に指定できず、プロバイダレベルの出口を使い続けます。",
+    accountDetailExitReadFailed: "出口を読み取れませんでした：{message}",
     accountDetailSigninHint: "このアカウントはまだログイン中です。身分を消去する前に magpie でログアウトしてください。",
     accountDetailRetiredHint: "指紋とアカウントのプロファイルは一体です。身分を消去しない限り、再ログインでは同じ指紋が使われます。",
     accountDetailHistoryTitle: "判定履歴",
@@ -1960,6 +2000,7 @@ const messages = {
     checkErrorUnknown: "判定結果が出る前に処理が停止しました。",
     errorInvalidNote: "メモが無効です。",
     toastNoteSaved: "メモを保存しました。",
+    toastExitSaved: "出口を保存しました",
     toastCheckDone: "判定完了 · ランク {grade}。",
     toastCheckCancelled: "判定をキャンセルしました。",
     toastRefreshed: "アカウント一覧を更新しました。",
@@ -2072,6 +2113,11 @@ let accountCheckTimer = null;
 let accountCheckTicker = null;
 let accountDetailContext = null;
 let noteSaving = false;
+// The per-account exit shown in the detail dialog: the last server answer,
+// the node list this dialog offers, and whether a save is in flight.
+let accountDetailExit = null;
+let detailExitProxies = [];
+let exitSaving = false;
 // The hosting dialog polls only while it is open, and only for the one account
 // it was opened for. Nothing polls on the user's behalf in the background.
 let accountHostingContext = null;
@@ -2332,6 +2378,9 @@ function applyText() {
   byId("account-detail-dismiss").textContent = text.accountDetailDismiss;
   byId("account-detail-check").textContent = text.accountCheckStart;
   byId("account-detail-note-save").textContent = text.accountDetailNoteSave;
+  byId("account-detail-exit-label").textContent = text.accountDetailExitLabel;
+  byId("account-detail-exit-hint").textContent = text.accountDetailExitHint;
+  byId("account-detail-exit-save").textContent = text.accountDetailExitSave;
   byId("account-detail-close").setAttribute("aria-label", text.accountDetailDismiss);
   // --- account hosting dialog ---
   byId("account-hosting-title").textContent = text.accountHostingDialogTitle;
@@ -5866,6 +5915,85 @@ function renderDetailHistory(checks) {
   }
 }
 
+// The per-account exit picker. It offers the same node list the check dialog
+// offers, plus the two magpie modes: follow the provider or force direct. A
+// custom URL magpie holds but the node list no longer knows is shown as-is
+// (read-only): it must never be quietly rewritten to "inherit".
+function renderDetailExit() {
+  const select = byId("account-detail-exit");
+  const status = byId("account-detail-exit-status");
+  const save = byId("account-detail-exit-save");
+  select.textContent = "";
+  const inherit = document.createElement("option");
+  inherit.value = "__inherit__";
+  inherit.textContent = text.accountDetailExitInherit.replace(
+    "{exit}",
+    accountDetailExit?.providerProxy || text.accountExitDirect,
+  );
+  select.append(inherit);
+  const direct = document.createElement("option");
+  direct.value = "__direct__";
+  direct.textContent = text.accountDetailExitDirect;
+  select.append(direct);
+  if (accountDetailExit?.mode === "custom" && !accountDetailExit.proxyId && accountDetailExit.url) {
+    const custom = document.createElement("option");
+    custom.value = "__custom__";
+    custom.disabled = true;
+    custom.textContent = accountDetailExit.url;
+    select.append(custom);
+  }
+  for (const proxy of detailExitProxies) {
+    const option = document.createElement("option");
+    option.value = proxy.id;
+    option.textContent = `${proxy.name || proxy.id} · ${formatAddress(proxy)}`;
+    select.append(option);
+  }
+  if (accountDetailExit?.mode === "direct") select.value = "__direct__";
+  else if (accountDetailExit?.mode === "custom") select.value = accountDetailExit.proxyId || "__custom__";
+  else select.value = "__inherit__";
+  if (accountDetailExit?.ok === false) {
+    select.disabled = true;
+    save.disabled = true;
+    status.textContent =
+      accountDetailExit.reason === "account_name_unknown"
+        ? text.accountDetailExitUnknownName
+        : text.accountDetailExitReadFailed.replace("{message}", String(accountDetailExit.reason || ""));
+    status.hidden = false;
+  } else {
+    select.disabled = false;
+    save.disabled = exitSaving;
+    status.textContent = "";
+    status.hidden = true;
+  }
+}
+
+async function loadAccountExit(context) {
+  detailExitProxies = proxies;
+  accountDetailExit = null;
+  renderDetailExit();
+  let data;
+  try {
+    data = await api(accountExitPath(context.provider, context.key));
+  } catch (error) {
+    if (accountDetailContext !== context) return;
+    // A failed read is a visible state, not a silent "inherit".
+    accountDetailExit = { ok: false, reason: serverErrorText(error) };
+    renderDetailExit();
+    return;
+  }
+  if (accountDetailContext !== context) return;
+  accountDetailExit = data?.exit ?? null;
+  try {
+    const list = await api("api/proxies");
+    if (accountDetailContext !== context) return;
+    if (Array.isArray(list?.proxies)) detailExitProxies = list.proxies;
+  } catch {
+    // Keep the bootstrap list if the read failed; the dialog still works.
+    if (accountDetailContext !== context) return;
+  }
+  renderDetailExit();
+}
+
 function openAccountDetail(account) {
   const dialog = byId("account-detail-dialog");
   const view = accountDisplay(account);
@@ -5878,6 +6006,7 @@ function openAccountDetail(account) {
   setDetailStatus(view.signedIn ? text.accountDetailSigninHint : text.accountDetailRetiredHint);
   renderDetailHistory(view.checks);
   if (!dialog.open) dialog.showModal();
+  void loadAccountExit(accountDetailContext);
 }
 
 function closeAccountDetail() {
@@ -5887,6 +6016,12 @@ function closeAccountDetail() {
 
 function cleanupAccountDetail() {
   accountDetailContext = null;
+  accountDetailExit = null;
+  detailExitProxies = [];
+  exitSaving = false;
+  const status = byId("account-detail-exit-status");
+  status.textContent = "";
+  status.hidden = true;
   setDetailError("");
 }
 
@@ -6235,6 +6370,44 @@ async function saveAccountNote() {
     noteSaving = false;
     byId("account-detail-note-save").disabled = false;
     byId("account-detail-note-save").textContent = text.accountDetailNoteSave;
+  }
+}
+
+// Saving the exit only writes this account's magpie entry; the main list
+// shows no exit column, so nothing here re-renders it.
+async function saveAccountExit() {
+  const context = accountDetailContext;
+  if (!context || exitSaving) return;
+  const value = byId("account-detail-exit").value;
+  // The read-only custom URL is a display of what magpie holds, not a choice
+  // the page can send back.
+  if (value === "__custom__") return;
+  const body =
+    value === "__inherit__" ? { mode: "inherit" }
+    : value === "__direct__" ? { mode: "direct" }
+    : { mode: "custom", proxyId: value };
+  exitSaving = true;
+  byId("account-detail-exit-save").disabled = true;
+  byId("account-detail-exit-save").textContent = text.accountDetailExitSaving;
+  setDetailError("");
+  try {
+    const data = await api(accountExitPath(context.provider, context.key), {
+      method: "PATCH",
+      body,
+    });
+    if (accountDetailContext !== context) return;
+    accountDetailExit = data?.exit ?? accountDetailExit;
+    renderDetailExit();
+    const status = byId("account-detail-exit-status");
+    status.textContent = text.accountDetailExitSaved;
+    status.hidden = false;
+    toast(text.toastExitSaved);
+  } catch (error) {
+    if (accountDetailContext === context) setDetailError(serverErrorText(error));
+  } finally {
+    exitSaving = false;
+    byId("account-detail-exit-save").disabled = accountDetailExit?.ok === false;
+    byId("account-detail-exit-save").textContent = text.accountDetailExitSave;
   }
 }
 
@@ -6760,6 +6933,7 @@ byId("account-detail-close").addEventListener("click", closeAccountDetail);
 byId("account-detail-dismiss").addEventListener("click", closeAccountDetail);
 byId("account-detail-check").addEventListener("click", openCheckFromDetail);
 byId("account-detail-note-save").addEventListener("click", saveAccountNote);
+byId("account-detail-exit-save").addEventListener("click", saveAccountExit);
 byId("account-detail-dialog").addEventListener("close", cleanupAccountDetail);
 byId("account-hosting-close").addEventListener("click", closeAccountHosting);
 byId("account-hosting-dismiss").addEventListener("click", closeAccountHosting);

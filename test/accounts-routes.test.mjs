@@ -295,3 +295,297 @@ test("POST /api/accounts/:provider/:key/hosting rejects missing enabled field", 
   expect(res.status).toBe(400);
   expect((await res.json()).error).toBe("invalid_body");
 });
+
+// --- Account exit routes ---------------------------------------------------
+// The exit dialog reads and writes the account's fixed exit in magpie's
+// providers.json. Everything is seeded into the same temporary directories;
+// the real ~/.config/magpie is never touched. The imports below are hoisted by
+// ESM, so the existing cases above stay byte-for-byte unchanged.
+import { describe } from "bun:test";
+import { readFile } from "node:fs/promises";
+
+describe("account exit routes", () => {
+  const env = { MAGPIE_CLEAN_LOGIN_DATA: dataDir };
+  const alphaDir = accountDir(env, "workbuddy", "workbuddy#alpha");
+  const betaDir = accountDir(env, "workbuddy", "workbuddy#beta");
+  const gammaDir = accountDir(env, "workbuddy", "workbuddy#gamma");
+  const nativeDir = accountDir(env, "antigravity", "antigravity#rec1");
+  const providersPath = join(configDir, "providers.json");
+  const alphaPath = "/api/accounts/workbuddy/workbuddy%23alpha/exit";
+  const betaPath = "/api/accounts/workbuddy/workbuddy%23beta/exit";
+  const gammaPath = "/api/accounts/workbuddy/workbuddy%23gamma/exit";
+  const nativePath = "/api/accounts/antigravity/antigravity%23rec1/exit";
+  const providerProxy = "http://provider-exit.example:8080";
+  const otherEntry = "http://other-exit.example:9000";
+  // The URL magpie must hold for the chosen exit, credentials included.
+  const customUrl = `http://${encodeURIComponent("u ser")}:${encodeURIComponent("p@ss:word")}@198.51.100.7:8080`;
+  let proxyId;
+
+  const patchExit = (path, body) =>
+    fetch(`http://127.0.0.1:${service.port}${path}`, {
+      method: "PATCH",
+      headers: { [TOKEN_HEADER]: token, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  const readProviders = async () => JSON.parse(await readFile(providersPath, "utf8"));
+  const workbuddyEntry = (doc) => doc.providers.find((item) => item.id === "workbuddy");
+
+  beforeAll(async () => {
+    // The unreadable-auth case above left plugin-auth.json malformed; restore
+    // a valid ledger and add the email-only entry the fallback case needs.
+    await writeFile(
+      join(configDir, "plugin-auth.json"),
+      JSON.stringify({
+        workbuddy: { type: "oauth", access: "SECRET", accountId: "signed-in" },
+        "workbuddy#beta": { type: "oauth", access: "SECRET-BETA", email: "Beta@Example.com" },
+      }),
+    );
+    // A native login supplies the third fallback's user name.
+    await writeFile(
+      join(configDir, "logins.json"),
+      JSON.stringify([
+        { agent: "antigravity", id: "rec1", user: "Delta@Example.com", auth: { access_token: "NATIVE-SECRET" } },
+      ]),
+    );
+    await writeFile(
+      providersPath,
+      JSON.stringify({
+        providers: [
+          {
+            id: "workbuddy",
+            name: "WorkBuddy",
+            proxy: providerProxy,
+            accountProxies: { "other-user": otherEntry },
+          },
+          { id: "antigravity", name: "Antigravity" },
+        ],
+      }),
+    );
+    await writeAccountMeta(alphaDir, {
+      version: 1,
+      provider: "workbuddy",
+      key: "workbuddy#alpha",
+      accountId: "Alpha@Example.com",
+      uid: "u-alpha",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+    await writeAccountMeta(betaDir, {
+      version: 1,
+      provider: "workbuddy",
+      key: "workbuddy#beta",
+      uid: "u-beta",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+    await writeAccountMeta(gammaDir, {
+      version: 1,
+      provider: "workbuddy",
+      key: "workbuddy#gamma",
+      uid: "u-gamma",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+    await writeAccountMeta(nativeDir, {
+      version: 1,
+      provider: "antigravity",
+      key: "antigravity#rec1",
+      uid: "u-native",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+    const res = await fetch(`http://127.0.0.1:${service.port}/api/proxies`, {
+      method: "POST",
+      headers: { [TOKEN_HEADER]: token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Exit A",
+        type: "http",
+        host: "198.51.100.7",
+        port: 8080,
+        username: "u ser",
+        password: "p@ss:word",
+      }),
+    });
+    expect(res.status).toBe(201);
+    proxyId = (await res.json()).proxy.id;
+  });
+
+  test("GET exit reports inherit and the provider proxy when no mapping exists", async () => {
+    const res = await api("GET", alphaPath);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.exit).toEqual({
+      ok: true,
+      mode: "inherit",
+      url: null,
+      key: "alpha@example.com",
+      providerProxy,
+      proxyId: null,
+    });
+    expect(JSON.stringify(body)).not.toContain(tmp);
+  });
+
+  test("PATCH exit custom stores the credential URL for this account only", async () => {
+    const metaBefore = await readAccountMeta(alphaDir);
+    // A client-supplied URL must be ignored: the service computes the address
+    // from the stored record alone.
+    const res = await patchExit(alphaPath, {
+      mode: "custom",
+      proxyId,
+      url: "http://client-supplied.example:1",
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.account).toBeUndefined();
+    expect(body.exit.mode).toBe("custom");
+    expect(body.exit.url).toBe(customUrl);
+    expect(body.exit.proxyId).toBe(proxyId);
+    const entry = workbuddyEntry(await readProviders());
+    expect(entry.accountProxies["alpha@example.com"]).toBe(customUrl);
+    expect(entry.accountProxies["other-user"]).toBe(otherEntry);
+    expect(entry.proxy).toBe(providerProxy);
+    // The account ledger is not part of this route's write set.
+    expect(await readAccountMeta(alphaDir)).toEqual(metaBefore);
+  });
+
+  test("GET exit reverse-maps the stored URL back to the proxy id", async () => {
+    const res = await api("GET", alphaPath);
+    expect(res.status).toBe(200);
+    expect((await res.json()).exit).toEqual({
+      ok: true,
+      mode: "custom",
+      url: customUrl,
+      key: "alpha@example.com",
+      providerProxy,
+      proxyId,
+    });
+  });
+
+  test("PATCH exit direct stores the literal direct marker", async () => {
+    const res = await patchExit(alphaPath, { mode: "direct" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.exit.mode).toBe("direct");
+    expect(body.exit.proxyId).toBeNull();
+    const entry = workbuddyEntry(await readProviders());
+    expect(entry.accountProxies["alpha@example.com"]).toBe("direct");
+    expect(entry.accountProxies["other-user"]).toBe(otherEntry);
+  });
+
+  test("PATCH exit inherit removes only this account's entry", async () => {
+    const res = await patchExit(alphaPath, { mode: "inherit" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.exit.mode).toBe("inherit");
+    expect(body.exit.url).toBeNull();
+    expect(body.exit.proxyId).toBeNull();
+    const entry = workbuddyEntry(await readProviders());
+    expect(Object.hasOwn(entry.accountProxies, "alpha@example.com")).toBe(false);
+    expect(entry.accountProxies["other-user"]).toBe(otherEntry);
+    expect(entry.proxy).toBe(providerProxy);
+  });
+
+  test("PATCH exit validates the mode and the selected proxy", async () => {
+    const badMode = await patchExit(alphaPath, { mode: "bogus" });
+    expect(badMode.status).toBe(400);
+    expect((await badMode.json()).error).toBe("invalid_mode");
+    const noMode = await patchExit(alphaPath, {});
+    expect(noMode.status).toBe(400);
+    expect((await noMode.json()).error).toBe("invalid_mode");
+    const noProxy = await patchExit(alphaPath, { mode: "custom" });
+    expect(noProxy.status).toBe(400);
+    expect((await noProxy.json()).error).toBe("invalid_proxy");
+    const badProxyType = await patchExit(alphaPath, { mode: "custom", proxyId: 42 });
+    expect(badProxyType.status).toBe(400);
+    expect((await badProxyType.json()).error).toBe("invalid_proxy");
+    const unknownProxy = await patchExit(alphaPath, { mode: "custom", proxyId: "no-such-proxy" });
+    expect(unknownProxy.status).toBe(404);
+    expect((await unknownProxy.json()).error).toBe("not_found");
+    const badPath = await api("GET", "/api/accounts/workbuddy/%E0%A4%A/exit");
+    expect(badPath.status).toBe(400);
+    expect((await badPath.json()).error).toBe("invalid_account");
+  });
+
+  test("exit routes answer 404 for an unknown account", async () => {
+    const get = await api("GET", "/api/accounts/workbuddy/workbuddy%23missing/exit");
+    expect(get.status).toBe(404);
+    expect((await get.json()).error).toBe("not_found");
+    const patch = await patchExit("/api/accounts/workbuddy/workbuddy%23missing/exit", { mode: "direct" });
+    expect(patch.status).toBe(404);
+    expect((await patch.json()).error).toBe("not_found");
+  });
+
+  test("exit routes require the page token", async () => {
+    const get = await api("GET", alphaPath, { withToken: false });
+    expect(get.status).toBe(403);
+    const patch = await fetch(`http://127.0.0.1:${service.port}${alphaPath}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "direct" }),
+    });
+    expect(patch.status).toBe(403);
+  });
+
+  test("PATCH exit falls back to the auth file email when the ledger has no accountId", async () => {
+    const res = await patchExit(betaPath, { mode: "direct" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).exit.key).toBe("beta@example.com");
+    expect(workbuddyEntry(await readProviders()).accountProxies["beta@example.com"]).toBe("direct");
+    // Leave the map as it was for the assertions that follow.
+    const back = await patchExit(betaPath, { mode: "inherit" });
+    expect(back.status).toBe(200);
+  });
+
+  test("PATCH exit falls back to the native login email", async () => {
+    const res = await patchExit(nativePath, { mode: "direct" });
+    expect(res.status).toBe(200);
+    expect((await res.json()).exit.key).toBe("delta@example.com");
+    const doc = await readProviders();
+    const entry = doc.providers.find((item) => item.id === "antigravity");
+    expect(entry.accountProxies["delta@example.com"]).toBe("direct");
+    const back = await patchExit(nativePath, { mode: "inherit" });
+    expect(back.status).toBe(200);
+  });
+
+  test("PATCH exit without any user name is a 409 and leaves providers.json untouched", async () => {
+    // With logins.json gone the fallback chain must still end at an empty
+    // name, not a crash: the lib reports account_name_unknown.
+    rmSync(join(configDir, "logins.json"), { force: true });
+    const before = await readFile(providersPath, "utf8");
+    const res = await patchExit(gammaPath, { mode: "direct" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("account_name_unknown");
+    expect(await readFile(providersPath, "utf8")).toBe(before);
+  });
+
+  test("GET exit reports an unknown account name instead of failing", async () => {
+    const res = await api("GET", gammaPath);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.exit).toEqual({ ok: false, reason: "account_name_unknown", key: "", proxyId: null });
+  });
+
+  test("GET exit reports a missing providers.json without leaking paths", async () => {
+    const text = await readFile(providersPath, "utf8");
+    rmSync(providersPath);
+    try {
+      const res = await api("GET", alphaPath);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.exit.ok).toBe(false);
+      expect(body.exit.reason).toBe("providers_missing");
+      expect(body.exit.key).toBe("alpha@example.com");
+      expect(body.exit.proxyId).toBeNull();
+      expect(JSON.stringify(body)).not.toContain(tmp);
+    } finally {
+      await writeFile(providersPath, text);
+    }
+  });
+
+  test("exit routes reject another method", async () => {
+    const res = await api("DELETE", alphaPath);
+    expect(res.status).toBe(405);
+    expect(res.headers.get("allow")).toBe("GET, PATCH");
+  });
+});
