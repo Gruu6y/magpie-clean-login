@@ -449,6 +449,7 @@ const messages = {
     accountDetailExitSaved: "Exit saved.",
     accountDetailExitInherit: "Follow provider ({exit})",
     accountDetailExitDirect: "Force direct",
+    accountDetailExitCustom: "Custom exit in magpie",
     accountDetailExitUnknownName: "magpie has no user name for this account, so it keeps the provider-level exit.",
     accountDetailExitReadFailed: "Could not read the exit: {message}",
     accountDetailSigninHint: "This account is still signed in. Sign it out in magpie before clearing its identity.",
@@ -928,6 +929,7 @@ const messages = {
     accountDetailExitSaved: "出口已保存。",
     accountDetailExitInherit: "跟随供应商（{exit}）",
     accountDetailExitDirect: "强制直连",
+    accountDetailExitCustom: "magpie 里的自定义出口",
     accountDetailExitUnknownName: "这个账号没有 magpie 能识别的用户名，无法单独指定出口，将继续沿用供应商级出口。",
     accountDetailExitReadFailed: "读取出口失败：{message}",
     accountDetailSigninHint: "该账号仍在登录状态。先在 magpie 中登出，这里才能清除它的身份。",
@@ -1407,6 +1409,7 @@ const messages = {
     accountDetailExitSaved: "出口已儲存。",
     accountDetailExitInherit: "跟隨供應商（{exit}）",
     accountDetailExitDirect: "強制直連",
+    accountDetailExitCustom: "magpie 裡的自訂出口",
     accountDetailExitUnknownName: "這個帳號沒有 magpie 能識別的使用者名稱，無法單獨指定出口，將繼續沿用供應商級出口。",
     accountDetailExitReadFailed: "讀取出口失敗：{message}",
     accountDetailSigninHint: "該帳號仍在登入狀態。先在 magpie 中登出，這裡才能清除它的身分。",
@@ -1886,6 +1889,7 @@ const messages = {
     accountDetailExitSaved: "出口を保存しました。",
     accountDetailExitInherit: "プロバイダに従う（{exit}）",
     accountDetailExitDirect: "直接接続を強制",
+    accountDetailExitCustom: "magpie のカスタム出口",
     accountDetailExitUnknownName: "このアカウントには magpie が認識できるユーザー名がないため、出口を個別に指定できず、プロバイダレベルの出口を使い続けます。",
     accountDetailExitReadFailed: "出口を読み取れませんでした：{message}",
     accountDetailSigninHint: "このアカウントはまだログイン中です。身分を消去する前に magpie でログアウトしてください。",
@@ -5935,11 +5939,15 @@ function renderDetailExit() {
   direct.value = "__direct__";
   direct.textContent = text.accountDetailExitDirect;
   select.append(direct);
-  if (accountDetailExit?.mode === "custom" && !accountDetailExit.proxyId && accountDetailExit.url) {
+  if (accountDetailExit?.mode === "custom" && !accountDetailExit.proxyId) {
     const custom = document.createElement("option");
     custom.value = "__custom__";
     custom.disabled = true;
-    custom.textContent = accountDetailExit.url;
+    // The address magpie holds, without its credentials: the page never sees
+    // the password, so an unparseable entry is shown without an address.
+    custom.textContent = accountDetailExit.displayUrl
+      ? `${text.accountDetailExitCustom} · ${accountDetailExit.displayUrl}`
+      : text.accountDetailExitCustom;
     select.append(custom);
   }
   for (const proxy of detailExitProxies) {

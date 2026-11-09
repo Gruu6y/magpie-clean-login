@@ -315,11 +315,24 @@ describe("account exit routes", () => {
   const betaPath = "/api/accounts/workbuddy/workbuddy%23beta/exit";
   const gammaPath = "/api/accounts/workbuddy/workbuddy%23gamma/exit";
   const nativePath = "/api/accounts/antigravity/antigravity%23rec1/exit";
-  const providerProxy = "http://provider-exit.example:8080";
+  // `provider.proxy` may carry credentials just like a custom exit (magpie's
+  // own editor accepts a URL with user:password), so the seeded value does.
+  const providerProxy = `http://${encodeURIComponent("prov user")}:${encodeURIComponent("prov pass")}@provider-exit.example:8080`;
   const otherEntry = "http://other-exit.example:9000";
+  // The route hands the page only the credential-free origin of any exit URL.
+  const originOf = (value) => {
+    const url = new URL(value);
+    return `${url.protocol}//${url.host}`;
+  };
+  const providerProxyDisplay = originOf(providerProxy);
   // The URL magpie must hold for the chosen exit, credentials included.
   const customUrl = `http://${encodeURIComponent("u ser")}:${encodeURIComponent("p@ss:word")}@198.51.100.7:8080`;
   let proxyId;
+  const customUrlDisplay = originOf(customUrl);
+  // An exit magpie holds that no stored node produces any more (node deleted,
+  // or the entry edited by hand): credentials included, still never echoed.
+  const orphanUrl = `http://${encodeURIComponent("legacy user")}:${encodeURIComponent("legacy pass")}@203.0.113.44:3128`;
+  const orphanUrlDisplay = originOf(orphanUrl);
 
   const patchExit = (path, body) =>
     fetch(`http://127.0.0.1:${service.port}${path}`, {
@@ -415,9 +428,9 @@ describe("account exit routes", () => {
     expect(body.exit).toEqual({
       ok: true,
       mode: "inherit",
-      url: null,
+      displayUrl: null,
       key: "alpha@example.com",
-      providerProxy,
+      providerProxy: providerProxyDisplay,
       proxyId: null,
     });
     expect(JSON.stringify(body)).not.toContain(tmp);
@@ -437,8 +450,14 @@ describe("account exit routes", () => {
     expect(body.ok).toBe(true);
     expect(body.account).toBeUndefined();
     expect(body.exit.mode).toBe("custom");
-    expect(body.exit.url).toBe(customUrl);
+    // The stored URL carries the exit's credentials; the response never does.
+    expect(body.exit.url).toBeUndefined();
+    expect(body.exit.displayUrl).toBe(customUrlDisplay);
     expect(body.exit.proxyId).toBe(proxyId);
+    expect(JSON.stringify(body)).not.toContain(customUrl);
+    expect(JSON.stringify(body)).not.toContain(
+      customUrl.slice(customUrl.indexOf("//") + 2, customUrl.lastIndexOf("@")),
+    );
     const entry = workbuddyEntry(await readProviders());
     expect(entry.accountProxies["alpha@example.com"]).toBe(customUrl);
     expect(entry.accountProxies["other-user"]).toBe(otherEntry);
@@ -450,14 +469,32 @@ describe("account exit routes", () => {
   test("GET exit reverse-maps the stored URL back to the proxy id", async () => {
     const res = await api("GET", alphaPath);
     expect(res.status).toBe(200);
-    expect((await res.json()).exit).toEqual({
+    const body = await res.json();
+    expect(body.exit).toEqual({
       ok: true,
       mode: "custom",
-      url: customUrl,
+      displayUrl: customUrlDisplay,
       key: "alpha@example.com",
-      providerProxy,
+      providerProxy: providerProxyDisplay,
       proxyId,
     });
+    expect(JSON.stringify(body)).not.toContain(customUrl);
+  });
+
+  test("GET exit redacts a custom URL the node list no longer knows", async () => {
+    // magpie can hold an exit this page cannot name: a node since deleted, or
+    // an entry edited by hand. It is shown, but without its credentials.
+    const doc = await readProviders();
+    workbuddyEntry(doc).accountProxies["alpha@example.com"] = orphanUrl;
+    await writeFile(providersPath, `${JSON.stringify(doc, null, 2)}\n`);
+    const res = await api("GET", alphaPath);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.exit.mode).toBe("custom");
+    expect(body.exit.url).toBeUndefined();
+    expect(body.exit.displayUrl).toBe(orphanUrlDisplay);
+    expect(body.exit.proxyId).toBeNull();
+    expect(JSON.stringify(body)).not.toContain(orphanUrl);
   });
 
   test("PATCH exit direct stores the literal direct marker", async () => {
@@ -476,7 +513,7 @@ describe("account exit routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.exit.mode).toBe("inherit");
-    expect(body.exit.url).toBeNull();
+    expect(body.exit.displayUrl).toBeNull();
     expect(body.exit.proxyId).toBeNull();
     const entry = workbuddyEntry(await readProviders());
     expect(Object.hasOwn(entry.accountProxies, "alpha@example.com")).toBe(false);
