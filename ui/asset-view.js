@@ -18,6 +18,9 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^1[3-9]\d{9}$/;
 
 export const ASSET_NOTE_MAX = 200;
+// The account cap mirrors the service's own limit so the page rejects an
+// overlong account before the round trip instead of surfacing invalid_account.
+export const ASSET_ACCOUNT_MAX = 254;
 
 // The account stored for a phone number is its bare 11 digits: the service
 // normalizes the same way, so the page must too or an edit would submit a
@@ -35,6 +38,7 @@ export function validateAssetForm({ type, account, note } = {}) {
   if (!ASSET_TYPES.includes(normalizedType)) return "invalid_type";
   const normalizedAccount = normalizeAssetAccount(normalizedType, account);
   if (!normalizedAccount) return "invalid_account";
+  if (normalizedAccount.length > ASSET_ACCOUNT_MAX) return "invalid_account";
   if (normalizedType === "cn-phone") {
     if (!PHONE_PATTERN.test(normalizedAccount)) return "invalid_account";
   } else if (!EMAIL_PATTERN.test(normalizedAccount)) {
