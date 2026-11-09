@@ -213,3 +213,61 @@ test("a paused hosted renewal raises a page-wide banner", () => {
   expect(css).toContain(".hosting-alert");
   expect(css).toContain(".hosting-alert-text");
 });
+
+test("the list exit cell prefers the current exit and the detail picker reuses the sign-in list", () => {
+  // The last-login cell shows the exit the account is set to use now; only a
+  // missing current exit falls back to the exit of the last login.
+  expect(app).toContain("formatExit(view.exit ?? view.lastLogin, text.accountExitDirect)");
+  // The detail dropdown draws its nodes in the sign-in order and through the
+  // sign-in option formatter, so live latency and verdicts match that picker.
+  expect(app).toContain("orderSignInProxies(\n    detailExitProxies,\n    accountIdentities,\n    accountDetailContext?.provider,\n  )");
+  expect(app).toContain("formatSignInProxyOption(\n      proxyForTarget(proxy, detailExitTarget(), proxyTargets),");
+  expect(app).toContain("detailExitTesting.has(proxy.id) || rowTests.has(proxy.id)");
+  // Opening the detail probes every candidate in the background; closing the
+  // dialog aborts the sweep and clears its in-flight state.
+  expect(app).toContain("await probeSignInProxies(");
+  expect(app).toContain("signal: controller.signal,");
+  expect(app).toContain("detailExitProxyGuard.cancel();");
+  expect(app).toContain("detailExitController.abort();");
+  expect(app).toContain("detailExitTesting.clear();");
+});
+
+test("both exits pickers fold probe answers through one shared helper", () => {
+  // One probe request and one answer fold for both dialogs: the sign-in picker
+  // and the account detail picker must not grow two copies again.
+  expect(app).toContain("function probeProxy(proxy, target, signal) {");
+  expect(app).toContain("function foldProbeAnswer(list, proxy, data, networkErrorText) {");
+  expect(app).toContain("foldProbeAnswer(proxies, proxy, data, text.errorNetwork)");
+  expect(app).toContain("foldProbeAnswer(detailExitProxies, proxy, data, text.errorNetwork)");
+  // Both probe callbacks go through the shared request builder.
+  expect(
+    (app.match(/\(proxy, \{ signal \}\) => probeProxy\(proxy, target, signal\)/g) || []).length,
+  ).toBe(2);
+  // The sign-in sweep is only the guard, the shared fold and the redraws; the
+  // old hand-rolled data?.proxy branch is gone.
+  const signInSweep = /async function refreshSignInProxies\(\)[\s\S]*?\n}\n/.exec(app)?.[0] || "";
+  expect(signInSweep).toContain("foldProbeAnswer(proxies, proxy, data, text.errorNetwork)");
+  expect(signInSweep).not.toContain("data?.proxy");
+  const detailSweep = /async function loadAccountExit\(context\)[\s\S]*?\n}\n/.exec(app)?.[0] || "";
+  expect(detailSweep).toContain("foldProbeAnswer(detailExitProxies, proxy, data, text.errorNetwork)");
+  expect(detailSweep).not.toContain("data?.proxy");
+});
+
+test("the detail picker keeps the user's mode across probe redraws", () => {
+  // The <select> is static markup, so remember which account it was drawn for;
+  // otherwise a value left by the previous dialog looks like a user choice.
+  expect(app).toContain("let detailExitRenderedFor = null;");
+  expect(app).toContain('const key = accountDetailContext ? accountDetailContext.provider + "\\u0000" + accountDetailContext.key : "";');
+  expect(app).toContain('const previous = detailExitRenderedFor === key ? select.value : "";');
+  // Mode options are rebuilt every draw too, so the retention condition covers
+  // them and not just node ids.
+  for (const mode of ["__inherit__", "__direct__", "__custom__"]) {
+    expect(app).toContain(`previous === "${mode}" ||`);
+  }
+  expect(app).toContain("ordered.some((proxy) => proxy.id === previous)");
+  expect(app).toContain("detailExitRenderedFor = key;");
+  expect(app).toContain("detailExitRenderedFor = null;");
+  // Detail probes write into their own shallow copy, never the global list the
+  // sign-in dialog still uses.
+  expect(app).toContain("detailExitProxies = proxies.map((proxy) => ({ ...proxy }));");
+});

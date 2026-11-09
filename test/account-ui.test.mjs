@@ -249,3 +249,47 @@ test("the accounts tab and its dialogs are wired to real requests", () => {
   expect(app).toContain("accountCheckPath(context.provider, context.key)");
   expect(app).toContain('method: "PATCH"');
 });
+
+test("the list shows the account's current exit and the detail picker reuses the sign-in node list", () => {
+  // The list's last-login cell shows the account's current exit, falling back
+  // to the exit of the last login only when no current one is set.
+  expect(app).toContain("formatExit(view.exit ?? view.lastLogin, text.accountExitDirect)");
+  // The detail dropdown orders its nodes like the sign-in dialog and formats
+  // each option through the same live latency helper.
+  expect(app).toContain("orderSignInProxies(");
+  expect(app).toContain("formatSignInProxyOption(");
+  expect(app).toContain("detailExitTarget()");
+  expect(app).toContain("detailExitTesting.has(proxy.id) || rowTests.has(proxy.id)");
+  // Opening the detail probes the nodes in the background, and closing aborts
+  // the sweep and clears its testing state.
+  expect(app).toContain("await probeSignInProxies(");
+  expect(app).toContain("detailExitController.abort()");
+  expect(app).toContain("detailExitTesting.clear()");
+});
+
+test("both exits pickers share one probe request and one answer fold", () => {
+  expect(app).toContain("function probeProxy(proxy, target, signal) {");
+  expect(app).toContain("function foldProbeAnswer(list, proxy, data, networkErrorText) {");
+  expect(app).toContain("foldProbeAnswer(proxies, proxy, data, text.errorNetwork)");
+  expect(app).toContain("foldProbeAnswer(detailExitProxies, proxy, data, text.errorNetwork)");
+  expect(
+    (app.match(/\(proxy, \{ signal \}\) => probeProxy\(proxy, target, signal\)/g) || []).length,
+  ).toBe(2);
+});
+
+test("the detail picker keeps the user's mode across probe redraws", () => {
+  // The mode options are rebuilt on every probe redraw, so the picker must
+  // preserve the user's choice as well as node ids. The key guard keeps a
+  // value left by the previous dialog from counting as this dialog's choice.
+  expect(app).toContain("let detailExitRenderedFor = null;");
+  expect(app).toContain('const key = accountDetailContext ? accountDetailContext.provider + "\\u0000" + accountDetailContext.key : "";');
+  expect(app).toContain('const previous = detailExitRenderedFor === key ? select.value : "";');
+  for (const mode of ["__inherit__", "__direct__", "__custom__"]) {
+    expect(app).toContain(`previous === "${mode}" ||`);
+  }
+  expect(app).toContain("ordered.some((proxy) => proxy.id === previous)");
+  expect(app).toContain("detailExitRenderedFor = key;");
+  expect(app).toContain("detailExitRenderedFor = null;");
+  // A detail probe mutates only its own shallow copy of the node list.
+  expect(app).toContain("detailExitProxies = proxies.map((proxy) => ({ ...proxy }));");
+});

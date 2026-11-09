@@ -70,6 +70,23 @@ describe("accountView", () => {
     expect(accountView({ accountId: "", uid: "uid1", key: "k1" }).name).toBe("uid1");
     expect(accountView({ accountId: "", uid: "", key: "k1" }).name).toBe("k1");
   });
+
+  test("parses the account's current exit, defaulting to null", () => {
+    const exit = {
+      at: "2026-11-04T10:00:00.000Z",
+      proxyId: "px2",
+      proxyName: "02",
+      region: "SG",
+      type: "socks5",
+    };
+    // An object is kept exactly as the service sent it.
+    expect(accountView({ exit }).exit).toEqual(exit);
+    // null means the account follows its provider, and so does a missing field.
+    expect(accountView({ exit: null }).exit).toBeNull();
+    expect(accountView({}).exit).toBeNull();
+    // Anything that is not an object is treated as "no current exit".
+    expect(accountView({ exit: "surprise" }).exit).toBeNull();
+  });
 });
 
 describe("formatExit", () => {
