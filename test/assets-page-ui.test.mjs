@@ -5,6 +5,8 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buttonIds } from "./button-ids.mjs";
+import { ASSET_ACCOUNT_MAX } from "../ui/asset-view.js";
+import { ASSET_ACCOUNT_MAX as SERVICE_ACCOUNT_MAX } from "../lib/asset-registry.mjs";
 
 const root = join(import.meta.dir, "..");
 const html = readFileSync(join(root, "ui", "index.html"), "utf8");
@@ -62,6 +64,11 @@ test("the add/edit dialog and the delete dialog ship every control", () => {
   // The note is capped in the markup as well as in the validator.
   const note = /<textarea id="asset-note"[^>]*>/.exec(html)?.[0] || "";
   expect(note).toContain('maxlength="200"');
+  // The account cap in the markup matches the validator and the service, so a
+  // user cannot type past what the service would reject.
+  expect(ASSET_ACCOUNT_MAX).toBe(SERVICE_ACCOUNT_MAX);
+  const account = /<input id="asset-account"[^>]*>/.exec(html)?.[0] || "";
+  expect(account).toContain(`maxlength="${ASSET_ACCOUNT_MAX}"`);
   // Save is an explicit click control; no form submission anywhere.
   expect(html).not.toContain('type="submit"');
   // The page still keeps exactly one <details> (the provider catalog).

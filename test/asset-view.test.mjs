@@ -2,6 +2,7 @@
 // validation, list filtering and time formatting. No DOM and no browser.
 import { expect, test } from "bun:test";
 import {
+  ASSET_ACCOUNT_MAX,
   ASSET_NOTE_MAX,
   ASSET_TYPES,
   filterAssets,
@@ -57,6 +58,20 @@ test("a note is capped at 200 characters", () => {
   expect(validateAssetForm({ type: "google-mail", account: "a@example.com", note: "n".repeat(200) })).toBeNull();
   expect(validateAssetForm({ type: "google-mail", account: "a@example.com", note: "n".repeat(201) })).toBe("invalid_note");
   expect(validateAssetForm({ type: "google-mail", account: "a@example.com" })).toBeNull();
+});
+
+test("an account is capped at the service's 254 characters", () => {
+  expect(ASSET_ACCOUNT_MAX).toBe(254);
+  const long = `${"a".repeat(249)}@b.co`;
+  expect(validateAssetForm({ type: "google-mail", account: long, note: "" })).toBeNull();
+  expect(
+    validateAssetForm({ type: "google-mail", account: `${long}x`, note: "" }),
+  ).toBe("invalid_account");
+  // The phone path strips separators before the length check, so a padded
+  // number that normalizes to 11 digits stays valid.
+  expect(
+    validateAssetForm({ type: "cn-phone", account: "138 0013 8000", note: "" }),
+  ).toBeNull();
 });
 
 test("filterAssets narrows by type and search together", () => {
