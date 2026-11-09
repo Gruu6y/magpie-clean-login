@@ -2122,6 +2122,16 @@ let noteSaving = false;
 let accountDetailExit = null;
 let detailExitProxies = [];
 let exitSaving = false;
+// The detail dialog probes its candidate exits in the background so the picker
+// shows live latency, just like the sign-in dialog. Closing the dialog cancels
+// whatever is still queued or in flight.
+const detailExitTesting = new Set();
+const detailExitProxyGuard = createRequestGuard();
+let detailExitController = null;
+// Which account's picker the current <select> contents belong to. The element
+// is static markup, so without this a value left by the previous dialog would
+// look like a fresh user choice when the next account opens.
+let detailExitRenderedFor = null;
 // The hosting dialog polls only while it is open, and only for the one account
 // it was opened for. Nothing polls on the user's behalf in the background.
 let accountHostingContext = null;
@@ -3916,6 +3926,58 @@ function selectedSignInProxy() {
   return proxies.find((proxy) => proxy.id === id) || null;
 }
 
+// Both exits pickers sweep the same node list through the same route; keeping
+// one probe call is what stops the two dialogs from drifting apart.
+function probeProxy(proxy, target, signal) {
+  return api(`api/proxies/${encodeURIComponent(proxy.id)}/test`, {
+    method: "POST",
+    ...(target ? { body: { provider: target } } : {}),
+    signal,
+  });
+}
+
+// One fold for both exits pickers. The sign-in dialog and the account detail
+// dialog show the same nodes and probe them against the same target, so an
+// answer has to land in the local list the same way in both places.
+// Returns the entry it updated, or null when the list no longer holds that node.
+function foldProbeAnswer(list, proxy, data, networkErrorText) {
+  if (data?.proxy) {
+    const next = withProbeResult(data.proxy, data.result);
+    const index = list.findIndex((item) => item.id === next.id);
+    if (index >= 0) list[index] = next;
+    else list.push(next);
+    return next;
+  }
+  const current = list.find((item) => item.id === proxy.id);
+  if (!current) return null;
+  if (data?.result) {
+    Object.assign(current, withProbeResult(current, data.result));
+    current.status = data.result.ok ? "ok" : "error";
+    // Keep the row's generic number intact when this was a two-leg
+    // probe; the provider number already went into latencyByProvider.
+    // A two-leg probe whose exit leg failed has no exit number, so it
+    // keeps what the row already showed instead of borrowing the
+    // provider's round trip.
+    const providerLeg = data.result.target?.kind === "provider";
+    const stored = providerLeg
+      ? (Number.isFinite(data.result.exitLatency) ? data.result.exitLatency : null)
+      : data.result.latency;
+    current.latency = Number.isFinite(stored)
+      ? Math.round(stored)
+      : providerLeg && Number.isFinite(current.latency)
+        ? current.latency
+        : null;
+    current.errorCode = data.result.ok ? "" : data.result.errorCode || "unknown";
+    current.error = data.result.ok ? "" : data.result.error || "";
+    return current;
+  }
+  current.status = "error";
+  current.errorCode = "network";
+  current.error = networkErrorText;
+  current.latency = null;
+  return current;
+}
+
 // Re-read the stored proxies when the dialog opens so the dropdown reflects
 // GET /api/proxies, not just the list bootstrap cached. A failed read keeps
 // the bootstrap list; the dialog still works. Every candidate exit is then
@@ -3951,50 +4013,13 @@ async function refreshSignInProxies() {
   renderSignInProxies();
   await probeSignInProxies(
     ordered,
-    (proxy, { signal }) =>
-      api(`api/proxies/${encodeURIComponent(proxy.id)}/test`, {
-        method: "POST",
-        ...(target ? { body: { provider: target } } : {}),
-        signal,
-      }),
+    (proxy, { signal }) => probeProxy(proxy, target, signal),
     {
       signal: controller.signal,
       onResult(proxy, data) {
         if (!signInProxyGuard.isCurrent(tokenForSweep) || signInContext !== context) return;
         signInTestingProxies.delete(proxy.id);
-        if (data?.proxy) {
-          replaceProxy(withProbeResult(data.proxy, data.result));
-        } else if (data?.result) {
-          const current = proxies.find((item) => item.id === proxy.id);
-          if (current) {
-            Object.assign(current, withProbeResult(current, data.result));
-            current.status = data.result.ok ? "ok" : "error";
-            // Keep the row's generic number intact when this was a two-leg
-            // probe; the provider number already went into latencyByProvider.
-            // A two-leg probe whose exit leg failed has no exit number, so it
-            // keeps what the row already showed instead of borrowing the
-            // provider's round trip.
-            const providerLeg = data.result.target?.kind === "provider";
-            const stored = providerLeg
-              ? (Number.isFinite(data.result.exitLatency) ? data.result.exitLatency : null)
-              : data.result.latency;
-            current.latency = Number.isFinite(stored)
-              ? Math.round(stored)
-              : providerLeg && Number.isFinite(current.latency)
-                ? current.latency
-                : null;
-            current.errorCode = data.result.ok ? "" : data.result.errorCode || "unknown";
-            current.error = data.result.ok ? "" : data.result.error || "";
-          }
-        } else {
-          const current = proxies.find((item) => item.id === proxy.id);
-          if (current) {
-            current.status = "error";
-            current.errorCode = "network";
-            current.error = text.errorNetwork;
-            current.latency = null;
-          }
-        }
+        foldProbeAnswer(proxies, proxy, data, text.errorNetwork);
         renderSignInProxies();
         renderProxies();
       },
@@ -5393,9 +5418,11 @@ function accountRow(account) {
   fingerprint.append(pinned);
 
   const lastLogin = accountCell("proxy-checked account-cell-last-login", text.accountColLastLogin);
+  // This cell shows the exit the account is set to use right now; only when
+  // there is no current setting does it fall back to the last login's exit.
   lastLogin.textContent = text.accountLastLoginAt
     .replace("{time}", formatTime(view.lastLogin?.at || view.signedInAt))
-    .replace("{exit}", formatExit(view.lastLogin, text.accountExitDirect));
+    .replace("{exit}", formatExit(view.exit ?? view.lastLogin, text.accountExitDirect));
 
   const checkCell = accountCell("proxy-score-cell account-cell-check", text.accountColCheck);
   if (accountRunningFor(view.provider, view.key)) {
@@ -5919,6 +5946,13 @@ function renderDetailHistory(checks) {
   }
 }
 
+// The detail exit picker measures the provider this account belongs to, the
+// same target the sign-in dialog for that provider would probe.
+function detailExitTarget() {
+  const provider = accountDetailContext?.provider;
+  return provider ? resolveTargetId(provider, proxyTargets) : "";
+}
+
 // The per-account exit picker. It offers the same node list the check dialog
 // offers, plus the two magpie modes: follow the provider or force direct. A
 // custom URL magpie holds but the node list no longer knows is shown as-is
@@ -5927,6 +5961,8 @@ function renderDetailExit() {
   const select = byId("account-detail-exit");
   const status = byId("account-detail-exit-status");
   const save = byId("account-detail-exit-save");
+  const key = accountDetailContext ? accountDetailContext.provider + "\u0000" + accountDetailContext.key : "";
+  const previous = detailExitRenderedFor === key ? select.value : "";
   select.textContent = "";
   const inherit = document.createElement("option");
   inherit.value = "__inherit__";
@@ -5950,15 +5986,41 @@ function renderDetailExit() {
       : text.accountDetailExitCustom;
     select.append(custom);
   }
-  for (const proxy of detailExitProxies) {
+  // The node list is exactly the sign-in dialog's list: same order, same live
+  // latency/verdict text, so the two pickers can never disagree about an exit.
+  const ordered = orderSignInProxies(
+    detailExitProxies,
+    accountIdentities,
+    accountDetailContext?.provider,
+  );
+  for (const proxy of ordered) {
     const option = document.createElement("option");
     option.value = proxy.id;
-    option.textContent = `${proxy.name || proxy.id} · ${formatAddress(proxy)}`;
+    option.textContent = formatSignInProxyOption(
+      proxyForTarget(proxy, detailExitTarget(), proxyTargets),
+      text,
+      detailExitTesting.has(proxy.id) || rowTests.has(proxy.id),
+    );
     select.append(option);
   }
-  if (accountDetailExit?.mode === "direct") select.value = "__direct__";
-  else if (accountDetailExit?.mode === "custom") select.value = accountDetailExit.proxyId || "__custom__";
-  else select.value = "__inherit__";
+  // A probe redraw must not discard a node or a mode the user already picked.
+  // The mode options are rebuilt on every draw, so keeping only nodes would
+  // bounce a user's "follow provider"/"force direct" choice back to the stored
+  // value as soon as any probe answered. When the previous value is gone (or
+  // came from another account's dialog), land on the account's stored mode.
+  const stored = accountDetailExit?.mode === "direct"
+    ? "__direct__"
+    : accountDetailExit?.mode === "custom"
+      ? accountDetailExit.proxyId || "__custom__"
+      : "__inherit__";
+  select.value = previous &&
+    (previous === "__inherit__" ||
+      previous === "__direct__" ||
+      previous === "__custom__" ||
+      ordered.some((proxy) => proxy.id === previous))
+    ? previous
+    : stored;
+  detailExitRenderedFor = key;
   if (accountDetailExit?.ok === false) {
     select.disabled = true;
     save.disabled = true;
@@ -5976,7 +6038,9 @@ function renderDetailExit() {
 }
 
 async function loadAccountExit(context) {
-  detailExitProxies = proxies;
+  // Probe results are written into the local objects, so the detail dialog
+  // needs its own copy: the sign-in dialog keeps using the global list.
+  detailExitProxies = proxies.map((proxy) => ({ ...proxy }));
   accountDetailExit = null;
   renderDetailExit();
   let data;
@@ -5999,7 +6063,43 @@ async function loadAccountExit(context) {
     // Keep the bootstrap list if the read failed; the dialog still works.
     if (accountDetailContext !== context) return;
   }
+  if (accountDetailContext !== context) return;
+  // Probe every candidate exit so the picker shows live latency, exactly like
+  // the sign-in dialog, and redraw as each one answers. A re-open invalidates
+  // the previous pass so a late answer cannot touch the new dialog.
+  detailExitProxyGuard.cancel();
+  if (detailExitController) {
+    detailExitController.abort();
+    detailExitController = null;
+  }
+  detailExitTesting.clear();
+  const token = detailExitProxyGuard.begin();
+  const controller = new AbortController();
+  detailExitController = controller;
+  const target = detailExitTarget();
+  const ordered = orderSignInProxies(detailExitProxies, accountIdentities, context.provider);
+  for (const proxy of ordered) {
+    if (proxy?.id) detailExitTesting.add(proxy.id);
+  }
   renderDetailExit();
+  await probeSignInProxies(
+    ordered,
+    (proxy, { signal }) => probeProxy(proxy, target, signal),
+    {
+      signal: controller.signal,
+      onResult(proxy, data) {
+        if (!detailExitProxyGuard.isCurrent(token) || accountDetailContext !== context) return;
+        detailExitTesting.delete(proxy.id);
+        foldProbeAnswer(detailExitProxies, proxy, data, text.errorNetwork);
+        renderDetailExit();
+      },
+    },
+  );
+  if (detailExitProxyGuard.isCurrent(token)) {
+    detailExitTesting.clear();
+    if (detailExitController === controller) detailExitController = null;
+    if (accountDetailContext === context) renderDetailExit();
+  }
 }
 
 function openAccountDetail(account) {
@@ -6023,6 +6123,13 @@ function closeAccountDetail() {
 }
 
 function cleanupAccountDetail() {
+  detailExitProxyGuard.cancel();
+  if (detailExitController) {
+    detailExitController.abort();
+    detailExitController = null;
+  }
+  detailExitTesting.clear();
+  detailExitRenderedFor = null;
   accountDetailContext = null;
   accountDetailExit = null;
   detailExitProxies = [];
@@ -6406,6 +6513,15 @@ async function saveAccountExit() {
     if (accountDetailContext !== context) return;
     accountDetailExit = data?.exit ?? accountDetailExit;
     renderDetailExit();
+    if (data?.account) {
+      const index = accountIdentities.findIndex(
+        (item) => item?.provider === context.provider && item?.key === context.key,
+      );
+      if (index >= 0) accountIdentities[index] = data.account;
+      context.account = data.account;
+      renderDetailFacts(accountDisplay(data.account));
+      renderAccounts();
+    }
     const status = byId("account-detail-exit-status");
     status.textContent = text.accountDetailExitSaved;
     status.hidden = false;

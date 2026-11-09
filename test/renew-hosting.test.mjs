@@ -56,6 +56,7 @@ async function setup({
   withLedger = true,
   signedInAt = "2026-11-08T10:00:00.000Z",
   lastLogin = { at: "2026-11-08T10:00:00.000Z", proxyId: null },
+  currentExit = null,
   proxyRecord = null,
   signIn = fakeSignIn(),
   now = () => BASE,
@@ -74,6 +75,7 @@ async function setup({
       uid: "u-1",
       signedInAt,
       ...(lastLogin ? { lastLogin } : {}),
+      ...(currentExit ? { exit: currentExit } : {}),
     });
   }
   if (withIdentity) {
@@ -261,6 +263,76 @@ test("a direct login stays a direct renewal", async () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(ctx.signIn.calls[0].proxy).toBeNull();
     expect(ctx.signIn.calls[0].proxyMeta).toBeNull();
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+// The account's current exit (the `exit` the detail dialog writes) drives
+// hosting; the login exit is only the fallback when no current exit is set.
+test("the ledger's current exit wins over the last login exit", async () => {
+  const proxyA = {
+    id: "px-a",
+    name: "Exit A",
+    region: "HK",
+    type: "http",
+    server: "http://127.0.0.1:8080",
+  };
+  // Only A exists in the proxy list; B is deliberately gone. If hosting fell
+  // back to lastLogin it would refuse with exit_missing instead of reaching A.
+  const ctx = await setup({
+    currentExit: {
+      at: "2026-11-08T11:00:00.000Z",
+      proxyId: "px-a",
+      proxyName: "Exit A",
+      region: "HK",
+      type: "http",
+    },
+    lastLogin: { at: "2026-11-08T10:00:00.000Z", proxyId: "px-b" },
+    proxyRecord: proxyA,
+  });
+  try {
+    const view = await ctx.hosting.enable(PROVIDER, KEY);
+    expect(view.enabled).toBe(true);
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(ctx.signIn.calls).toHaveLength(1);
+    expect(ctx.signIn.calls[0].proxy).toBe(proxyA);
+    expect(ctx.signIn.calls[0].proxyMeta).toEqual({
+      id: "px-a",
+      name: "Exit A",
+      region: "HK",
+      type: "http",
+    });
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("with no current exit the last login exit is still used", async () => {
+  const proxyB = {
+    id: "px-b",
+    name: "Exit B",
+    region: "US",
+    type: "socks5",
+    server: "socks5://127.0.0.1:1080",
+  };
+  const ctx = await setup({
+    currentExit: null,
+    lastLogin: { at: "2026-11-08T10:00:00.000Z", proxyId: "px-b" },
+    proxyRecord: proxyB,
+  });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(ctx.signIn.calls[0].proxy).toBe(proxyB);
+    expect(ctx.signIn.calls[0].proxyMeta).toEqual({
+      id: "px-b",
+      name: "Exit B",
+      region: "US",
+      type: "socks5",
+    });
   } finally {
     cleanup(ctx);
   }

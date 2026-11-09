@@ -84,6 +84,7 @@ test("GET /api/accounts lists the ledger fields and the signed-in flag", async (
   const extras = {
     note: "",
     lastLogin: null,
+    exit: null,
     loginHistory: [],
     lastCheck: null,
     checks: [],
@@ -448,7 +449,13 @@ describe("account exit routes", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
-    expect(body.account).toBeUndefined();
+    expect(body.account?.exit).toEqual({
+      at: expect.any(String),
+      proxyId,
+      proxyName: "Exit A",
+      region: "",
+      type: "http",
+    });
     expect(body.exit.mode).toBe("custom");
     // The stored URL carries the exit's credentials; the response never does.
     expect(body.exit.url).toBeUndefined();
@@ -462,8 +469,19 @@ describe("account exit routes", () => {
     expect(entry.accountProxies["alpha@example.com"]).toBe(customUrl);
     expect(entry.accountProxies["other-user"]).toBe(otherEntry);
     expect(entry.proxy).toBe(providerProxy);
-    // The account ledger is not part of this route's write set.
-    expect(await readAccountMeta(alphaDir)).toEqual(metaBefore);
+    // The route mirrors the change into the plugin's own ledger as this
+    // account's current exit; every other ledger field is left untouched.
+    const afterExit = await readAccountMeta(alphaDir);
+    expect(afterExit.exit).toEqual({
+      at: expect.any(String),
+      proxyId,
+      proxyName: "Exit A",
+      region: "",
+      type: "http",
+    });
+    const { exit: mirroredExit, ...ledgerRest } = afterExit;
+    expect(mirroredExit).toBeTruthy();
+    expect(ledgerRest).toEqual(metaBefore);
   });
 
   test("GET exit reverse-maps the stored URL back to the proxy id", async () => {
@@ -624,5 +642,66 @@ describe("account exit routes", () => {
     const res = await api("DELETE", alphaPath);
     expect(res.status).toBe(405);
     expect(res.headers.get("allow")).toBe("GET, PATCH");
+  });
+
+  test("PATCH exit mirrors the current exit into the ledger and the accounts view", async () => {
+    // The plugin's own ledger keeps "the exit this account is set to use",
+    // separate from the lastLogin history. Seed one so the mirror is proven
+    // not to rewrite the historical record.
+    const seeded = await readAccountMeta(alphaDir);
+    const historicLogin = {
+      at: "2026-11-03T10:00:00.000Z",
+      proxyId: "px-historic",
+      proxyName: "Old exit",
+      region: "US",
+      type: "http",
+    };
+    await writeAccountMeta(alphaDir, {
+      ...seeded,
+      lastLogin: historicLogin,
+      loginHistory: [historicLogin],
+    });
+
+    const custom = await patchExit(alphaPath, { mode: "custom", proxyId });
+    expect(custom.status).toBe(200);
+    const customMeta = await readAccountMeta(alphaDir);
+    expect(customMeta.exit).toEqual({
+      at: expect.any(String),
+      proxyId,
+      proxyName: "Exit A",
+      region: "",
+      type: "http",
+    });
+    // The exit change never rewrites the sign-in that actually happened.
+    expect(customMeta.lastLogin).toEqual(historicLogin);
+    expect(customMeta.loginHistory).toEqual([historicLogin]);
+
+    const afterCustom = (await (await api("GET", "/api/accounts")).json()).accounts.find(
+      (a) => a.key === "workbuddy#alpha",
+    );
+    expect(afterCustom.exit).toEqual(customMeta.exit);
+
+    const direct = await patchExit(alphaPath, { mode: "direct" });
+    expect(direct.status).toBe(200);
+    const directMeta = await readAccountMeta(alphaDir);
+    expect(directMeta.exit).toEqual({
+      at: expect.any(String),
+      proxyId: null,
+      proxyName: "",
+      region: "",
+      type: null,
+    });
+    const afterDirect = (await (await api("GET", "/api/accounts")).json()).accounts.find(
+      (a) => a.key === "workbuddy#alpha",
+    );
+    expect(afterDirect.exit).toEqual(directMeta.exit);
+
+    const inherit = await patchExit(alphaPath, { mode: "inherit" });
+    expect(inherit.status).toBe(200);
+    expect((await readAccountMeta(alphaDir)).exit).toBeNull();
+    const afterInherit = (await (await api("GET", "/api/accounts")).json()).accounts.find(
+      (a) => a.key === "workbuddy#alpha",
+    );
+    expect(afterInherit.exit).toBeNull();
   });
 });

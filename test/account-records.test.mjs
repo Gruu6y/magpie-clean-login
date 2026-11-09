@@ -11,6 +11,7 @@ import {
   loginSnapshot,
   normalizeNote,
   withCheck,
+  withExit,
   withLogin,
   withNote,
 } from "../lib/account-records.mjs";
@@ -147,10 +148,41 @@ test("withCheck prepends, caps at 10 and keeps earlier records intact", () => {
   expect(grown.checks[9].summary).toEqual([]);
 });
 
+test("withExit records the account's current exit without touching the login history", () => {
+  const login = loginSnapshot(FULL_PROXY, AT);
+  const meta = { version: 1, key: "k", lastLogin: login, loginHistory: [login], note: "keep" };
+  const next = withExit(meta, loginSnapshot(FULL_PROXY, "2026-11-09T00:00:00.000Z"));
+  expect(next.note).toBe("keep");
+  expect(next.lastLogin).toEqual(login);
+  expect(next.loginHistory).toEqual([login]);
+  expect(next.exit).toEqual({
+    at: "2026-11-09T00:00:00.000Z",
+    proxyId: "p-01",
+    proxyName: "Hong Kong 01",
+    region: "香港",
+    type: "socks5",
+  });
+  // The full record's credential, host and port never reach the ledger.
+  const text = JSON.stringify(next);
+  for (const secret of ["secret-user", "secret-pass", "10.0.0.7", "1080"]) {
+    expect(text).not.toContain(secret);
+  }
+  expect(meta.exit).toBeUndefined();
+});
+
+test("withExit clears the record for anything that is not a snapshot", () => {
+  const meta = { version: 1, key: "k", exit: { at: AT, proxyId: "p", proxyName: "HK", region: "香港", type: "http" } };
+  expect(withExit(meta, null).exit).toBeNull();
+  expect(withExit(meta, "direct").exit).toBeNull();
+  expect(withExit(meta, undefined).exit).toBeNull();
+  expect(meta.exit).not.toBeNull();
+});
+
 test("accountExtras gives defaults for a bare ledger", () => {
   expect(accountExtras(null)).toEqual({
     note: "",
     lastLogin: null,
+    exit: null,
     loginHistory: [],
     lastCheck: null,
     checks: [],
@@ -158,6 +190,7 @@ test("accountExtras gives defaults for a bare ledger", () => {
   expect(accountExtras({ version: 1, key: "k" })).toEqual({
     note: "",
     lastLogin: null,
+    exit: null,
     loginHistory: [],
     lastCheck: null,
     checks: [],
@@ -200,6 +233,7 @@ test("accountExtras derives lastCheck and whitelists nested fields", () => {
     region: "",
     type: null,
   });
+  expect(extras.exit).toBeNull();
   expect(extras.loginHistory).toHaveLength(1);
   expect(extras.checks).toEqual([
     {
@@ -223,11 +257,13 @@ test("accountExtras normalizes malformed history entries", () => {
   const extras = accountExtras({
     note: 42,
     lastLogin: "not an object",
+    exit: 42,
     loginHistory: [null, 7, { at: AT, grade: "D", exposure: 4, summary: ["x", 9] }],
     checks: [null, 7, { at: AT, grade: "Z", exposure: -1, summary: "nope" }],
   });
   expect(extras.note).toBe("");
   expect(extras.lastLogin).toBeNull();
+  expect(extras.exit).toBeNull();
   expect(extras.loginHistory).toHaveLength(3);
   expect(extras.checks).toHaveLength(3);
   expect(extras.checks[0].grade).toBeNull();

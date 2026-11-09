@@ -25,6 +25,10 @@ export function accountView(account) {
   const signedIn = Boolean(value.signedIn);
   const signedInAt = typeof value.signedInAt === "string" ? value.signedInAt : "";
   const lastLogin = value.lastLogin && typeof value.lastLogin === "object" ? value.lastLogin : null;
+  // The exit the account is currently set to use; null means "follow the
+  // provider". It is separate from lastLogin so a manual exit change shows up
+  // without rewriting the sign-in history.
+  const exit = value.exit && typeof value.exit === "object" ? value.exit : null;
   const checks = Array.isArray(value.checks) ? value.checks : [];
   const lastCheck = value.lastCheck && typeof value.lastCheck === "object"
     ? value.lastCheck
@@ -43,6 +47,7 @@ export function accountView(account) {
     signedIn,
     signedInAt,
     lastLogin,
+    exit,
     lastCheck,
     checks,
     note,
