@@ -50,6 +50,11 @@ test("the accounts tab and panel ship every control", () => {
   expect(html).toContain('id="account-hosting-dialog"');
   expect(html).toContain('id="account-check-proxy"');
   expect(html).toContain('id="account-detail-note"');
+  expect(html).toContain('id="account-detail-exit"');
+  expect(html).toContain('id="account-detail-exit-label"');
+  expect(html).toContain('id="account-detail-exit-hint"');
+  expect(html).toContain('id="account-detail-exit-status"');
+  expect(html).toContain('id="account-detail-exit-save"');
   expect(html).toContain('id="toasts"');
 });
 
@@ -96,6 +101,10 @@ test("the page only reads real endpoints and never invents a verdict", () => {
     'body: { note }',
     'body: { proxyId }',
     "accountCheckPath(context.provider, context.key)",
+    "accountExitPath(",
+    'byId("account-detail-exit-save").addEventListener',
+    "loadAccountExit",
+    "saveAccountExit",
     "${accountCheckPath(context.provider, context.key)}/cancel",
     "ACCOUNT_CHECK_POLL_MS = 800",
     "serverErrorText(error)",

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   accountCheckCancelPath,
   accountCheckPath,
+  accountExitPath,
   accountIdentityPath,
   accountIdentityView,
   accountLabel,
@@ -151,6 +152,13 @@ test("accountIdentityPath URL-encodes both segments", () => {
     "api/accounts/workbuddy/workbuddy%23ab12",
   );
   expect(accountIdentityPath("a/b", "c d")).toBe("api/accounts/a%2Fb/c%20d");
+});
+
+test("accountExitPath URL-encodes both segments", () => {
+  expect(accountExitPath("workbuddy", "workbuddy#ab12")).toBe(
+    "api/accounts/workbuddy/workbuddy%23ab12/exit",
+  );
+  expect(accountExitPath("a/b", "c d")).toBe("api/accounts/a%2Fb/c%20d/exit");
 });
 
 test("accountIdentityView exposes no fingerprint and no path", () => {

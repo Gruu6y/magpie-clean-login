@@ -17,6 +17,7 @@ export const buttonIds = [
   "account-detail-check",
   "account-detail-close",
   "account-detail-dismiss",
+  "account-detail-exit-save",
   "account-detail-note-save",
   "account-filter-all",
   "account-filter-reset",
