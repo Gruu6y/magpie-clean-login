@@ -224,6 +224,19 @@ bun bin/clean-login.mjs proxies     # exits only, no credentials
 bun bin/clean-login.mjs accounts    # accounts only
 ```
 
+Accounts and exits are fully drivable from the command line, with no page open:
+
+```sh
+bun bin/clean-login.mjs proxies add home-01 http 127.0.0.1 7102   # store an exit
+bun bin/clean-login.mjs accounts import plan                      # preview magpie's accounts
+bun bin/clean-login.mjs accounts import run --only <provider>#<recordId>
+bun bin/clean-login.mjs accounts exit <provider>#<recordId> --mode custom --proxy <proxyId>
+bun bin/clean-login.mjs accounts note <provider>#<recordId> spare
+bun bin/clean-login.mjs accounts delete <provider>#<recordId>
+```
+
+The read-only preview and the real import run through the same function, so the plan and the import can never disagree about which accounts exist; without `--only` the whole plan is imported.
+
 The CLI looks for the service on `127.0.0.1:3492` by default (override with `--port` or `--url`), reads the per-process page token from the page the service itself serves, and never prints that token. It has no dependency beyond the runtime's `fetch`, so it starts in milliseconds and never loads the browser modules.
 
 Two things keep a program from having to poll:
@@ -235,6 +248,10 @@ Two things keep a program from having to poll:
 bun bin/clean-login.mjs signin start --provider workbuddy --proxy hk-home-1 --wait
 bun bin/clean-login.mjs signin code 123456
 bun bin/clean-login.mjs proxy score hk-home-1 --wait
+bun bin/clean-login.mjs accounts prune                # sweep directories that own no credential
+bun bin/clean-login.mjs accounts hosting              # renewal policies and the job in flight
+bun bin/clean-login.mjs env cancel                    # stop the login-browser download
+bun bin/clean-login.mjs score cancel                  # stop the trust-score check
 ```
 
 Run `bun bin/clean-login.mjs help` for the full command list. A remote service (`magpie web`) has no loopback page to read, so pass `--token` explicitly there.

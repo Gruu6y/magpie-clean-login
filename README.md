@@ -224,6 +224,19 @@ bun bin/clean-login.mjs proxies     # 只看出口，不含凭据
 bun bin/clean-login.mjs accounts    # 只看账号
 ```
 
+账号和出口的整套操作都能在命令行完成，不用开页面：
+
+```sh
+bun bin/clean-login.mjs proxies add 家宽01 http 127.0.0.1 7102   # 存一条出口
+bun bin/clean-login.mjs accounts import plan                     # 预览 magpie 已有的账号
+bun bin/clean-login.mjs accounts import run --only <provider>#<recordId>
+bun bin/clean-login.mjs accounts exit <provider>#<recordId> --mode custom --proxy <proxyId>
+bun bin/clean-login.mjs accounts note <provider>#<recordId> 备用号
+bun bin/clean-login.mjs accounts delete <provider>#<recordId>
+```
+
+`accounts import` 只读预览与真导入走的是同一个函数，所以预览与实际导入不可能对不上；不带 `--only` 时导入整份计划。
+
 CLI 默认在 `127.0.0.1:3492` 找服务（用 `--port` 或 `--url` 覆盖），从服务自己送出的页面里读取每进程一份的页面 token，并且从不把这个 token 打印出来。除了运行时的 `fetch` 它没有任何依赖，所以毫秒级启动，也不会加载浏览器模块。
 
 有两件事让程序不必轮询：
@@ -235,6 +248,10 @@ CLI 默认在 `127.0.0.1:3492` 找服务（用 `--port` 或 `--url` 覆盖），
 bun bin/clean-login.mjs signin start --provider workbuddy --proxy hk-home-1 --wait
 bun bin/clean-login.mjs signin code 123456
 bun bin/clean-login.mjs proxy score hk-home-1 --wait
+bun bin/clean-login.mjs accounts prune                # 扫掉不再持有凭据的账号目录
+bun bin/clean-login.mjs accounts hosting              # 续期托管的开关与正在跑的任务
+bun bin/clean-login.mjs env cancel                    # 停掉登录浏览器下载
+bun bin/clean-login.mjs score cancel                  # 停掉信任度评分
 ```
 
 完整命令列表跑 `bun bin/clean-login.mjs help`。远程服务（`magpie web`）没有回环页面可读，那里要显式传 `--token`。
