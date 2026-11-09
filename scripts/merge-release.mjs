@@ -349,7 +349,10 @@ function realDeps(pr) {
     ghJson: (args, options = {}) => {
       const expanded = args.map((a) => (a.includes("__REPO__") ? a.replace("__REPO__", process.env.CL_REPO || repoSlug()) : a));
       const result = sh([GH, ...expanded], cwdOf(options));
-      if (result.code !== 0) throw new Error(`gh ${args.join(" ")} failed: ${result.stderr}`);
+      // Name the command that actually ran: `args` still holds the __REPO__
+      // placeholder, so printing it sends a stalled wait-for-ci to a path that
+      // does not exist.
+      if (result.code !== 0) throw new Error(`gh ${expanded.join(" ")} failed: ${result.stderr}`);
       const text = result.stdout;
       if (!text) return null;
       // `gh pr merge` prints human-readable text, not JSON. Only the --json

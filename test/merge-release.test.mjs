@@ -336,6 +336,15 @@ test("the foreign-push decision reads the branch ref, not the lagging PR head", 
   expect(runner).toContain("refusing to merge a head without the version");
 });
 
+test("a failed gh call names the real repository, not the __REPO__ placeholder", () => {
+  const runner = readFileSync(join(import.meta.dir, "..", "scripts", "merge-release.mjs"), "utf8");
+  // ghJson expands the placeholder into `expanded`; the error message has to
+  // describe that command, or a stalled wait-for-ci reports repos/__REPO__/...
+  // and sends the reader to a path that does not exist.
+  expect(runner).toContain('gh ${expanded.join(" ")} failed:');
+  expect(runner).not.toContain('gh ${args.join(" ")} failed:');
+});
+
 test("a merge-point commit that touches more than package.json is refused", async () => {
   const { deps, calls } = fixture({ numstat: "1\t1\tpackage.json\n2\t0\tlib/server.mjs\n" });
   const error = await runMergeRelease({ pr: 64 }, deps).catch((e) => e);
