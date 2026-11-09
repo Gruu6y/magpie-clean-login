@@ -410,6 +410,7 @@ test("the UI modules are readable from an opaque origin", async () => {
   for (const path of [
     "/app.js",
     "/account-state.js",
+    "/asset-view.js",
     "/reload-guard.js",
     "/provider-state.js",
     "/proxy-state.js",
@@ -483,7 +484,7 @@ test("the UI is genuinely Host-driven", () => {
 });
 
 test("static files exist and carry no mock data or dead action buttons", () => {
-  for (const file of ["ui/index.html", "ui/style.css", "ui/app.js", "ui/account-state.js", "ui/account-view.js", "ui/proxy-state.js", "ui/provider-state.js", "ui/signin-state.js", "lib/provider-registry.mjs"]) {
+  for (const file of ["ui/index.html", "ui/style.css", "ui/app.js", "ui/account-state.js", "ui/account-view.js", "ui/asset-view.js", "ui/proxy-state.js", "ui/provider-state.js", "ui/signin-state.js", "lib/provider-registry.mjs"]) {
     expect(existsSync(join(root, file))).toBe(true);
   }
   const html = readFileSync(join(root, "ui", "index.html"), "utf8");

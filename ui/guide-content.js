@@ -1,4 +1,4 @@
-// The in-page manual, shown in the fourth tab.
+// The in-page manual, shown in the fifth tab.
 //
 // This is prose for a person who has never used the plugin, so it is kept out
 // of app.js (which is wiring) and out of index.html (which the editorial test
