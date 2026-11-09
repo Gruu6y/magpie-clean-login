@@ -64,6 +64,9 @@ test("parseArgs handles values, flags, repeats and --", () => {
       "--input",
       "email=a@b.com",
       "--input=code=123",
+      "--only",
+      "antigravity#d13e",
+      "--only=codex#1",
       "--single",
       "--raw",
       "--",
@@ -75,6 +78,7 @@ test("parseArgs handles values, flags, repeats and --", () => {
     options: {
       provider: "workbuddy",
       input: ["email=a@b.com", "code=123"],
+      only: ["antigravity#d13e", "codex#1"],
       single: true,
       raw: true,
     },
@@ -320,6 +324,106 @@ test("missing arguments and unknown commands fail with a specific code", async (
   });
 });
 
+test("proxies add, delete and targets map to the proxy routes", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+  await r.run(["proxies", "add", "柳老师01", "http", "127.0.0.1", "7102", "--user", "u", "--pass", "p", ...args]);
+  await r.run(["proxies", "delete", "p-1", ...args]);
+  await r.run(["proxies", "targets", ...args]);
+  expect(fake.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+    "POST /api/proxies",
+    "DELETE /api/proxies/p-1",
+    "GET /api/proxy-targets",
+  ]);
+  expect(fake.calls[0].body).toEqual({
+    name: "柳老师01",
+    type: "http",
+    host: "127.0.0.1",
+    port: "7102",
+    username: "u",
+    password: "p",
+  });
+
+  // Every positional is required; a short call must not reach the service.
+  await expect(r.run(["proxies", "add", "n", "http", "h", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(r.run(["proxies", "delete", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+});
+
+test("accounts import, exit, note, delete, prune and hosting map to the account routes and encode #", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+  const slotKey = ["antigravity", "d13e957af937ea32"].join("#");
+  await r.run(["accounts", "import", ...args]);
+  await r.run(["accounts", "import", "plan", ...args]);
+  await r.run(["accounts", "import", "run", ...args]);
+  await r.run(["accounts", "import", "run", "--only", slotKey, "--only", "codex#1", ...args]);
+  await r.run(["accounts", "exit", "antigravity", slotKey, ...args]);
+  await r.run(["accounts", "exit", "antigravity", slotKey, "--mode", "direct", ...args]);
+  await r.run(["accounts", "exit", "antigravity", slotKey, "--mode", "custom", "--proxy", "p1", ...args]);
+  await r.run(["accounts", "note", "antigravity", slotKey, "备用号", ...args]);
+  await r.run(["accounts", "delete", "antigravity", slotKey, ...args]);
+  await r.run(["accounts", "prune", ...args]);
+  await r.run(["accounts", "hosting", ...args]);
+  const encoded = encodeURIComponent(slotKey);
+  expect(fake.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+    "GET /api/accounts/import/plan",
+    "GET /api/accounts/import/plan",
+    "POST /api/accounts/import",
+    "POST /api/accounts/import",
+    `GET /api/accounts/antigravity/${encoded}/exit`,
+    `PATCH /api/accounts/antigravity/${encoded}/exit`,
+    `PATCH /api/accounts/antigravity/${encoded}/exit`,
+    `PATCH /api/accounts/antigravity/${encoded}`,
+    `DELETE /api/accounts/antigravity/${encoded}`,
+    "POST /api/accounts/prune",
+    "GET /api/accounts/hosting",
+  ]);
+  expect(fake.calls[2].body).toEqual({});
+  expect(fake.calls[3].body).toEqual({ keys: [slotKey, "codex#1"] });
+  expect(fake.calls[5].body).toEqual({ mode: "direct" });
+  expect(fake.calls[6].body).toEqual({ mode: "custom", proxyId: "p1" });
+  expect(fake.calls[7].body).toEqual({ note: "备用号" });
+  // Custom mode without a proxy id is refused before a request is sent.
+  await expect(
+    r.run(["accounts", "exit", "antigravity", slotKey, "--mode", "custom", ...args]),
+  ).rejects.toMatchObject({ code: "missing_argument" });
+  // An account command needs both segments, and an unknown import step is refused.
+  await expect(r.run(["accounts", "delete", "antigravity", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(r.run(["accounts", "import", "nonsense", ...args])).rejects.toMatchObject({
+    code: "bad_command",
+  });
+});
+
+test("score cancel, env cancel, report and market map to their routes", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+  await r.run(["score", "cancel", ...args]);
+  await r.run(["env", "cancel", ...args]);
+  await r.run(["report", "--provider", "antigravity", "--note", "403", "--language", "zh-Hans", ...args]);
+  await r.run(["market", ...args]);
+  await r.run(["market", "status", ...args]);
+  await r.run(["market", "install", "@magpie-community/opencode-qoder-auth", ...args]);
+  expect(fake.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+    "POST /api/proxy-score/cancel",
+    "POST /api/environment/cancel",
+    "POST /api/report",
+    "GET /api/market/install",
+    "GET /api/market/install",
+    "POST /api/market/install",
+  ]);
+  expect(fake.calls[2].body).toEqual({ provider: "antigravity", note: "403", language: "zh-Hans" });
+  expect(fake.calls[5].body).toEqual({ package: "@magpie-community/opencode-qoder-auth" });
+});
+
 // ---------- the real binary against a real service ----------
 
 const tmp = mkdtempSync(join(tmpdir(), "clean-login-agent-cli-e2e-"));
@@ -395,6 +499,19 @@ test("the shipped binary drives the live service end to end", async () => {
   // No flow has run, so the real controller reports null; the CLI passes it
   // through instead of inventing an idle object.
   expect(JSON.parse(signin.stdout.trim()).flow).toBeNull();
+
+  // Round-trip proxy add + delete and the targets list against the live server.
+  const added = await cli("proxies", "add", "家宽01", "http", "127.0.0.1", "7102", "--raw");
+  expect(added.status).toBe(0);
+  const addedId = JSON.parse(added.stdout.trim()).proxy.id;
+  expect(addedId).toBeTruthy();
+  const removed = await cli("proxies", "delete", addedId, "--raw");
+  expect(removed.status).toBe(0);
+  expect(JSON.parse(removed.stdout.trim())).toEqual({ ok: true, id: addedId });
+
+  const targets = await cli("proxies", "targets", "--raw");
+  expect(targets.status).toBe(0);
+  expect(Array.isArray(JSON.parse(targets.stdout.trim()).targets)).toBe(true);
 });
 
 test("the shipped binary reports a bad command as a JSON error and exits 1", async () => {
