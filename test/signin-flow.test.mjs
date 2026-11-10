@@ -760,21 +760,57 @@ test("a method with no prompts still calls authorize the way it always did", asy
   await controller.whenSettled();
 });
 
-test("a plugin that returns no url and no code method is still an honest error", async () => {
-  const { controller } = await harness({
+test("a url-less local-session method registers the account without opening a browser", async () => {
+  const calls = [];
+  const { state, controller } = await harness({
     methods: [
       {
         type: "oauth",
-        label: "Provider account (broken)",
-        authorize: async () => ({ url: "", instructions: "nothing", method: "auto", callback: async () => success() }),
+        label: "Sign in with Google",
+        // agy-cli's shape when its own CLI session is already signed in: no URL,
+        // no prompts, and a callback that reports the account.
+        authorize: async () => ({
+          url: "",
+          instructions: "",
+          method: "auto",
+          callback: async () => {
+            calls.push("callback");
+            return { type: "success", key: "agy" };
+          },
+        }),
       },
     ],
   });
-  await expect(controller.startSignIn({ provider: "workbuddy" })).rejects.toMatchObject({
-    code: "no_url",
-    status: 502,
+  const started = await controller.startSignIn({ provider: "agy-cli" });
+  expect(started.url).toBe("");
+  // Nothing to open, so no window may be started at "".
+  expect(state.launched).toBeNull();
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.state).toBe("done");
+  expect(flow.error).toBeNull();
+  expect(calls).toEqual(["callback"]);
+});
+
+test("a silent sign-in refuses a local-session method with not_hostable", async () => {
+  const methods = [
+    {
+      type: "oauth",
+      label: "Sign in with Google",
+      authorize: async () => ({
+        url: "",
+        instructions: "",
+        method: "auto",
+        callback: async () => ({ type: "success", key: "agy" }),
+      }),
+    },
+  ];
+  const { state, controller } = await harness({ methods });
+  await expect(controller.startSignIn({ provider: "agy-cli", silent: true })).rejects.toMatchObject({
+    code: "not_hostable",
+    status: 409,
   });
-  expect(controller.status().state).toBe("error");
+  expect(state.launched).toBeNull();
 });
 
 test("the state list covers the whole lifecycle", () => {
