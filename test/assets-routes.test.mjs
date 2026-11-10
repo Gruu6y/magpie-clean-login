@@ -128,6 +128,23 @@ test("POST /api/assets rejects invalid types, accounts and notes", async () => {
   }
 });
 
+// The account cap is asserted at the wire boundary with a literal, so a change
+// to the service limit fails here even if the shared constant moves with it.
+test("POST /api/assets accepts a 254 character account and rejects 255", async () => {
+  const edge = `${"a".repeat(249)}@b.co`;
+  expect(edge).toHaveLength(254);
+  const ok = await api("POST", "/api/assets", { type: "google-mail", account: edge });
+  expect(ok.status).toBe(201);
+  expect((await ok.json()).asset.account).toBe(edge);
+
+  const tooLong = await api("POST", "/api/assets", {
+    type: "google-mail",
+    account: `${edge}x`,
+  });
+  expect(tooLong.status).toBe(400);
+  expect((await tooLong.json()).error).toBe("invalid_account");
+});
+
 test("POST /api/assets rejects a missing or non-object body", async () => {
   const empty = await fetch(`http://127.0.0.1:${service.port}/api/assets`, {
     method: "POST",
