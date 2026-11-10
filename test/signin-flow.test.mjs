@@ -292,6 +292,48 @@ test("a missing plugin executable is reported honestly", async () => {
   expect(controller.status().error.code).toBe("browser_missing");
 });
 
+test("a plugin's own failure is reported verbatim instead of as a missing callback", async () => {
+  // agy-cli answers `{ type: "failed", error: "agy CLI not found…" }` when the
+  // CLI is not installed. That reason must reach the user; it is not a plugin
+  // shape problem.
+  const { controller } = await harness({
+    methods: [
+      {
+        type: "oauth",
+        label: "Sign in with Google",
+        authorize: async () => ({
+          type: "failed",
+          error: "agy CLI not found. Install Antigravity CLI first: https://antigravity.google/docs/cli",
+        }),
+      },
+    ],
+  });
+  await expect(controller.startSignIn({ provider: "workbuddy" })).rejects.toMatchObject({
+    code: "signin_failed",
+    status: 502,
+    message:
+      "agy CLI not found. Install Antigravity CLI first: https://antigravity.google/docs/cli",
+  });
+  expect(controller.status().state).toBe("error");
+  expect(controller.status().error.code).toBe("signin_failed");
+});
+
+test("a plugin failure without a message still says which provider failed", async () => {
+  const { controller } = await harness({
+    methods: [
+      {
+        type: "oauth",
+        label: "Sign in with Google",
+        authorize: async () => ({ type: "failed" }),
+      },
+    ],
+  });
+  await expect(controller.startSignIn({ provider: "workbuddy" })).rejects.toMatchObject({
+    code: "signin_failed",
+    message: 'The "workbuddy" sign-in could not start.',
+  });
+});
+
 test("a plugin with no browser method is reported honestly", async () => {
   const { controller } = await harness({
     methods: [{ type: "api", label: "API key" }],
