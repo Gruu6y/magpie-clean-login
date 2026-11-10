@@ -222,9 +222,10 @@ bun bin/clean-login.mjs agent       # 整个服务的一份紧凑 JSON 摘要
 bun bin/clean-login.mjs providers   # 只看供应商卡片
 bun bin/clean-login.mjs proxies     # 只看出口，不含凭据
 bun bin/clean-login.mjs accounts    # 只看账号
+bun bin/clean-login.mjs assets      # 只看已登记的资产（邮箱、手机号、Apple ID）
 ```
 
-账号和出口的整套操作都能在命令行完成，不用开页面：
+账号、出口和资产登记都能在命令行完成，不用开页面：
 
 ```sh
 bun bin/clean-login.mjs proxies add 家宽01 http 127.0.0.1 7102   # 存一条出口
@@ -233,9 +234,13 @@ bun bin/clean-login.mjs accounts import run --only <provider>#<recordId>
 bun bin/clean-login.mjs accounts exit <provider>#<recordId> --mode custom --proxy <proxyId>
 bun bin/clean-login.mjs accounts note <provider>#<recordId> 备用号
 bun bin/clean-login.mjs accounts delete <provider>#<recordId>
+bun bin/clean-login.mjs assets add google-mail a@b.com --note 主邮箱   # 登记一条资产
+bun bin/clean-login.mjs assets get <id>                                 # 按 id 取一条
+bun bin/clean-login.mjs assets update <id> --note 备用                  # 改类型/账号/备注
+bun bin/clean-login.mjs assets delete <id>                              # 删掉一条
 ```
 
-`accounts import` 只读预览与真导入走的是同一个函数，所以预览与实际导入不可能对不上；不带 `--only` 时导入整份计划。
+`accounts import` 只读预览与真导入走的是同一个函数，所以预览与实际导入不可能对不上；不带 `--only` 时导入整份计划。`assets add` 的 `<type>` 取 `google-mail`、`microsoft-mail`、`cn-phone` 或 `apple-id`，格式校验由服务端负责。
 
 CLI 默认在 `127.0.0.1:3492` 找服务（用 `--port` 或 `--url` 覆盖），从服务自己送出的页面里读取每进程一份的页面 token，并且从不把这个 token 打印出来。除了运行时的 `fetch` 它没有任何依赖，所以毫秒级启动，也不会加载浏览器模块。
 
