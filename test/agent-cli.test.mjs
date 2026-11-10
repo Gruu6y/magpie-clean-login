@@ -402,6 +402,54 @@ test("accounts import, exit, note, delete, prune and hosting map to the account 
   });
 });
 
+test("assets list, add, get, update and delete map to the asset routes", async () => {
+  const fake = fakeFetch({ "/api/assets": { assets: [{ id: "a1", type: "google-mail" }] } });
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+
+  // The list route emits only the records, not the wrapper.
+  expect(await r.run(["assets", ...args])).toBe(0);
+  expect(stdout(r)).toEqual([{ id: "a1", type: "google-mail" }]);
+  expect(fake.calls[0]).toMatchObject({ path: "/api/assets", method: "GET" });
+
+  // add sends type, account and note; get fetches one by id.
+  await r.run(["assets", "add", "google-mail", "a@b.com", "--note", "primary", ...args]);
+  await r.run(["assets", "get", "a1", ...args]);
+  expect(fake.calls[1]).toMatchObject({ path: "/api/assets", method: "POST" });
+  expect(fake.calls[1].body).toEqual({ type: "google-mail", account: "a@b.com", note: "primary" });
+  expect(fake.calls[2]).toMatchObject({ path: "/api/assets/a1", method: "GET" });
+
+  // update carries only the fields the caller spelled out.
+  await r.run(["assets", "update", "a1", "--note", "备用", ...args]);
+  await r.run(["assets", "update", "a1", "--type", "cn-phone", "--account", "13800000000", ...args]);
+  await r.run(["assets", "delete", "a1", ...args]);
+  expect(fake.calls[3]).toMatchObject({ path: "/api/assets/a1", method: "PATCH" });
+  expect(fake.calls[3].body).toEqual({ note: "备用" });
+  expect(fake.calls[4]).toMatchObject({ path: "/api/assets/a1", method: "PATCH" });
+  expect(fake.calls[4].body).toEqual({ type: "cn-phone", account: "13800000000" });
+  expect(fake.calls[5]).toMatchObject({ path: "/api/assets/a1", method: "DELETE" });
+
+  // add without --note must not send the key at all.
+  await r.run(["assets", "add", "apple-id", "a@b.com", ...args]);
+  expect(fake.calls[6].body).toEqual({ type: "apple-id", account: "a@b.com" });
+
+  // An update with no fields is refused before a request is sent.
+  const before = fake.calls.length;
+  await expect(r.run(["assets", "update", "a1", ...args])).rejects.toMatchObject({
+    code: "bad_command",
+  });
+  expect(fake.calls).toHaveLength(before);
+
+  // An unknown action and a missing id are both refused.
+  await expect(r.run(["assets", "frobnicate", ...args])).rejects.toMatchObject({
+    code: "bad_command",
+  });
+  await expect(r.run(["assets", "get", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  expect(usage()).toContain("assets add");
+});
+
 test("score cancel, env cancel, report and market map to their routes", async () => {
   const fake = fakeFetch({});
   const r = runner(fake);
