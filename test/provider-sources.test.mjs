@@ -4,6 +4,7 @@
 
 import { expect, test } from "bun:test";
 import { listProviders, publicProvider } from "../lib/provider-registry.mjs";
+import { providerCanSignIn, signInDoor } from "../ui/provider-state.js";
 import {
   MAGPIE_PROVIDERS_READ,
   PROVIDER_PRESENCES,
@@ -205,6 +206,48 @@ test("an unavailable magpie list degrades to the local registry without false cl
       expect(provider.presenceNote).toBeNull();
     }
   }
+});
+
+test("an unreadable magpie list cannot take away a built-in provider's sign-in entry", () => {
+  // Regression for the card that showed only "report a problem": the native
+  // door was gated on `inMagpie`, so a failed `providers:list` handover removed
+  // the only entry antigravity has. That door is `magpie accounts add <agent>`,
+  // which never reads the list, so the entry has to survive the failed read.
+  const view = mergeProviderSources({ local: LOCAL, magpie: undefined });
+  const byId = Object.fromEntries(view.providers.map((provider) => [provider.id, provider]));
+  expect(byId.antigravity.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(byId.antigravity)).toBe(true);
+  expect(signInDoor(byId.antigravity)).toBe("native");
+  expect(byId.codex.nativeSignIn).toBe(true);
+  // A token-import provider is not a browser door: nothing is invented for it.
+  expect(byId.claude.nativeSignIn).toBe(false);
+  // The card still says honestly that magpie's list was never read.
+  expect(byId.antigravity.presence).toBe("local-unknown");
+  expect(byId.antigravity.presenceNote).toBeNull();
+});
+
+test("a magpie list that WAS read keeps the final say over the native door", () => {
+  const view = mergeProviderSources({ local: LOCAL, magpie: ["workbuddy"] });
+  const byId = Object.fromEntries(view.providers.map((provider) => [provider.id, provider]));
+  expect(byId.antigravity.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(byId.antigravity)).toBe(false);
+  expect(byId.antigravity.presence).toBe("local-only");
+});
+
+test("an installed plugin still wins over the native door when the list is unreadable", () => {
+  const view = mergeProviderSources({
+    local: LOCAL,
+    magpie: undefined,
+    plugins: {
+      available: true,
+      providers: [
+        { id: "antigravity", package: "@x/antigravity", methods: [{ type: "oauth", label: "Antigravity (browser)", category: "browser", runnable: true }] },
+      ],
+    },
+  });
+  const card = view.providers.find((provider) => provider.id === "antigravity");
+  expect(card.nativeSignIn).toBe(false);
+  expect(signInDoor(card)).toBe("plugin");
 });
 
 test("signInProvider carries the installed plugin entry id the service loads", () => {
