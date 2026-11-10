@@ -44,6 +44,15 @@
   本地想复核可以跑：`bun scripts/check-version-bump.mjs --base origin/main --event pull_request`。
   若你确实写了一个版本，门禁仍会拒绝降级、以及等于 `main` 已发布号。
 
+## CLI 同步（每个 PR 都要自判）
+
+- **每个 PR 都要自己判断需不需要更新 CLI**，不单单针对某一条工作线，**针对所有 Cindy 工作线**。
+- 结论写进 PR 描述：要么「已更新 CLI：改了哪几条命令」，要么「不需要动 CLI，理由 X」。
+- 判断口径：CLI 的意义是「不开网页也能完成整套操作」。新增/改动了 `lib/server.mjs` 的 `/api/*`
+  路由、参数形状或语义（尤其账号、出口、代理、导入、托管、续期、市场安装这类能从命令行做完的动作）时，
+  看 `lib/agent-cli.mjs` 有没有对应子命令；纯内部实现（扫描器、渲染、图标、测试）通常不需要动。
+- 合并方合并前核这一条；PR 描述里没有结论就退回作者补。完整检查清单见 [docs/releasing.md](docs/releasing.md)。
+
 ## 发布纪律
 
 - magpie 判断插件有没有新版本，比的是 `package.json` 的 `version` 字符串；不 bump 版本，用户端就看不到这次更新。
