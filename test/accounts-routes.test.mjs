@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { TOKEN_HEADER, startServer } from "../lib/server.mjs";
 import { accountDir, readAccountMeta, writeAccountMeta } from "../lib/account-identity.mjs";
 import { offView } from "../lib/renew-hosting.mjs";
+import { writeAccountProxies } from "../lib/account-proxies.mjs";
 
 const tmp = mkdtempSync(join(tmpdir(), "clean-login-accounts-routes-"));
 const dataDir = join(tmp, "data");
@@ -703,5 +704,48 @@ describe("account exit routes", () => {
       (a) => a.key === "workbuddy#alpha",
     );
     expect(afterInherit.exit).toBeNull();
+  });
+
+  test("GET /api/accounts projects a providers.json custom exit when the ledger has no exit", async () => {
+    // A legacy account (e.g. antigravity) may be bound to a custom exit in
+    // magpie's providers.json while its own ledger never recorded an exit or a
+    // login, so the front end cannot see which node it occupies. The list
+    // must project the stored node, but only through the credential-free
+    // whitelist; the URL text itself may never appear.
+    const legacyDir = accountDir(env, "workbuddy", "workbuddy#legacy");
+    await writeAccountMeta(legacyDir, {
+      version: 1,
+      provider: "workbuddy",
+      key: "workbuddy#legacy",
+      accountId: "Legacy@Example.com",
+      uid: "u-legacy",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+    const written = await writeAccountProxies({
+      env: { ...env, MAGPIE_CONFIG_DIR: configDir },
+      entries: [{ provider: "workbuddy", accountId: "Legacy@Example.com", url: customUrl }],
+    });
+    expect(written.ok).toBe(true);
+    expect(written.changed).toHaveLength(1);
+
+    const res = await api("GET", "/api/accounts");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const account = body.accounts.find((a) => a.key === "workbuddy#legacy");
+    // The ledger has no exit, so this is the fallback projection of the node
+    // bound in providers.json: same id and name as the stored record, no time.
+    expect(account.exit).toEqual({
+      at: null,
+      proxyId,
+      proxyName: "Exit A",
+      region: "",
+      type: "http",
+    });
+    const text = JSON.stringify(body);
+    expect(text).not.toContain(customUrl);
+    // The authority (user:password@host) never leaves the service either.
+    expect(text).not.toContain(
+      customUrl.slice(customUrl.indexOf("//") + 2, customUrl.lastIndexOf("@")),
+    );
   });
 });

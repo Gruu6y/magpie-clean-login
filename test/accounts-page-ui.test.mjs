@@ -214,6 +214,17 @@ test("a paused hosted renewal raises a page-wide banner", () => {
   expect(css).toContain(".hosting-alert-text");
 });
 
+test("the detail save updates the shared identity list before redrawing the picker", () => {
+  // Ordering matters: the picker ranks nodes against `accountIdentities`, so a
+  // node assigned here only sinks once the list already carries the new exit.
+  const save = /async function saveAccountExit\(\)[\s\S]*?\n}\n/.exec(app)?.[0] || "";
+  const identity = save.indexOf("accountIdentities[index] = data.account");
+  const redraw = save.indexOf("renderDetailExit();");
+  expect(identity).toBeGreaterThan(-1);
+  expect(redraw).toBeGreaterThan(-1);
+  expect(identity).toBeLessThan(redraw);
+});
+
 test("the list exit cell prefers the current exit and the detail picker reuses the sign-in list", () => {
   // The last-login cell shows the exit the account is set to use now; only a
   // missing current exit falls back to the exit of the last login.

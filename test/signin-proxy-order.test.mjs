@@ -17,11 +17,11 @@ const root = join(import.meta.dir, "..");
 const app = readFileSync(join(root, "ui", "app.js"), "utf8");
 
 const proxy = (id, name) => ({ id, name, host: "127.0.0.1", port: 18000 });
-const account = (provider, loginHistory, lastLogin = null) => ({
-  provider,
-  loginHistory,
-  lastLogin,
-});
+// A login/exit snapshot, the shape `accountExtras` hands the page.
+const login = (proxyId, proxyName) => ({ at: null, proxyId, proxyName, region: "", type: null });
+// Under the "current exit only" rule an account's `exit` decides which node is
+// in use; `lastLogin` is the fallback when no exit has been assigned.
+const account = (provider, exit = null, lastLogin = null) => ({ provider, exit, lastLogin });
 
 const nodes = [
   proxy("used", "R0-1|香港-NF|BGP静态"),
@@ -32,7 +32,7 @@ const nodes = [
 ];
 
 test("unused static, residential and other exits lead; used exits are last", () => {
-  const accounts = [account("zcode", [{ proxyId: "used", proxyName: "R0-1|香港-NF|BGP静态" }])];
+  const accounts = [account("zcode", login("used", "R0-1|香港-NF|BGP静态"))];
   expect(orderSignInProxies(nodes, accounts, "zcode").map((item) => item.id)).toEqual([
     "static",
     "home",
@@ -44,8 +44,8 @@ test("unused static, residential and other exits lead; used exits are last", () 
 
 test("history belongs only to its provider and includes the last login fallback", () => {
   const accounts = [
-    account("another", [{ proxyId: "static", proxyName: "R3-1|香港-NF|BGP静态" }]),
-    account("zcode", [], { proxyId: "home", proxyName: "R2-1|香港-NF|HKT家宽" }),
+    account("another", login("static", "R3-1|香港-NF|BGP静态")),
+    account("zcode", null, login("home", "R2-1|香港-NF|HKT家宽")),
   ];
   expect(orderSignInProxies(nodes, accounts, "zcode").map((item) => item.id)).toEqual([
     "used",
@@ -57,7 +57,7 @@ test("history belongs only to its provider and includes the last login fallback"
 });
 
 test("a rebuilt proxy id still counts as used when the node name is unchanged", () => {
-  const accounts = [account("zcode", [{ proxyId: "old-id", proxyName: "R3-1|香港-NF|BGP静态" }])];
+  const accounts = [account("zcode", login("old-id", "R3-1|香港-NF|BGP静态"))];
   const used = usedSignInProxies(accounts, "zcode");
   expect(used.ids.has("old-id")).toBe(true);
   expect(used.names.has("r3-1|香港-nf|bgp静态")).toBe(true);
@@ -66,7 +66,7 @@ test("a rebuilt proxy id still counts as used when the node name is unchanged", 
 
 test("direct-login snapshots and malformed data never mark a real proxy used", () => {
   const accounts = [
-    account("zcode", [null, { proxyId: null, proxyName: "直连" }]),
+    account("zcode", login(null, "直连")),
     null,
     account("zcode"),
   ];
@@ -78,6 +78,37 @@ test("direct-login snapshots and malformed data never mark a real proxy used", (
     "other10",
   ]);
   expect(orderSignInProxies(null, null, "zcode")).toEqual([]);
+});
+
+test("only the account's current exit counts and a reassignment releases the old node", () => {
+  // The exit assigned in the detail dialog wins over any older last login: the
+  // node the account was moved off is offered as fresh again.
+  const reassigned = [
+    {
+      provider: "zcode",
+      exit: login("home", "R2-1|香港-NF|HKT家宽"),
+      lastLogin: login("static", "R3-1|香港-NF|BGP静态"),
+    },
+  ];
+  const used = usedSignInProxies(reassigned, "zcode");
+  expect(used.ids.has("home")).toBe(true);
+  expect(used.ids.has("static")).toBe(false);
+  // A login history the account has moved off is no longer "in use".
+  const historyOnly = [
+    {
+      provider: "zcode",
+      exit: null,
+      loginHistory: [login("used", "R0-1|香港-NF|BGP静态")],
+      lastLogin: null,
+    },
+  ];
+  expect(usedSignInProxies(historyOnly, "zcode").ids.size).toBe(0);
+  // With no exit at all the account still follows what it last signed in
+  // through, so that node is not offered as fresh either.
+  const fallback = [
+    { provider: "zcode", exit: null, lastLogin: login("home", "R2-1|香港-NF|HKT家宽") },
+  ];
+  expect(usedSignInProxies(fallback, "zcode").ids.has("home")).toBe(true);
 });
 
 test("sorting is stable for equal names and does not mutate the bootstrap list", () => {

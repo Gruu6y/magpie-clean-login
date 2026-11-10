@@ -6970,8 +6970,10 @@ async function saveAccountNote() {
   }
 }
 
-// Saving the exit only writes this account's magpie entry; the main list
-// shows no exit column, so nothing here re-renders it.
+// Saving the exit writes this account's magpie entry and mirrors it into the
+// account ledger the pickers share. The main list has no exit column, but the
+// identity list is updated before the picker redraws so the assigned node
+// sinks out of the front row at once.
 async function saveAccountExit() {
   const context = accountDetailContext;
   if (!context || exitSaving) return;
@@ -6994,16 +6996,19 @@ async function saveAccountExit() {
     });
     if (accountDetailContext !== context) return;
     accountDetailExit = data?.exit ?? accountDetailExit;
-    renderDetailExit();
     if (data?.account) {
       const index = accountIdentities.findIndex(
         (item) => item?.provider === context.provider && item?.key === context.key,
       );
       if (index >= 0) accountIdentities[index] = data.account;
+      else accountIdentities.push(data.account);
       context.account = data.account;
       renderDetailFacts(accountDisplay(data.account));
-      renderAccounts();
     }
+    // Redraw after the shared identity list carries the new exit: the sign-in
+    // dialog and this picker must agree on which nodes are already assigned.
+    renderDetailExit();
+    if (data?.account) renderAccounts();
     const status = byId("account-detail-exit-status");
     status.textContent = text.accountDetailExitSaved;
     status.hidden = false;
