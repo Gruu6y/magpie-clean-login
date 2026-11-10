@@ -341,6 +341,70 @@ test("a package without a name degrades to itself, never to a failed scan", asyn
   }
 });
 
+// Regression: the scanner only understood an entry module that exports a
+// FACTORY returning `{ auth }`. magpie and OpenCode also load a plugin as
+// `export default { id, server }`, where `server` is the plugin function and
+// its return value carries the same auth hooks. A package shipping only that
+// shape (agy-cli does) therefore contributed no provider at all: its card fell
+// through to the market layer and said "not installed" while the plugin sat on
+// disk with a perfectly good sign-in method.
+test("a plugin that exports only the host shape still names its provider", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "clean-login-hostshape-"));
+  try {
+    const p = join(dir, "plugins", "node_modules", "@magpie-community", "opencode-agy-cli-auth");
+    mkdirSync(p, { recursive: true });
+    writeFileSync(join(p, "package.json"), JSON.stringify({ name: "@magpie-community/opencode-agy-cli-auth", type: "module", main: "./opencode.mjs" }));
+    // The host shape: no named factory at all, only the { id, server } default.
+    writeFileSync(
+      join(p, "index.mjs"),
+      `export default { id: "agy-cli", server: async () => ({ auth: { provider: "agy-cli", methods: [{ type: "oauth", label: "Sign in with Google", authorize: async () => {} }] } }) };\n`,
+    );
+    writeFileSync(join(p, "opencode.mjs"), `export { default } from "./index.mjs";\n`);
+
+    const scan = await scanMagpiePlugins({ env: { MAGPIE_CONFIG_DIR: dir }, timeoutMs: 15000 });
+    expect(scan.available).toBe(true);
+    expect(scan.providers.map((provider) => provider.id)).toEqual(["agy-cli"]);
+    const agy = scan.providers[0];
+    expect(agy.package).toBe("@magpie-community/opencode-agy-cli-auth");
+    // The method must survive the host shape too: a provider with no method
+    // would still have no door on its card.
+    expect(agy.methods[0]).toMatchObject({ type: "oauth", category: "browser", runnable: true });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A package that ships both shapes (devin, loomy) describes its provider twice.
+// Only one entry may survive — the parent's normalizeScan drops the duplicate,
+// keeping the first — so the named factory has to be tried before the host
+// shape. That ordering is the guarantee this test pins: with it the card shows
+// the method the package itself named, not the host's fallback.
+test("a package that ships both shapes keeps the named factory's provider", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "clean-login-bothshapes-"));
+  try {
+    const p = join(dir, "plugins", "node_modules", "@scope", "opencode-devin-auth");
+    mkdirSync(p, { recursive: true });
+    writeFileSync(join(p, "package.json"), JSON.stringify({ name: "@scope/opencode-devin-auth", type: "module", main: "./index.mjs" }));
+    writeFileSync(
+      join(p, "index.mjs"),
+      [
+        `const namedAuth = { provider: "devin", methods: [{ type: "oauth", label: "Devin (browser)", authorize: async () => {} }] };`,
+        `const hostAuth = { provider: "devin", methods: [{ type: "oauth", label: "HOST SHAPE WINS", authorize: async () => {} }] };`,
+        `export const DevinAuthPlugin = async () => ({ auth: namedAuth });`,
+        `export default { id: "devin", setup: () => {}, server: async () => ({ auth: hostAuth }) };`,
+        "",
+      ].join("\n"),
+    );
+
+    const scan = await scanMagpiePlugins({ env: { MAGPIE_CONFIG_DIR: dir }, timeoutMs: 15000 });
+    expect(scan.available).toBe(true);
+    expect(scan.providers.map((provider) => provider.id)).toEqual(["devin"]);
+    expect(scan.providers[0].methods[0].label).toBe("Devin (browser)");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("scanMagpiePlugins ignores noise and parses the marked JSON line", async () => {
   const output = JSON.stringify({ available: true, providers: [{ id: "x", methods: [] }] });
   const exec = fakeExecFile((_f, _a, _o, callback) => callback(null, `warn: something\n${output}\n`));
