@@ -27,18 +27,21 @@ function rememberLogin(logins, login) {
   }
 }
 
-// A proxy counts as used when any identity belonging to this provider has a
-// successful login recorded through it. Match the stored id first, but also
-// remember the node name: rebuilding the proxy list can allocate fresh ids
-// for the same Clash exits. Direct logins have a null id and are not proxies.
+// A proxy counts as used when any identity belonging to this provider is set
+// to sign in through it right now. The account's own `exit` (the exit it was
+// assigned in its detail dialog) wins; an account with no assignment follows
+// whatever it last signed in through. Match the stored id first, but also
+// remember the node name: rebuilding the proxy list can allocate fresh ids for
+// the same Clash exits. An exit an account has since been moved off is
+// released, so the picker offers it fresh again. Direct exits have a null id
+// and are not proxies.
 export function usedSignInProxies(accounts = [], provider) {
   const logins = { ids: new Set(), names: new Set() };
   for (const account of Array.isArray(accounts) ? accounts : []) {
     if (!account || account.provider !== provider) continue;
-    for (const login of Array.isArray(account.loginHistory) ? account.loginHistory : []) {
-      rememberLogin(logins, login);
-    }
-    rememberLogin(logins, account.lastLogin);
+    // Only the exit the account uses now counts. Prefer the explicitly
+    // assigned exit; without one the last login is the exit it still follows.
+    rememberLogin(logins, account.exit ?? account.lastLogin);
   }
   return logins;
 }
