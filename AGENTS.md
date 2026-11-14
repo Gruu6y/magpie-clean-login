@@ -61,3 +61,11 @@
 - 合并方的机械步骤可用 `node scripts/merge-release.mjs <PR号> --dry-run` 预览、去掉 `--dry-run` 执行；它不代替读 diff 与风险分级。
 - `scripts/release.mjs` 仍可用于手工/应急发布（默认不 push，先 `--dry-run` 预览），常规发版不再经过它。
 - 不要自动写 CHANGELOG；发布提交只包含 `package.json` 的版本变更。
+
+## Project memory (docs/cindy-memory/)
+
+`docs/cindy-memory/` holds this project's memory shards, migrated out of the bot's global memory store on 2026-11-14. When working on this repo:
+
+- Read shards here for historical PR decisions, provider rules, release mechanics, and runtime facts.
+- Write new project facts as new or updated `.md` shards here and commit them, instead of the global memory store.
+- Global bot memory still holds cross-project user/feedback/reference facts; only project-local facts live here.
