@@ -77,12 +77,14 @@ Clean Login fills exactly that gap, in three ways:
 | | |
 | --- | --- |
 | Host | [magpie](https://usemagpie.ai) with the Plugins panel |
-| OS | **Windows x64 · Linux x64 / arm64** — the login browser is a slim Camoufox build downloaded with the plugin for these platforms (a macOS build is coming) |
+| OS | **Windows x64 · Linux x64 / arm64 · macOS (Apple Silicon and Intel)** — the login browser is a slim Camoufox build downloaded with the plugin for these platforms |
 | Runtime | Bun **≥ 1.4.2** |
 | Disk | ~153–176 MB download depending on the platform, ~1 GB free during install — once |
 | Network | Only for actions you start: proxy tests, the trust-score and identity-check pages, the runtime download, and the provider's own sign-in |
 
-Other platforms are not supported yet; ask on the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues) if you need one.
+macOS notes: on an Intel Mac the `darwin/x64` archive runs under Rosetta 2 (asset choice follows the process architecture, so an x64 Node picks x86_64 automatically); the Intel build only got a Rosetta smoke test, not real-hardware verification. Other platforms are not supported yet; ask on the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues) if you need one.
+
+The macOS slim archive drops `Camoufox.app/Contents/Resources/fonts/` (~2.1 GB) from the upstream zip and keeps the one stock sentinel font — a deliberate, documented exception to the "never modify the official bundle" rule. The upstream macOS zip ships no code signature and the plugin does not notarize either; Gatekeeper does not block the launch of a non-quarantined download. The builder is [`scripts/build-slim-artifact.mjs`](scripts/build-slim-artifact.mjs) and the artifacts' provenance is in the release's `inventory.json`.
 
 <a id="install"></a>
 
@@ -263,7 +265,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 | Symptom | What to do |
 | --- | --- |
 | A provider card has no **Add account** | The card says why. Market entries need their plugin installed in magpie first; plugin-only providers need a plugin that exposes a browser sign-in method. |
-| The login browser reads *not installed* / the download failed | The first run fetches a 153–176 MB archive for your platform (~176 MB on Windows x64, ~159 MB on Linux x64, ~153 MB on Linux arm64). Check disk space and network, then retry from the providers page. The archive is sha256-verified before it is unpacked. |
+| The login browser reads *not installed* / the download failed | The first run fetches a 153–176 MB archive for your platform (~176 MB on Windows x64, ~155 MB on macOS x64, ~147 MB on macOS arm64, ~159 MB on Linux x64, ~153 MB on Linux arm64). Check disk space and network, then retry from the providers page. The archive is sha256-verified before it is unpacked. |
 | Sign-in fails with `no_url` or `method_input_required` | The plugin wants a value (phone number, site, key) that the dialog did not collect. Fill that field and try again; if it keeps failing use **Report a problem** on the card. |
 | A proxy test fails | The test opens a real connection through that exit and never falls back to direct. Check host, port, credentials, and whether that exit is allowed to reach the target. |
 | There is a `~` in front of the latency | That is handshake time, not request latency: the target completed the TLS handshake but returned no HTTP response (a WAF blocking the probe is the usual cause). Try another exit. |
@@ -278,7 +280,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 
 - No telemetry and no account. The only network calls are the ones you start: proxy tests, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
 - Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalog is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`). Hosted-renewal switches and recent records live in `renew-hosting.json` in that same directory; it holds switches, times and outcomes, never a credential.
-- The login browser unpacks to `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows (`MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
+- The login browser unpacks to `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows, `~/Library/Caches/magpie-clean-login/camoufox` on macOS, and `$XDG_CACHE_HOME/magpie-clean-login/camoufox` on Linux (all overridable with `MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
 - Stored proxy passwords never reach the page and are never logged. The page token is per-process and exists only in the page the service serves.
 
 <a id="contributing"></a>
