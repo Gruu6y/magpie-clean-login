@@ -10,24 +10,21 @@ import {
   BROWSER_SHA256_ENV,
   BROWSER_URL_ENV,
   BROWSER_VERSION,
-  DEFAULT_ASSET_SHA256,
-  DEFAULT_ASSET_URL,
   DISK_MARGIN_BYTES,
-  DOWNLOAD_BYTES,
   ENVIRONMENT_STATES,
   EXECUTABLE_ENV,
-  EXTRACTED_BYTES,
   EnvironmentError,
   MODEL_DIR_NAME,
   MODEL_DOWNLOAD_BYTES,
   MODEL_EXTRACTED_BYTES,
   MODEL_STAMP_FILE,
-  REQUIRED_DISK_BYTES,
   createEnvironmentManager,
   defaultModelInstaller,
   directoryBytes,
   findExecutable,
   isFingerprintModelInstalled,
+  platformAsset,
+  requiredDiskBytes,
   resolveBrowserAsset,
 } from "../lib/browser-environment.mjs";
 
@@ -68,25 +65,44 @@ async function fakeModelInstaller({ dir, onProgress } = {}) {
   return { modelDir, modelBytes: 7, modelVerified: true, downloaded: true };
 }
 
-test("pins the slim asset and derives the disk requirement", () => {
-  expect(DOWNLOAD_BYTES).toBe(176_170_139);
-  expect(EXTRACTED_BYTES).toBe(432_909_728);
+test("pins one slim asset per platform and derives the disk requirement", () => {
+  const win = platformAsset("win32", "x64");
+  expect(win.downloadBytes).toBe(176_170_139);
+  expect(win.extractedBytes).toBe(432_909_728);
+  expect(win.url.endsWith("camoufox-slim-win-x86_64-158.0.1-beta.41.zip")).toBe(true);
+  expect(win.sha256).toBe("07bfbe8148b7b2b6a520074b6766b4aac493c6f2364e4d6af21c31b453026dd1");
+
+  const lin64 = platformAsset("linux", "x64");
+  expect(lin64.downloadBytes).toBe(158_977_343);
+  expect(lin64.extractedBytes).toBe(394_738_736);
+  expect(lin64.url.endsWith("camoufox-slim-lin-x86_64-158.0.1-beta.41.zip")).toBe(true);
+  expect(lin64.sha256).toBe("e29ce75164fc1a139405c68633d5570befd5e88d9279cc5f5417211a87ed33fd");
+
+  const linArm = platformAsset("linux", "arm64");
+  expect(linArm.downloadBytes).toBe(152_903_916);
+  expect(linArm.extractedBytes).toBe(371_229_773);
+  expect(linArm.url.endsWith("camoufox-slim-lin-arm64-158.0.1-beta.41.zip")).toBe(true);
+  expect(linArm.sha256).toBe("e17d5a340b1f50f0fb8899d21bb20e44310996c79a1d05a215e404c85ede9cc8");
+
+  for (const asset of [win, lin64, linArm]) expect(asset.sha256).toMatch(/^[0-9a-f]{64}$/);
+  expect(platformAsset("win32", "arm64")).toBeNull();
+  expect(platformAsset("darwin", "x64")).toBeNull();
+
   expect(MODEL_DOWNLOAD_BYTES).toBe(1_564_571);
   expect(MODEL_EXTRACTED_BYTES).toBe(213_104_823);
   expect(DISK_MARGIN_BYTES).toBe(256 * 1024 * 1024);
-  expect(REQUIRED_DISK_BYTES).toBe(
-    DOWNLOAD_BYTES + EXTRACTED_BYTES + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
+  expect(requiredDiskBytes("linux", "x64")).toBe(
+    158_977_343 + 394_738_736 + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
   );
-  expect(REQUIRED_DISK_BYTES).toBe(1_092_184_717);
-  expect(
-    DEFAULT_ASSET_URL.endsWith(
-      "/browser-v158.0.1-beta.41-slim.1/camoufox-slim-win-x86_64-158.0.1-beta.41.zip",
-    ),
-  ).toBe(true);
-  expect(DEFAULT_ASSET_SHA256).toBe(
-    "07bfbe8148b7b2b6a520074b6766b4aac493c6f2364e4d6af21c31b453026dd1",
+  expect(requiredDiskBytes("win32", "x64")).toBe(
+    176_170_139 + 432_909_728 + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
   );
-  expect(DEFAULT_ASSET_SHA256).toMatch(/^[0-9a-f]{64}$/);
+  expect(requiredDiskBytes("win32", "x64")).toBe(1_092_184_717);
+  // An unsupported platform prices the asset at zero; prepare() still refuses
+  // with unsupported_platform before the disk check is consulted.
+  expect(requiredDiskBytes("win32", "arm64")).toBe(
+    MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
+  );
   expect(ENVIRONMENT_STATES).toContain("cancelled");
 });
 
@@ -109,10 +125,17 @@ test("isFingerprintModelInstalled follows the pin's stamp and members", async ()
 });
 
 test("default asset carries its digest; an override without one does not", () => {
+  const hostAsset = platformAsset();
   const fallback = resolveBrowserAsset({});
-  expect(fallback.url).toBe(DEFAULT_ASSET_URL);
-  expect(fallback.sha256).toBe(DEFAULT_ASSET_SHA256);
+  expect(hostAsset).not.toBeNull();
+  expect(fallback.url).toBe(hostAsset.url);
+  expect(fallback.url.endsWith(hostAsset.url.split("/").pop())).toBe(true);
+  expect(fallback.sha256).toBe(hostAsset.sha256);
   expect(fallback.source).toBe("default");
+  expect(resolveBrowserAsset({})).toEqual(resolveBrowserAsset({}));
+
+  // An explicitly unsupported platform resolves to null instead of guessing.
+  expect(resolveBrowserAsset({}, "win32", "arm64")).toBeNull();
 
   const overridden = resolveBrowserAsset({
     [BROWSER_URL_ENV]: "https://example.test/browser.zip",
@@ -216,10 +239,11 @@ test("defaultModelInstaller maps model failures to model codes", async () => {
 
 test("status() reports honest defaults for a missing install", async () => {
   const root = await tempRoot();
+  const asset = platformAsset();
   const manager = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     now: () => "2026-01-01T00:00:00.000Z",
     idFactory: () => "job-1",
   });
@@ -235,13 +259,13 @@ test("status() reports honest defaults for a missing install", async () => {
   expect(status.version).toBeNull();
   expect(status.executablePath).toBeNull();
   expect(status.installDir).toBe(root);
-  expect(status.downloadBytes).toBe(DOWNLOAD_BYTES + MODEL_DOWNLOAD_BYTES);
-  expect(status.extractedBytes).toBe(EXTRACTED_BYTES + MODEL_EXTRACTED_BYTES);
+  expect(status.downloadBytes).toBe(asset.downloadBytes + MODEL_DOWNLOAD_BYTES);
+  expect(status.extractedBytes).toBe(asset.extractedBytes + MODEL_EXTRACTED_BYTES);
   expect(status.modelDownloadBytes).toBe(MODEL_DOWNLOAD_BYTES);
   expect(status.modelExtractedBytes).toBe(MODEL_EXTRACTED_BYTES);
-  expect(status.requiredDiskBytes).toBe(REQUIRED_DISK_BYTES);
+  expect(status.requiredDiskBytes).toBe(requiredDiskBytes());
   expect(status.installedBytes).toBe(0);
-  expect(status.freeBytes).toBe(REQUIRED_DISK_BYTES + 1);
+  expect(status.freeBytes).toBe(requiredDiskBytes() + 1);
   expect(status.checksumVerified).toBe(false);
   expect(status.checksumStatus).toBe("unavailable");
   expect(status.assetOverride).toBe(false);
@@ -255,11 +279,11 @@ test("a verified install writes the record and exports the executable path", asy
   const manager = createEnvironmentManager({
     root,
     env,
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: async () => ({
       version: BROWSER_VERSION,
       executablePath: exe,
-      bytes: EXTRACTED_BYTES,
+      bytes: platformAsset().extractedBytes,
       checksumVerified: true,
     }),
     modelInstaller: fakeModelInstaller,
@@ -277,7 +301,7 @@ test("a verified install writes the record and exports the executable path", asy
   expect(status.modelInstalled).toBe(true);
   expect(status.checksumVerified).toBe(true);
   expect(status.checksumStatus).toBe("verified");
-  expect(status.installedBytes).toBe(EXTRACTED_BYTES + 7);
+  expect(status.installedBytes).toBe(platformAsset().extractedBytes + 7);
   expect(status.modelBytes).toBe(7);
   expect(status.executablePath).toBe(exe);
   expect(env[EXECUTABLE_ENV]).toBe(exe);
@@ -299,7 +323,7 @@ test("an override without a digest is never reported as verified", async () => {
   const manager = createEnvironmentManager({
     root,
     env,
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: async () => ({
       version: BROWSER_VERSION,
       executablePath: exe,
@@ -326,7 +350,7 @@ test("a model failure is classified apart from a browser failure", async () => {
   const modelManager = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: async () => ({
       version: BROWSER_VERSION,
       executablePath: exe,
@@ -345,7 +369,7 @@ test("a model failure is classified apart from a browser failure", async () => {
   const browserManager = createEnvironmentManager({
     root: await tempRoot(),
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: async () => {
       throw new EnvironmentError("download_failed", "browser", 502);
     },
@@ -373,7 +397,7 @@ test("a model failure keeps a previously written browser record", async () => {
   const good = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: browserInstaller,
     modelInstaller: fakeModelInstaller,
   });
@@ -388,7 +412,7 @@ test("a model failure keeps a previously written browser record", async () => {
   const failing = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: browserInstaller,
     modelInstaller: async () => {
       throw new EnvironmentError("model_download_failed", "model", 502);
@@ -411,7 +435,7 @@ test("prepare refuses when free space is below the requirement", async () => {
   const manager = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES - 1,
+    freeBytes: requiredDiskBytes() - 1,
   });
 
   let error;
@@ -431,7 +455,7 @@ test("cancel moves the job to cancelled", async () => {
   const manager = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: ({ signal }) =>
       new Promise((_resolve, reject) => {
         signal.addEventListener(
@@ -460,7 +484,7 @@ test("a missing executable maps to install_failed", async () => {
   const manager = createEnvironmentManager({
     root,
     env: {},
-    freeBytes: REQUIRED_DISK_BYTES + 1,
+    freeBytes: requiredDiskBytes() + 1,
     installer: async () => ({
       version: BROWSER_VERSION,
       executablePath: join(root, "nope.exe"),
@@ -488,7 +512,7 @@ test("distinguishes asset_not_found and rate_limited from download_failed", asyn
     const manager = createEnvironmentManager({
       root,
       env: {},
-      freeBytes: REQUIRED_DISK_BYTES + 1,
+      freeBytes: requiredDiskBytes() + 1,
       installer: async () => {
         throw new EnvironmentError(code, "boom", status);
       },
@@ -513,4 +537,45 @@ test("findExecutable finds the launcher and directoryBytes sums it", async () =>
 
   expect(await findExecutable(root, "win32")).toBe(exe);
   expect(await directoryBytes(root)).toBe(5);
+});
+
+test("findExecutable finds the linux launcher at the extracted root", async () => {
+  const root = await tempRoot();
+  // The slim linux zip puts both launcher names at the archive root; the
+  // shallow-first search must see them without descending.
+  const exe = join(root, "camoufox-bin");
+  await writeFile(exe, "bin");
+  expect(await findExecutable(root, "linux")).toBe(exe);
+  await writeFile(join(root, "camoufox"), "sh");
+  // Either root-level name is a valid hit; it must not descend or miss them.
+  const found = await findExecutable(root, "linux");
+  expect([join(root, "camoufox"), exe]).toContain(found);
+});
+
+test("prepare refuses an unsupported platform before the disk check", async () => {
+  const root = await tempRoot();
+  const manager = createEnvironmentManager({
+    root,
+    env: {},
+    platform: "win32",
+    arch: "arm64",
+    // Zero free bytes would trip insufficient_disk if the platform check did
+    // not run first; the installer must never be reached either way.
+    freeBytes: 0,
+    installer: async () => {
+      throw new Error("the installer must not run on an unsupported platform");
+    },
+  });
+
+  const error = await captureRejection(() => manager.prepare());
+  expect(error).toBeInstanceOf(EnvironmentError);
+  expect(error.code).toBe("unsupported_platform");
+  expect(error.status).toBe(422);
+  expect(manager.job()).toBeNull();
+
+  const status = await manager.status();
+  expect(status.state).toBe("missing");
+  expect(status.downloadBytes).toBe(MODEL_DOWNLOAD_BYTES);
+  expect(status.extractedBytes).toBe(MODEL_EXTRACTED_BYTES);
+  expect(status.requiredDiskBytes).toBe(requiredDiskBytes("win32", "arm64"));
 });
