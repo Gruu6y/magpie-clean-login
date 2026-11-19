@@ -150,10 +150,13 @@ test("the two languages carry the same factual limits", () => {
   // no translation, so the load-bearing numbers are pinned in both files.
   for (const markdown of [zh, en]) {
     expect(markdown).toContain("Windows x64");
+    expect(markdown).toContain("Linux x64");
+    expect(markdown).toContain("arm64");
     expect(markdown).toContain("1.4.2");
-    expect(markdown).toContain("170 MB");
-    expect(markdown).toContain("616 MB");
-    expect(markdown).toContain("1.02 GB");
+    expect(markdown).toContain("153–176 MB");
+    expect(markdown).toContain("176 MB");
+    expect(markdown).toContain("159 MB");
+    expect(markdown).toContain("153 MB");
     expect(markdown).toContain("127.0.0.1:3492");
     expect(markdown).toContain("MAGPIE_CLEAN_LOGIN_DATA");
     expect(markdown).toContain("MAGPIE_CLEAN_LOGIN_BROWSER_DIR");

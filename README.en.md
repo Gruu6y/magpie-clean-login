@@ -77,9 +77,9 @@ Clean Login fills exactly that gap, in three ways:
 | | |
 | --- | --- |
 | Host | [magpie](https://usemagpie.ai) with the Plugins panel |
-| OS | **Windows x64** — the login browser downloaded with the plugin is a Windows-only Camoufox build |
+| OS | **Windows x64 · Linux x64 / arm64** — the login browser is a slim Camoufox build downloaded with the plugin for these platforms (a macOS build is coming) |
 | Runtime | Bun **≥ 1.4.2** |
-| Disk | ~170 MB download, ~616 MB on disk, ~1.02 GB free during install — once |
+| Disk | ~153–176 MB download depending on the platform, ~1 GB free during install — once |
 | Network | Only for actions you start: proxy tests, the trust-score and identity-check pages, the runtime download, and the provider's own sign-in |
 
 Other platforms are not supported yet; ask on the [issue tracker](https://github.com/Gruu6y/magpie-clean-login/issues) if you need one.
@@ -104,7 +104,7 @@ Four steps and you have one cleanly signed-in account. About five minutes, most 
 
 At the top of the providers page there is a **Login browser setup** block. Click **Prepare browser** and let it finish.
 
-- The download is about **170 MB**, verified against a pinned sha256, fetched once.
+- The download is **~153–176 MB** depending on the platform, verified against a pinned sha256, fetched once.
 - When it is done the block reads **Ready**. The first screenshot shows the badge as **Not installed**: the images were generated against an empty browser root, which is exactly what a first run looks like.
 - If it fails you can retry; nothing else is affected.
 
@@ -263,7 +263,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 | Symptom | What to do |
 | --- | --- |
 | A provider card has no **Add account** | The card says why. Market entries need their plugin installed in magpie first; plugin-only providers need a plugin that exposes a browser sign-in method. |
-| The login browser reads *not installed* / the download failed | The first run fetches a ~170 MB Windows x64 archive. Check disk space and network, then retry from the providers page. The archive is sha256-verified before it is unpacked. |
+| The login browser reads *not installed* / the download failed | The first run fetches a 153–176 MB archive for your platform (~176 MB on Windows x64, ~159 MB on Linux x64, ~153 MB on Linux arm64). Check disk space and network, then retry from the providers page. The archive is sha256-verified before it is unpacked. |
 | Sign-in fails with `no_url` or `method_input_required` | The plugin wants a value (phone number, site, key) that the dialog did not collect. Fill that field and try again; if it keeps failing use **Report a problem** on the card. |
 | A proxy test fails | The test opens a real connection through that exit and never falls back to direct. Check host, port, credentials, and whether that exit is allowed to reach the target. |
 | There is a `~` in front of the latency | That is handshake time, not request latency: the target completed the TLS handshake but returned no HTTP response (a WAF blocking the probe is the usual cause). Try another exit. |
