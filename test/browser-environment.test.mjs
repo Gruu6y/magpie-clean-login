@@ -84,15 +84,29 @@ test("pins one slim asset per platform and derives the disk requirement", () => 
   expect(linArm.url.endsWith("camoufox-slim-lin-arm64-158.0.1-beta.41.zip")).toBe(true);
   expect(linArm.sha256).toBe("e17d5a340b1f50f0fb8899d21bb20e44310996c79a1d05a215e404c85ede9cc8");
 
-  for (const asset of [win, lin64, linArm]) expect(asset.sha256).toMatch(/^[0-9a-f]{64}$/);
+  const macArm = platformAsset("darwin", "arm64");
+  expect(macArm.downloadBytes).toBe(153_691_113);
+  expect(macArm.extractedBytes).toBe(377_713_579);
+  expect(macArm.url.endsWith("camoufox-slim-mac-arm64-158.0.1-beta.41.zip")).toBe(true);
+  expect(macArm.sha256).toBe("516f3953623abda2790c42fe5685c5dc46b992bccede95b147ec478b91185381");
+
+  const macX64 = platformAsset("darwin", "x64");
+  expect(macX64.downloadBytes).toBe(161_709_470);
+  expect(macX64.extractedBytes).toBe(397_653_777);
+  expect(macX64.url.endsWith("camoufox-slim-mac-x86_64-158.0.1-beta.41.zip")).toBe(true);
+  expect(macX64.sha256).toBe("e9e47eb0ea0c640a89c4d27d3d09057233873c4e574dc3c9013183b812c05bfb");
+
+  for (const asset of [win, lin64, linArm, macArm, macX64]) expect(asset.sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(platformAsset("win32", "arm64")).toBeNull();
-  expect(platformAsset("darwin", "x64")).toBeNull();
 
   expect(MODEL_DOWNLOAD_BYTES).toBe(1_564_571);
   expect(MODEL_EXTRACTED_BYTES).toBe(213_104_823);
   expect(DISK_MARGIN_BYTES).toBe(256 * 1024 * 1024);
   expect(requiredDiskBytes("linux", "x64")).toBe(
     158_977_343 + 394_738_736 + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
+  );
+  expect(requiredDiskBytes("darwin", "arm64")).toBe(
+    153_691_113 + 377_713_579 + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
   );
   expect(requiredDiskBytes("win32", "x64")).toBe(
     176_170_139 + 432_909_728 + MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
@@ -104,6 +118,29 @@ test("pins one slim asset per platform and derives the disk requirement", () => 
     MODEL_DOWNLOAD_BYTES + MODEL_EXTRACTED_BYTES + DISK_MARGIN_BYTES,
   );
   expect(ENVIRONMENT_STATES).toContain("cancelled");
+});
+
+// macOS slim assets measured on a Devin macOS 26.6.2 Apple Silicon VM from the
+// upstream camoufox-158.0.1-beta.41 zips; digests recorded in the release's
+// inventory.json. The (platform, arch) -> asset contract is covered by the
+// per-platform table test above; this test covers the resolver behaviour.
+test("resolveBrowserAsset selects per platform and resolves null unsupported", () => {
+  const mac = resolveBrowserAsset({}, "darwin", "arm64");
+  const macAsset = platformAsset("darwin", "arm64");
+  expect(mac.url).toBe(macAsset.url);
+  expect(mac.sha256).toBe(macAsset.sha256);
+  expect(mac.source).toBe("default");
+
+  // An env override always wins, whatever the platform.
+  const overridden = resolveBrowserAsset(
+    { [BROWSER_URL_ENV]: "https://example.test/browser.zip" },
+    "win32",
+    "arm64",
+  );
+  expect(overridden.source).toBe("override");
+
+  // An explicitly unsupported platform resolves to null instead of guessing.
+  expect(resolveBrowserAsset({}, "win32", "arm64")).toBeNull();
 });
 
 test("the model constants match the installed fpgen-js pin", async () => {
