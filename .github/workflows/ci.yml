@@ -10,7 +10,14 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      # One platform failing should not hide the other results.
+      fail-fast: false
+      matrix:
+        # macos-latest is arm64; there is no free Intel (x86_64) macOS runner
+        # anymore, so Intel macs are not covered by CI.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
