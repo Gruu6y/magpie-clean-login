@@ -14,6 +14,8 @@
 
 > **这是非官方插件。** 由 [Gruu6y](https://github.com/Gruu6y/magpie-clean-login) 开发维护，**不是** magpie 官方或 `magpie-community` 发布的。代码全部公开，欢迎读、欢迎提 issue、欢迎提 PR。
 
+> **新 · 多平台：** 登录浏览器现在支持 **Windows x64、macOS（Apple Silicon + Intel）和 Linux（x64 / arm64）**——随插件自动下载约 150 MB、经 sha256 校验的精简 Camoufox，一次装好，不用手动装浏览器。
+
 <a id="contents"></a>
 
 ## 目录

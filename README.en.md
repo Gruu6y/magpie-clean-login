@@ -14,6 +14,8 @@ If you only ever use one account, magpie alone is enough. If you have several �
 
 > **This is an unofficial plugin.** Built and maintained by [Gruu6y](https://github.com/Gruu6y/magpie-clean-login), **not** published by magpie or `magpie-community`. All the code is public — read it, open issues, send pull requests.
 
+> **New — multi-platform:** the login browser now supports **Windows x64, macOS (Apple Silicon + Intel) and Linux (x64 / arm64)** — a ~150 MB slim Camoufox downloaded with the plugin and verified by sha256, installed once, no manual browser setup.
+
 <a id="contents"></a>
 
 ## Contents
