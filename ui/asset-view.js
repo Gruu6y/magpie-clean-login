@@ -37,7 +37,9 @@ export function validateAssetForm({ type, account, note } = {}) {
   const normalizedType = typeof type === "string" ? type : "";
   if (!ASSET_TYPES.includes(normalizedType)) return "invalid_type";
   const normalizedAccount = normalizeAssetAccount(normalizedType, account);
-  if (!normalizedAccount) return "invalid_account";
+  // An empty account is not a type mistake; it gets its own code so the form
+  // can ask for the value instead of calling the input wrong.
+  if (!normalizedAccount) return "account_required";
   if (normalizedAccount.length > ASSET_ACCOUNT_MAX) return "invalid_account";
   if (normalizedType === "cn-phone") {
     if (!PHONE_PATTERN.test(normalizedAccount)) return "invalid_account";

@@ -252,6 +252,18 @@ test("DELETE rejects another method", async () => {
   expect(res.headers.get("allow")).toBe("DELETE");
 });
 
+test("dot-segment account keys stay inside the accounts root", async () => {
+  // `..` survives into accountDir from sources other than the URL path (a
+  // crafted plugin-auth entry reaches it through the import writer), so the
+  // directory encoder itself must defuse it. A URL-carried `%2e%2e` is
+  // normalized away before routing, which is fine too: it just 404s.
+  const res = await api("DELETE", "/api/accounts/workbuddy/%2e%2e");
+  expect([404, 405]).toContain(res.status);
+  const providerDir = join(dataDir, "accounts", "workbuddy");
+  expect(existsSync(join(providerDir, "workbuddy"))).toBe(true);
+  expect(existsSync(providerDir)).toBe(true);
+});
+
 // With no readable key set the service cannot tell a signed-in account from a
 // signed-out one, so it reports the flag it can prove (false) and refuses the
 // delete rather than risk a live credential's pin.

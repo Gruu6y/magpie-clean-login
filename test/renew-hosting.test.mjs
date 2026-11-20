@@ -58,6 +58,7 @@ async function setup({
   lastLogin = { at: "2026-11-08T10:00:00.000Z", proxyId: null },
   currentExit = null,
   proxyRecord = null,
+  ledgerMethod = null,
   signIn = fakeSignIn(),
   now = () => BASE,
   ...options
@@ -76,6 +77,7 @@ async function setup({
       signedInAt,
       ...(lastLogin ? { lastLogin } : {}),
       ...(currentExit ? { exit: currentExit } : {}),
+      ...(ledgerMethod ? { methodLabel: ledgerMethod } : {}),
     });
   }
   if (withIdentity) {
@@ -250,6 +252,32 @@ test("enable resolves the recorded exit and keeps credentials out of the ledger 
     expect(call.proxy).toBe(proxyRecord);
     expect(call.proxyMeta).toEqual({ id: "px-1", name: "HK · 01", region: "HK", type: "http" });
     expect(JSON.stringify(call.proxyMeta)).not.toContain("secret");
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("a renewal replays the method the ledger says the account signed in through", async () => {
+  // On a multi-method plugin the default pick is the first browser method;
+  // the ledger's own record is what keeps the renewal on the same one.
+  const ctx = await setup({ ledgerMethod: "ZCode EU (browser)" });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(ctx.signIn.calls[0].methodLabel).toBe("ZCode EU (browser)");
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("a renewal with no recorded method asks for the default pick", async () => {
+  const ctx = await setup();
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(ctx.signIn.calls[0].methodLabel).toBeNull();
   } finally {
     cleanup(ctx);
   }

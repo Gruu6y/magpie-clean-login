@@ -2,7 +2,8 @@
 // the preflight checks are exercised directly, and the in-process launch path
 // is driven through injected camoufox/playwright stubs.
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -27,6 +28,28 @@ async function tempDir() {
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
+
+// The forked host receives its launch input on stdin, not as a file path, so
+// the fake child collects what `end()` writes. `payload()` is what the host
+// would parse from the stream.
+function fakeStdin() {
+  const sink = {
+    text: "",
+    write(chunk) {
+      sink.text += String(chunk);
+      return true;
+    },
+    end(chunk) {
+      if (chunk) sink.write(chunk);
+    },
+    on() {},
+  };
+  return sink;
+}
+
+function stdinPayload(child) {
+  return JSON.parse(child.stdin.text.trim() || "{}");
+}
 
 test("the launch input pins the persistent profile and the fingerprint", () => {
   const identity = { webgl: { vendor: "X" } };
@@ -322,6 +345,41 @@ test("launchSignInBrowser starts a host and returns its pid", async () => {
   await handle.close();
 });
 
+test("launchSignInBrowser hands the payload over stdin and writes no payload file", async () => {
+  // The launch input can carry a proxy password; it must never sit in a file
+  // inside the profile directory where a crash would leave it behind.
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const { EventEmitter } = await import("node:events");
+  const child = new EventEmitter();
+  child.pid = 9;
+  child.kill = () => {};
+  child.send = () => queueMicrotask(() => child.emit("exit", 0));
+  child.unref = () => {};
+  child.channel = { unref: () => {} };
+  const profile = join(dir, "profile");
+  const handle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: profile,
+    proxy: { server: "http://u:PLACEHOLDERPW@h:1" },
+    env: {},
+    deps: {
+      fork: (_hostPath, _args, options) => {
+        child.stdin = fakeStdin();
+        expect(options.stdio[0]).toBe("pipe");
+        queueMicrotask(() => child.emit("message", { type: "ready", pid: 9 }));
+        return child;
+      },
+    },
+  });
+  expect(stdinPayload(child).proxy).toEqual({ server: "http://u:PLACEHOLDERPW@h:1" });
+  const names = readdirSync(profile);
+  expect(names.some((name) => name.includes("signin-launch"))).toBe(false);
+  await handle.close();
+});
+
 test("launchSignInBrowser passes the plugin model directory to the host", async () => {
   const dir = await tempDir();
   const exe = join(dir, "camoufox.exe");
@@ -346,8 +404,9 @@ test("launchSignInBrowser passes the plugin model directory to the host", async 
         captured.hostPath = hostPath;
         captured.args = args;
         captured.env = options.env;
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 7 });
         });
         return child;
@@ -382,8 +441,9 @@ test("launchSignInBrowser defaults to the plugin's model directory", async () =>
     deps: {
       fork: (_hostPath, args, options) => {
         captured.env = options.env;
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 8 });
         });
         return child;
@@ -747,8 +807,9 @@ test("launchSignInBrowser passes a custom navigation deadline to the host", asyn
     navTimeoutMs: 12_000,
     deps: {
       fork: (_hostPath, args) => {
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 31 });
         });
         return child;
@@ -848,8 +909,9 @@ test("launchScoreBrowser passes a custom navigation deadline to the host", async
     navTimeoutMs: 7_500,
     deps: {
       fork: (_hostPath, args) => {
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 34 });
         });
         return child;
@@ -952,8 +1014,9 @@ test("launchIdentityCheckBrowser reports the verdict text the host sends", async
       hostPath: "/fake/identity-check-browser-host.mjs",
       fork: (hostPath, args) => {
         captured.hostPath = hostPath;
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 21 });
           child.emit("message", { type: "identity", text: "评分 B" });
         });
@@ -989,8 +1052,9 @@ test("launchIdentityCheckBrowser defaults to headless true", async () => {
     identity: {},
     deps: {
       fork: (_hostPath, args) => {
-        queueMicrotask(async () => {
-          captured.payload = JSON.parse(await readFile(args[0], "utf8"));
+        child.stdin = fakeStdin();
+        queueMicrotask(() => {
+          captured.payload = stdinPayload(child);
           child.emit("message", { type: "ready", pid: 22 });
           child.emit("message", { type: "identity", text: "评分 A" });
         });

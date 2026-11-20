@@ -187,6 +187,31 @@ test("normalizeScan is idempotent and preserves an existing browser flag", () =>
   expect(twice).toEqual(once);
 });
 
+test("normalizeScan re-derives a category for a legacy fixture without one", () => {
+  // A stored scan entry can carry only the legacy `browser` boolean with no
+  // `category`. Re-normalizing used to read an undeclared `type` in that
+  // branch and die with a ReferenceError.
+  const scan = normalizeScan({
+    available: true,
+    providers: [
+      {
+        id: "x",
+        methods: [
+          { type: "oauth", label: "X sign-in", browser: false },
+          { type: "api", label: "X key", browser: false, runnable: false },
+          { type: "oauth", label: "X other", browser: false, hasAuthorize: true },
+        ],
+      },
+    ],
+  });
+  expect(scan.available).toBe(true);
+  expect(scan.providers[0].methods.map((method) => method.category)).toEqual([
+    "unknown",
+    "key",
+    "pending",
+  ]);
+});
+
 test("anything other than a recognized scan degrades to unavailable", () => {
   for (const raw of [null, undefined, 42, {}, { available: false }, { available: true, providers: "nope" }]) {
     expect(normalizeScan(raw)).toEqual(unavailableScan());
