@@ -698,7 +698,12 @@ test("a code submitted in time disarms the code deadline", async () => {
   });
   await controller.startSignIn({ provider: "workbuddy" });
   await controller.submitCode("123456");
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  // submitCode resolves once the code is stored; the callback itself may be
+  // invoked a tick later on a loaded host, so wait for `release` to exist
+  // instead of assuming 10ms is enough.
+  for (let i = 0; i < 100 && !release; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   release();
   await controller.whenSettled();
   expect(controller.status().state).toBe("done");
