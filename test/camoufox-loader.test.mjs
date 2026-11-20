@@ -80,7 +80,13 @@ function fakeFs(entries = {}) {
       if (e && typeof e === "object" && "link" in e) return { isSymbolicLink: () => true };
       throw enoent(p);
     },
-    existsSync: (p) => p in entries,
+    // existsSync follows symlinks (a dangling link reports false).
+    existsSync: (p) => {
+      const e = entries[p];
+      if (e && typeof e === "object" && "link" in e) return e.link in entries;
+      return p in entries;
+    },
+    rmSync: (p) => calls.push(["rm", p]),
     realpathSync: (p) => (entries[p] && entries[p].link) ?? p,
     mkdirSync: (p) => calls.push(["mkdir", p]),
     renameSync: (from, to) => calls.push(["rename", from, to]),
@@ -107,8 +113,19 @@ test("darwin loader migrates a pre-existing real install before linking", () => 
   expect(fs.calls).toContainEqual(["symlink", SANDBOX_INSTALL, REAL]);
 });
 
+test("darwin loader repairs a dangling link it left behind", () => {
+  // The plugin data dir was deleted after an earlier run: our symlink now
+  // dangles. Relink instead of refusing — the debris is ours.
+  const gone = join(HOME, "deleted-plugin-dir");
+  const fs = fakeFs({ [REAL]: { link: gone }, [join(DIR, "parent")]: undefined });
+  ensureDarwinInstallSymlink(DIR, { fs, home: HOME });
+  expect(fs.calls).toContainEqual(["rm", REAL]);
+  expect(fs.calls).toContainEqual(["symlink", SANDBOX_INSTALL, REAL]);
+});
+
 test("darwin loader refuses a foreign symlink and an occupied sandbox", () => {
-  const foreign = fakeFs({ [REAL]: { link: join(HOME, "elsewhere") } });
+  const elsewhere = join(HOME, "elsewhere");
+  const foreign = fakeFs({ [REAL]: { link: elsewhere }, [elsewhere]: "dir" });
   expect(() => ensureDarwinInstallSymlink(DIR, { fs: foreign, home: HOME })).toThrow(CamoufoxSandboxError);
 
   // real dir exists AND the sandbox target is already occupied: no rename.
