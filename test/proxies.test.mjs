@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { createServer } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -537,4 +537,26 @@ test("persists across a server restart and still redacts the password", async ()
 test("the package directory is not used for data", () => {
   expect(existsSync(join(root, "proxies.json"))).toBe(false);
   expect(dataDir.startsWith(root)).toBe(false);
+});
+
+// A corrupt proxies.json must not 500 every proxy API forever: the store
+// quarantines the file, starts empty and reports the recovery (M-9).
+test("a corrupt proxies.json is quarantined and the store recovers empty", async () => {
+  const bad = mkdtempSync(join(tmpdir(), "clean-login-proxies-corrupt-"));
+  const file = join(bad, "proxies.json");
+  writeFileSync(file, "{ this is not json !!!");
+  const { createProxyStore } = await import("../lib/proxies.mjs");
+  const store = createProxyStore({ dataDir: bad });
+  const list = await store.list();
+  expect(list).toEqual([]);
+  const recovered = store.recovered();
+  expect(recovered).toBeTruthy();
+  expect(recovered.corruptFile).toMatch(/^proxies\.json\.corrupt-/);
+  // The corrupt bytes are kept on disk for manual salvage, under the new name.
+  expect(existsSync(join(bad, recovered.corruptFile))).toBe(true);
+  expect(readFileSync(join(bad, recovered.corruptFile), "utf8")).toBe("{ this is not json !!!");
+  // And the store stays usable afterwards.
+  const created = await store.create({ name: "post-recovery", type: "http", host: "127.0.0.1", port: 8080 });
+  expect((await store.list()).some((item) => item.id === created.id)).toBe(true);
+  rmSync(bad, { recursive: true, force: true });
 });

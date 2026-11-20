@@ -1017,3 +1017,48 @@ test("a finished sign-in forwards the credential-free registration report in pro
     registration: { ok: true, state: "never_offered", action: "added", reason: null },
   });
 });
+
+// M-15: a claimed directory must verify the callback IS the ledgered account.
+// Before the fix, an empty ledger id or a callback with no uid skipped the
+// check entirely, so a claimed key could absorb another account's credentials.
+
+async function claimedHarness(callbackResult) {
+  const { env, dir, controller, clientCalls } = await harness({
+    methods: [browserMethod({ callback: async () => callbackResult })],
+  });
+  const path = accountDir(env, "workbuddy", "workbuddy");
+  await writeAccountMeta(path, {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy",
+    accountId: "ledger-acct",
+    uid: "ledger-uid",
+    signedInAt: "2026-11-01T00:00:00.000Z",
+  });
+  await controller.startSignIn({ provider: "workbuddy", account: { key: "workbuddy" } });
+  await controller.whenSettled();
+  return { env, dir, path, controller, clientCalls };
+}
+
+test("a callback with no uid cannot write into a claimed ledgered directory", async () => {
+  const { controller, clientCalls } = await claimedHarness(
+    success({ accountId: null, uid: null }),
+  );
+  const flow = controller.status();
+  expect(flow.state).toBe("error");
+  expect(flow.error.code).toBe("identity_mismatch");
+  expect(clientCalls).toHaveLength(0);
+});
+
+test("a callback whose uid differs from the claimed ledger is refused", async () => {
+  const { controller, clientCalls } = await claimedHarness(
+    success({ accountId: "other", uid: "other-uid" }),
+  );
+  expect(controller.status().error.code).toBe("identity_mismatch");
+  expect(clientCalls).toHaveLength(0);
+});
+
+test("a callback whose uid matches the claimed ledger still writes", async () => {
+  const { controller } = await claimedHarness(success({ uid: "ledger-uid", accountId: "ledger-acct" }));
+  expect(controller.status().state).toBe("done");
+});
