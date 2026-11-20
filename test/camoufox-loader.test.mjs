@@ -87,6 +87,7 @@ function fakeFs(entries = {}) {
       return p in entries;
     },
     rmSync: (p) => calls.push(["rm", p]),
+    readlinkSync: (p) => entries[p].link,
     realpathSync: (p) => (entries[p] && entries[p].link) ?? p,
     mkdirSync: (p) => calls.push(["mkdir", p]),
     renameSync: (from, to) => calls.push(["rename", from, to]),
