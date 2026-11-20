@@ -4780,7 +4780,9 @@ function nativeFlow(flow) {
     paste,
     code,
     url: typeof flow.url === "string" ? flow.url : "",
-    error: typeof flow.error === "string" ? flow.error : "",
+    // The native controller reports its failure as a plain string; the
+    // dialog's error line reads the `{ code, serverMessage }` shape.
+    error: typeof flow.error === "string" && flow.error ? { serverMessage: flow.error } : "",
     instructions: code
       ? `${text.signInNativeCode}: ${code}`
       : paste
