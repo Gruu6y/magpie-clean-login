@@ -377,6 +377,27 @@ test("a launch failure is reported as launch_failed", async () => {
   expect(controller.status().job.state).toBe("error");
 });
 
+test("a long launch error keeps playwright's display hints (F-8)", async () => {
+  // Playwright's display-less failure ends with an xvfb hint that a
+  // UI-sized cap would cut off; the job must keep the whole message.
+  const hint =
+    "Missing X server or $DISPLAY.\n" +
+    "The platform failed to initialize.  Exiting.\n" +
+    "x".repeat(400) +
+    "\nSet either 'headless: true' or use 'xvfb-run <your-playwright-app>' before running Playwright.";
+  const { controller } = await harness({
+    launchBrowser: async () => {
+      throw new ScoreBrowserError("launch_failed", hint, 502);
+    },
+  });
+  await expect(controller.start({ id: "p1", name: "SG 01" })).rejects.toMatchObject({
+    code: "launch_failed",
+  });
+  const view = controller.status();
+  expect(view.job.error).toBe(hint);
+  expect(view.job.error).toContain("xvfb-run");
+});
+
 test("a browser runtime that cannot be loaded is an unprepared browser", async () => {
   const { controller } = await harness({
     launchBrowser: async () => {

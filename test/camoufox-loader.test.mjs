@@ -11,9 +11,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CamoufoxSandboxError,
+  camoufoxCacheEnv,
   ensureDarwinInstallSymlink,
   isInsideSandbox,
 } from "../lib/camoufox-loader.mjs";
+
+test("camoufoxCacheEnv mirrors the import-time redirect for forked hosts", () => {
+  // win32 paths.js reads LOCALAPPDATA; linux reads XDG_CACHE_HOME (which also
+  // redirects fontconfig's cache). darwin has no env redirect at all — the
+  // install symlink does the work there, so nothing is exported.
+  expect(camoufoxCacheEnv("/box", "win32")).toEqual({ LOCALAPPDATA: "/box" });
+  expect(camoufoxCacheEnv("/box", "linux")).toEqual({ XDG_CACHE_HOME: "/box" });
+  expect(camoufoxCacheEnv("/box", "darwin")).toEqual({});
+});
 
 test("isInsideSandbox accepts the sandbox itself and its children only", () => {
   const sandbox = join(tmpdir(), "cl-sandbox-x");

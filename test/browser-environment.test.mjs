@@ -3,7 +3,7 @@
 // imports camoufox. The model installer is injected too: the default one would
 // reach the network on a missing model.
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -338,7 +338,10 @@ test("a verified install writes the record and exports the executable path", asy
   expect(status.modelInstalled).toBe(true);
   expect(status.checksumVerified).toBe(true);
   expect(status.checksumStatus).toBe("verified");
-  expect(status.installedBytes).toBe(platformAsset().extractedBytes + 7);
+  // The recorded browser bytes include the install.json record itself (F-9):
+  // the installer measured the directory before the record existed.
+  const { size: recordSize } = await stat(join(root, "install.json"));
+  expect(status.installedBytes).toBe(platformAsset().extractedBytes + recordSize + 7);
   expect(status.modelBytes).toBe(7);
   expect(status.executablePath).toBe(exe);
   expect(env[EXECUTABLE_ENV]).toBe(exe);
@@ -514,6 +517,41 @@ test("cancel moves the job to cancelled", async () => {
   expect(status.state).toBe("cancelled");
   expect(status.installed).toBe(false);
   expect(manager.job().state).toBe("cancelled");
+});
+
+test("installedBytes matches the real on-disk total once the record is written (F-9)", async () => {
+  // The installer measures the directory before writeRecord drops
+  // install.json into it. The stored bytes must include the record's own
+  // size, or the reported total sits ~350 B short of reality.
+  const root = await tempRoot();
+  const exe = join(root, "camoufox.exe");
+  await writeFile(exe, "browser-bytes");
+  const manager = createEnvironmentManager({
+    root,
+    env: {},
+    freeBytes: requiredDiskBytes() + 1,
+    installer: async ({ dir }) => ({
+      version: BROWSER_VERSION,
+      executablePath: exe,
+      // Measure exactly like defaultInstaller: install.json does not exist
+      // at this point, so this number cannot include it on its own.
+      bytes: await directoryBytes(dir),
+      checksumVerified: true,
+    }),
+    modelInstaller: fakeModelInstaller,
+  });
+
+  await manager.prepare();
+  await manager.whenSettled();
+
+  const status = await manager.status();
+  const record = JSON.parse(await readFile(join(root, "install.json"), "utf8"));
+  const total = await directoryBytes(root);
+  // record.bytes is the browser share: everything in the directory, including
+  // the record file itself, minus the model which is counted separately.
+  expect(status.modelBytes).toBe(7);
+  expect(record.bytes).toBe(total - 7);
+  expect(status.installedBytes).toBe(total);
 });
 
 test("installedBytes never counts the model twice when the record has no bytes", async () => {
