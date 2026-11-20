@@ -35,7 +35,7 @@ test("loadCamoufoxSandboxed pins INSTALL_DIR inside the sandbox (fresh process)"
         `import { loadCamoufoxSandboxed } from ${JSON.stringify(join(import.meta.dir, "..", "lib", "camoufox-loader.mjs").replace(/\\\\/g, "/"))};
          const dir = ${JSON.stringify(sandbox.replace(/\\\\/g, "/"))};
          const camoufox = await loadCamoufoxSandboxed(dir);
-         console.log(JSON.stringify({ installDir: camoufox.INSTALL_DIR ?? null }));`,
+         console.log(JSON.stringify({ installDir: camoufox.INSTALL_DIR ?? null, homedir: process.env.HOME ?? null }));`,
       ],
       { cwd: join(import.meta.dir, ".."), encoding: "utf8", timeout: 30_000 },
     );
@@ -45,7 +45,11 @@ test("loadCamoufoxSandboxed pins INSTALL_DIR inside the sandbox (fresh process)"
       return;
     }
     expect(result.status).toBe(0);
-    const { installDir } = JSON.parse(result.stdout.trim().split("\n").pop());
+    const { installDir, homedir } = JSON.parse(result.stdout.trim().split("\n").pop());
+    if (!isInsideSandbox(installDir, sandbox)) {
+      // Diagnose before asserting: which of the two paths escaped the sandbox?
+      console.log(`installDir=${installDir} homedir=${homedir} sandbox=${sandbox}`);
+    }
     expect(installDir).toBeTruthy();
     expect(isInsideSandbox(installDir, sandbox)).toBe(true);
   } finally {
