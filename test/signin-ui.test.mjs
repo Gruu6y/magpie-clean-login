@@ -53,6 +53,10 @@ test("a built-in provider's add entry goes through magpie's own command line", (
   expect(app).toContain("const NATIVE_STATE_ALIAS = {");
   expect(app).toContain('"paste-required": "waiting-code",');
   expect(app).toContain("function nativeFlow(flow) {");
+  // A native failure is a plain string; it is wrapped so serverErrorText shows
+  // the reason instead of the generic fallback.
+  expect(app).toContain('error: typeof flow.error === "string" && flow.error ? { serverMessage: flow.error } : "",');
+  expect(app).toContain("statusDetail.textContent = serverErrorText(flow?.error);");
 });
 
 test("the dialog is sandbox-safe: type=button controls and no form submission", () => {
