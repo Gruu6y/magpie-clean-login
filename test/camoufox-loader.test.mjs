@@ -48,6 +48,9 @@ test("loadCamoufoxSandboxed pins INSTALL_DIR inside the sandbox (fresh process)"
       console.log("skip: camoufox package not available in test environment");
       return;
     }
+    if (result.status !== 0) {
+      console.log(`subprocess failed: ${result.stderr ?? result.stdout}`);
+    }
     expect(result.status).toBe(0);
     const { installDir, homedir } = JSON.parse(result.stdout.trim().split("\n").pop());
     if (!isInsideSandbox(installDir, sandbox)) {
