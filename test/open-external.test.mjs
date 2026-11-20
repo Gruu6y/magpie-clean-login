@@ -4,7 +4,7 @@
 
 import { EventEmitter } from "node:events";
 import { expect, test } from "bun:test";
-import { describeOpen, openCommand, openExternal } from "../lib/open-external.mjs";
+import { describeOpen, isAllowedSignInUrl, openCommand, openExternal } from "../lib/open-external.mjs";
 import { ISSUE_NEW_URL } from "../lib/issue-report.mjs";
 
 class FakeChild extends EventEmitter {
@@ -75,4 +75,37 @@ test("a spawn failure becomes a readable 502, not an unhandled error", async () 
     code: "spawn-failed",
     status: 502,
   });
+});
+
+test("the native sign-in door opens a provider's https sign-in page", async () => {
+  const { spawnImpl, calls } = fakeSpawn();
+  const oauth = "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&redirect_uri=http%3A%2F%2Flocalhost%3A1455&state=s";
+  // The issue-report default still refuses it: that path is not widened.
+  await expect(openExternal(oauth, { spawnImpl })).rejects.toMatchObject({ code: "url-not-allowed" });
+  expect(calls).toHaveLength(0);
+  const opened = await openExternal(oauth, { spawnImpl, platform: "linux", allowAnyHttps: true });
+  expect(opened).toEqual({ ok: true, command: "xdg-open", url: oauth });
+  expect(calls).toHaveLength(1);
+  expect(calls[0].args).toEqual([oauth]);
+});
+
+test("allowAnyHttps still refuses every non-https or credentialed URL", async () => {
+  const { spawnImpl, calls } = fakeSpawn();
+  for (const bad of [
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "http://accounts.google.com/o/oauth2/auth",
+    "https://user:pass@accounts.google.com/",
+    "data:text/html,<script>1</script>",
+    "not a url",
+    "",
+  ]) {
+    expect(isAllowedSignInUrl(bad)).toBe(false);
+    await expect(openExternal(bad, { spawnImpl, allowAnyHttps: true })).rejects.toMatchObject({
+      code: "url-not-allowed",
+      status: 400,
+    });
+  }
+  expect(isAllowedSignInUrl(undefined)).toBe(false);
+  expect(calls).toHaveLength(0);
 });

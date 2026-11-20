@@ -171,6 +171,28 @@ test("a stale in-flight marker is reclaimed", async () => {
   expect(removed).toEqual([dir]);
 });
 
+test("a stale marker on a directory the live flow still owns is kept", async () => {
+  // A code flow can wait longer than the marker's window. The live flow, not
+  // the marker's age, decides: its directory is kept, a true orphan is not.
+  const { env } = await tempEnv();
+  const live = await account(env, "workbuddy", "workbuddy#waiting");
+  await writeFile(join(live, SIGNIN_FLOW_MARKER), JSON.stringify({ flowId: "f" }));
+  const orphan = await account(env, "workbuddy", "workbuddy#orphan");
+  const removed = [];
+  const report = await pruneOrphanAccounts({
+    env,
+    readKeys: () => new Set(),
+    rm: async (target) => removed.push(target),
+    stat: async () => ({ mtimeMs: 1_000 }),
+    now: () => 1_200,
+    staleMs: 100,
+    inFlightDirs: new Set([`${live}/`]),
+  });
+  expect(report.skippedLive).toEqual([{ provider: "workbuddy", key: "workbuddy#waiting" }]);
+  expect(report.removed).toEqual([{ provider: "workbuddy", key: "workbuddy#orphan" }]);
+  expect(removed).toEqual([orphan]);
+});
+
 test("a removal failure is reported and the rest of the sweep continues", async () => {
   const { env } = await tempEnv();
   const locked = await account(env, "workbuddy", "workbuddy#locked");

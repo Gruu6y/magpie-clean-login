@@ -643,6 +643,36 @@ test("tick stands down while an interactive sign-in is running", async () => {
   }
 });
 
+test("a sign-in parked in waiting-code holds off renewal instead of failing it", async () => {
+  // The real controller refuses a second start with `busy`. Before the fix
+  // `waiting-code` read as settled, so hosting started anyway, collided, and
+  // after two such "failures" switched the account's hosting off.
+  const calls = [];
+  const parked = {
+    status: () => ({ state: "waiting-code", provider: "loomy", key: "loomy" }),
+    startSignIn: async (input) => {
+      calls.push(input);
+      throw Object.assign(new Error("A sign-in is already in progress."), { code: "busy", status: 409 });
+    },
+    whenSettled: () => Promise.resolve(),
+    cancel: async () => {},
+  };
+  const ctx = await setup({ expiresAt: BASE - 1000, signIn: parked });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    for (let i = 0; i < 3; i += 1) {
+      expect(await ctx.hosting.tick()).toEqual({ ran: false, reason: "signin_busy" });
+    }
+    await expect(ctx.hosting.runNow(PROVIDER, KEY)).rejects.toMatchObject({ code: "busy", status: 409 });
+    expect(calls).toEqual([]);
+    const { hosting } = await ctx.hosting.inspect(PROVIDER, KEY);
+    expect(hosting.enabled).toBe(true);
+    expect(hosting.failStreak).toBe(0);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
 test("a malformed policy file leaves everything off", async () => {
   const ctx = await setup();
   try {
