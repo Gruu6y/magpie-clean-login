@@ -219,3 +219,26 @@ test("status is idle before anything runs", () => {
   const { controller } = harness();
   expect(controller.status()).toEqual({ state: "idle" });
 });
+
+// M-14: writing to a child whose stdin already died must not raise an
+// unhandled EPIPE that kills the whole process (the fake child's stdin emits
+// an 'error' the way a real socket does after the child exited).
+test("a paste after the child's stdin died is an error, not a process crash", async () => {
+  const { controller, children } = harness();
+  await controller.start({ agent: "codex" });
+  const child = children[0];
+  // Simulate a dead pipe: mark it unwritable and fire the error a real
+  // socket would raise. The flow's own listeners must swallow it.
+  child.stdin.writable = false;
+  child.stdin.on = (event, listener) => {
+    if (event === "error") listener(new Error("EPIPE"));
+    return child.stdin;
+  };
+  child.stdin.write = () => {
+    throw Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+  };
+  child.stdout.write("Paste its whole address here and press Enter:\n");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(controller.status().state).toBe("paste-required");
+  expect(() => controller.paste("http://localhost/x")).toThrow(NativeSignInError);
+});

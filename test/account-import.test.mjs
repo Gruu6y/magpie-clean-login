@@ -556,3 +556,56 @@ test("a built-in account reads as signed in, survives the sweep and cannot be de
   expect((await removed.json()).code ?? "signed_in").toBe("signed_in");
   expect(existsSync(accountDir(env, "antigravity", NATIVE_KEY))).toBe(true);
 });
+
+// --- 6. per-item isolation: one failure cannot sink the batch -------------
+
+test("a failed item is reported in `failed` while the rest still import", async () => {
+  const { env } = await realEnv();
+  const { identity } = stubDeps();
+  const written = [];
+  let metaCalls = 0;
+  const boom = new Error("disk full on meta write");
+  const report = await importAccounts(env, {
+    generate: async () => identity,
+    classify: pluginClassify,
+    writeAccountMeta: async (dir, meta) => {
+      // Fail the second item only: before the fix the whole POST 500'd and
+      // the earlier success went unreported.
+      metaCalls += 1;
+      if (metaCalls === 2) throw boom;
+      written.push(dir);
+      return writeAccountMeta(dir, meta);
+    },
+  });
+  expect(report.imported).toBe(2);
+  expect(report.failed).toHaveLength(1);
+  expect(report.failed[0].error).toContain("disk full");
+  const succeeded = new Set(NEW_KEYS.filter((key) => key !== report.failed[0].key));
+  for (const key of succeeded) {
+    expect(existsSync(accountDir(env, providerOf(key), key))).toBe(true);
+  }
+  // The failed item's directory may exist (the pin was drawn before the meta
+  // write threw) but must carry no ledger pretending the import finished.
+  const failedDir = accountDir(env, report.failed[0].provider, report.failed[0].key);
+  expect(existsSync(join(failedDir, "account.json"))).toBe(false);
+});
+
+test("POST /api/accounts/import stays 200 with per-item failures listed", async () => {
+  const { dataDir, env } = await realEnv();
+  await preDrawPins(env, NEW_KEYS.map((key) => [providerOf(key), key]));
+  // Corrupt the accounts root for exactly one item so its writeMeta fails:
+  // a regular file where the account's directory must be created.
+  const victim = NEW_KEYS[1];
+  const victimDir = accountDir(env, providerOf(victim), victim);
+  await rm(victimDir, { recursive: true, force: true });
+  await writeFile(victimDir, "not a directory");
+  const { api } = await startService(env);
+  const res = await api("POST", "/api/accounts/import", {});
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.failed.some((item) => item.key === victim)).toBe(true);
+  expect(body.imported).toBe(2);
+  const text = JSON.stringify(body);
+  assertNoSecrets(text);
+  void dataDir;
+});

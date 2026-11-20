@@ -11,7 +11,7 @@
 // camoufox is never imported: the generator is injected.
 import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -105,16 +105,19 @@ test("a profile that cannot be cleared fails the rotation and keeps the old pin"
   await ensureIdentity(dir, { generate: async () => ({ tag: "kept" }) });
   await expect(
     rotateIdentity(dir, {
-      generate: async () => {
-        throw new Error("the generator must not run after a failed clear");
-      },
+      // The draw now runs BEFORE the profile is cleared, so a fresh pin is
+      // staged first and discarded when the clear fails.
+      generate: async () => ({ tag: "staged" }),
       remove: async () => {
         throw new Error("EBUSY: the profile is open in a browser");
       },
     }),
   ).rejects.toThrow(/EBUSY/);
-  // Half a rotation is worse than none: the pin is still the old one.
+  // Half a rotation is worse than none: the pin is still the old one and no
+  // staged file is left behind.
   expect(await readIdentity(dir)).toEqual({ tag: "kept" });
+  const leftovers = (await readdir(dir)).filter((name) => name.includes("pending"));
+  expect(leftovers).toEqual([]);
 });
 
 test("rotateIdentity works on an account that has a directory but no pin yet", async () => {
@@ -221,4 +224,30 @@ test("a target that cannot be stated never costs the freshly drawn pin", async (
   });
   expect(await readIdentity(from)).toEqual({ tag: "drawn" });
   expect(await readIdentity(to)).toEqual({ tag: "owned" });
+});
+test("a failed draw leaves the old pin AND the old profile untouched", async () => {
+  const env = await tempEnv();
+  const dir = accountDir(env, "workbuddy", "workbuddy");
+  await ensureIdentity(dir, { generate: async () => ({ tag: "first" }) });
+  const profile = await seedProfile(dir);
+  expect(existsSync(join(profile, "cookies.sqlite"))).toBe(true);
+
+  await expect(
+    rotateIdentity(dir, {
+      generate: async () => {
+        throw new Error("fpgen blew up mid-draw");
+      },
+    }),
+  ).rejects.toThrow(/blew up|no identity/);
+
+  // The half-dead state this bug used to leave -- old pin plus an empty
+  // profile -- is exactly what must NOT happen: both halves survive or neither
+  // does.
+  expect(await readIdentity(dir)).toEqual({ tag: "first" });
+  expect(existsSync(join(profile, "cookies.sqlite"))).toBe(true);
+  // And no staged pin is left behind in the directory.
+  const leftovers = await readdir(dir).then((names) =>
+    names.filter((name) => name.includes("pending")),
+  );
+  expect(leftovers).toEqual([]);
 });
