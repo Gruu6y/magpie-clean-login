@@ -241,13 +241,49 @@ try {
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
-  await page.goto(`${base}/?theme=${theme}&lang=${lang}`, { waitUntil: "networkidle" });
+
+  // ui/embed-gate.js refuses a top-level load: the shipped page only runs
+  // framed, opaque-origin, and under an ancestor it trusts. So instead of
+  // page.goto straight at the app, drive the same mount "magpie web" uses:
+  // a same-origin parent (embed-gate trusts an ancestor whose origin is the
+  // page's own location.origin) holding a <iframe sandbox="allow-scripts">.
+  // The sandbox gives the frame an opaque origin, which is also how its API
+  // fetches get CORS out of lib/server.mjs; allow-same-origin must stay off
+  // or the gate reads a readable foreign frame and denies it. The parent is
+  // a same-origin shell the server doesn't route, fulfilled locally -- a
+  // foreign parent like wails.localhost is trusted by the gate but Chromium
+  // then blocks the loopback navigation as a Private Network Access violation.
+  await page.route(`${base}/launcher-frame`, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100%}</style>",
+    }),
+  );
+  await page.goto(`${base}/launcher-frame`);
+  const appUrl = `${base}/?theme=${theme}&lang=${lang}`;
+  const frameHandle = await page.evaluateHandle((src) => {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.src = src;
+    document.body.appendChild(frame);
+    return frame;
+  }, appUrl);
+  const app = await frameHandle.contentFrame();
+  if (!app) throw new Error(`the app iframe did not attach: ${appUrl}`);
+  await app.waitForLoadState("networkidle");
   await page.waitForTimeout(400);
+  // A denied embed paints the stub instead of the UI; say so rather than
+  // timing out on the first tab click.
+  const denied = await app
+    .$eval("#embed-denied", (node) => !node.hidden)
+    .catch(() => false);
+  if (denied) throw new Error("ui/embed-gate.js denied the README screenshot embed");
+  await app.waitForSelector(".shell", { state: "visible", timeout: 15000 });
 
   const shots = [];
   const shoot = async (name, tab, prepare) => {
-    await page.click(`#tab-${tab}`);
-    await page.waitForTimeout(350);
+    await app.click(`#tab-${tab}`);
+    await app.waitForTimeout(350);
     if (prepare) await prepare();
     await page.screenshot({ path: join(root, "assets", name), fullPage: false });
     shots.push(name);
@@ -255,14 +291,14 @@ try {
 
   await shoot("screenshot-providers.png", "providers");
   await shoot("screenshot-proxies.png", "proxies", async () => {
-    await page.waitForSelector("#proxy-test-target option[value='qoder-cn']", { state: "attached", timeout: 10000 });
-    await page.selectOption("#proxy-test-target", "qoder-cn");
-    await page.waitForTimeout(250);
+    await app.waitForSelector("#proxy-test-target option[value='qoder-cn']", { state: "attached", timeout: 10000 });
+    await app.selectOption("#proxy-test-target", "qoder-cn");
+    await app.waitForTimeout(250);
   });
   await shoot("screenshot-accounts.png", "accounts");
   await shoot("screenshot-guide.png", "guide");
 
-  const counts = await page.evaluate(() => ({
+  const counts = await app.evaluate(() => ({
     tabs: document.querySelectorAll(".tab").length,
     guideSections: document.querySelectorAll(".guide-section").length,
     // What the browser panel actually renders, so a leak shows up in the

@@ -232,6 +232,7 @@ Accounts and exits are fully drivable from the command line, with no page open:
 
 ```sh
 bun bin/clean-login.mjs proxies add home-01 http 127.0.0.1 7102   # store an exit
+bun bin/clean-login.mjs proxies update <proxyId> --host 10.0.0.2 --exit-port 1080   # change an exit (a connection change clears probe results)
 bun bin/clean-login.mjs accounts import plan                      # preview magpie's accounts
 bun bin/clean-login.mjs accounts import run --only <provider>#<recordId>
 bun bin/clean-login.mjs accounts exit <provider> <key> --mode custom --proxy <proxyId>

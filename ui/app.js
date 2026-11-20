@@ -326,6 +326,7 @@ const messages = {
     errorInvalidPort: "The port must be between 1 and 65535.",
     errorInvalidUsername: "The username is not valid.",
     errorInvalidPassword: "The password is not valid.",
+    errorNameTaken: "A proxy with that name already exists.",
     errorNotFound: "This proxy no longer exists.",
     errorInvalidJson: "The request was not valid JSON.",
     errorTooLarge: "The request was too large.",
@@ -853,6 +854,7 @@ const messages = {
     errorInvalidPort: "端口应在 1 到 65535 之间。",
     errorInvalidUsername: "用户名无效。",
     errorInvalidPassword: "密码无效。",
+    errorNameTaken: "已存在同名的代理。",
     errorNotFound: "这个代理已不存在。",
     errorInvalidJson: "请求不是有效的 JSON。",
     errorTooLarge: "请求内容过大。",
@@ -1380,6 +1382,7 @@ const messages = {
     errorInvalidPort: "連接埠應在 1 到 65535 之間。",
     errorInvalidUsername: "使用者名稱無效。",
     errorInvalidPassword: "密碼無效。",
+    errorNameTaken: "已存在同名的代理。",
     errorNotFound: "這個代理已不存在。",
     errorInvalidJson: "請求不是有效的 JSON。",
     errorTooLarge: "請求內容過大。",
@@ -1907,6 +1910,7 @@ const messages = {
     errorInvalidPort: "ポートは 1 から 65535 の範囲で入力してください。",
     errorInvalidUsername: "ユーザー名が無効です。",
     errorInvalidPassword: "パスワードが無効です。",
+    errorNameTaken: "同名のプロキシがすでに存在します。",
     errorNotFound: "このプロキシは存在しません。",
     errorInvalidJson: "リクエストが有効な JSON ではありません。",
     errorTooLarge: "リクエストが大きすぎます。",
@@ -2385,6 +2389,7 @@ const errorKeys = {
   identity_mismatch: "errorAccountMismatch",
   invalid_account: "errorAccountInvalid",
   invalid_name: "errorInvalidName",
+  name_taken: "errorNameTaken",
   invalid_type: "errorInvalidType",
   invalid_host: "errorInvalidHost",
   invalid_port: "errorInvalidPort",
@@ -2417,7 +2422,13 @@ const testErrorKeys = {
   unknown: "testUnknown",
 };
 
-function apiErrorText(code) {
+function apiErrorText(error) {
+  const code = error?.code;
+  // The proxy store returns one code for every name failure ("Name is
+  // required.", "...too long.", "Name must not contain < or >."). A single
+  // localized string cannot say which one happened, so the server's own
+  // message is the honest answer whenever it exists.
+  if (code === "invalid_name" && error?.serverMessage) return String(error.serverMessage);
   return text[errorKeys[code]] || text.errorGeneric;
 }
 
@@ -4343,7 +4354,7 @@ function serverErrorText(error) {
   if (code === "network") return text.errorNetwork;
   const key = (code !== "not_found" ? errorKeys[code] : undefined) || checkErrorKeys[code];
   if (key && text[key]) return text[key];
-  return [code, message].filter(Boolean).join(" · ") || apiErrorText(error?.code);
+  return [code, message].filter(Boolean).join(" · ") || apiErrorText(error);
 }
 
 function signInStateLabel(state) {
@@ -5307,7 +5318,7 @@ function environmentChecksumVerified(env) {
 function environmentRequestErrorText(error) {
   const code = error?.code;
   if (code && environmentErrorKeys[code]) return text[environmentErrorKeys[code]];
-  return apiErrorText(code);
+  return apiErrorText(error);
 }
 
 function stopEnvironmentPolling() {
@@ -5772,7 +5783,7 @@ async function testDialogProxy() {
       return;
     }
     context.lastTest = null;
-    setTestResult("error", text.testFailure.replace("{error}", apiErrorText(error.code)));
+    setTestResult("error", text.testFailure.replace("{error}", apiErrorText(error)));
   } finally {
     if (dialogContext === context) {
       context.testing = false;
@@ -5812,7 +5823,7 @@ async function saveProxy() {
     if (testedValues && saved.status !== "ok") testRowProxy(saved.id);
   } catch (error) {
     if (dialogContext === context && byId("proxy-dialog").open) {
-      setFormError(apiErrorText(error.code));
+      setFormError(apiErrorText(error));
       context.saving = false;
       setDialogBusy(false);
     }
@@ -5881,7 +5892,7 @@ async function confirmDelete() {
   } catch (error) {
     deleting = false;
     if (byId("confirm-dialog").open) {
-      setConfirmError(apiErrorText(error.code));
+      setConfirmError(apiErrorText(error));
       setConfirmBusy(false);
     } else {
       confirmController.cancel();
