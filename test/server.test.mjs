@@ -138,8 +138,103 @@ test("refuses API calls without the page token", async () => {
   for (const path of ["/api/health", "/api/bootstrap", "/api/providers"]) {
     const res = await raw("GET", path);
     expect(res.status).toBe(403);
-    expect(JSON.parse(res.body).reload).toBe(true);
+    const body = JSON.parse(res.body);
+    expect(body.reload).toBe(true);
+    // Same error shape as every other API error: a code plus a message.
+    expect(typeof body.message).toBe("string");
   }
+});
+
+test("a refused Origin is a JSON 403 with the same shape", async () => {
+  const res = await raw("GET", "/api/health", { origin: "https://evil.example" });
+  expect(res.status).toBe(403);
+  const body = JSON.parse(res.body);
+  expect(body.error).toBe("forbidden");
+  expect(typeof body.message).toBe("string");
+});
+
+test("a bad percent-encoding in a static path is a 400, never a 500", async () => {
+  const res = await raw("GET", "/%");
+  expect(res.status).toBe(400);
+  expect(JSON.parse(res.body).error).toBe("invalid_path");
+  const asset = await raw("GET", "/assets/%");
+  expect(asset.status).toBe(400);
+});
+
+test("environment routes publish no host paths and an idle job shape", async () => {
+  const res = await raw("GET", "/api/environment", auth());
+  expect(res.status).toBe(200);
+  const body = JSON.parse(res.body);
+  expect(body.environment.installDir).toBeUndefined();
+  expect(body.environment.modelDir).toBeUndefined();
+  expect(body.environment.executablePath).toBeUndefined();
+  expect(res.body).not.toContain(tmp);
+  // "Never ran" is the same idle shape the other job routes use, not null.
+  expect(body.job).toEqual({ state: "idle" });
+
+  const job = await raw("GET", "/api/environment/job", auth());
+  expect(job.status).toBe(200);
+  expect(JSON.parse(job.body).job).toEqual({ state: "idle" });
+});
+
+test("GET /api/signin reports the idle flow shape when nothing ran", async () => {
+  const res = await raw("GET", "/api/signin", auth());
+  expect(res.status).toBe(200);
+  expect(JSON.parse(res.body).flow).toEqual({ state: "idle" });
+});
+
+test("GET check and GET hosting are 404 for an account with no ledger", async () => {
+  const check = await raw("GET", "/api/accounts/workbuddy/workbuddy%23nope/check", auth());
+  expect(check.status).toBe(404);
+  expect(JSON.parse(check.body).error).toBe("not_found");
+  const hosting = await raw("GET", "/api/accounts/workbuddy/workbuddy%23nope/hosting", auth());
+  expect(hosting.status).toBe(404);
+  expect(JSON.parse(hosting.body).error).toBe("not_found");
+});
+
+test("DELETE works on a fresh install, and a corrupt auth file still refuses", async () => {
+  const { writeAccountMeta, accountDir } = await import("../lib/account-identity.mjs");
+  const config = join(tmp, "magpie-config");
+  const env = { ...process.env, MAGPIE_CONFIG_DIR: config, MAGPIE_CLEAN_LOGIN_DATA: join(tmp, "data") };
+  const retired = accountDir(env, "workbuddy", "workbuddy#gone");
+  await writeAccountMeta(retired, {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy#gone",
+    accountId: "gone",
+    uid: "u-g",
+    signedInAt: null,
+  });
+
+  // No plugin-auth.json and no logins.json: "no credential exists" is a real
+  // answer, so a retired directory can be deleted instead of refused.
+  const res = await raw("DELETE", "/api/accounts/workbuddy/workbuddy%23gone", auth());
+  expect(res.status).toBe(200);
+  expect(JSON.parse(res.body)).toEqual({ ok: true });
+  expect(existsSync(retired)).toBe(false);
+
+  // A store that EXISTS but cannot be read stays a refusal.
+  await mkdir(config, { recursive: true });
+  await writeFile(join(config, "plugin-auth.json"), "{ not json");
+  const second = accountDir(env, "workbuddy", "workbuddy#gone2");
+  await writeAccountMeta(second, {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy#gone2",
+    accountId: "gone2",
+    uid: "u-g2",
+    signedInAt: null,
+  });
+  const refused = await raw("DELETE", "/api/accounts/workbuddy/workbuddy%23gone2", auth());
+  expect(refused.status).toBe(503);
+  expect(JSON.parse(refused.body).error).toBe("auth_unreadable");
+  expect(existsSync(second)).toBe(true);
+
+  // Leave the temp tree as the surrounding tests expect: no auth file, no
+  // accounts root.
+  rmSync(join(config, "plugin-auth.json"), { force: true });
+  rmSync(second, { recursive: true, force: true });
+  rmSync(join(tmp, "data", "accounts"), { recursive: true, force: true });
 });
 
 test("bootstrap returns the Host-driven shape with the public provider registry", async () => {
@@ -288,10 +383,10 @@ test("health stays a secretless liveness probe", async () => {
     pruned: 0,
     skippedLive: 0,
     failed: 0,
-    // The temp MAGPIE_CONFIG_DIR has no plugin-auth.json, so a live count
-    // cannot tell signed-in from signed-out accounts…
-    // (the live counts above stay 0 because no account directory exists)
-    skipped: "auth_missing",
+    // The temp MAGPIE_CONFIG_DIR has no plugin-auth.json and no logins.json.
+    // Both stores absent is "no credential exists", so the sweep runs (and
+    // finds nothing to do) instead of bailing out.
+    skipped: null,
     sweptAt: expect.any(String),
   });
   expect(res.body).not.toContain(tmp);
@@ -339,8 +434,8 @@ test("health counts accounts now, not at the last sweep", async () => {
   expect(body.accounts.retired).toBe(0);
 
   // Leave the temp tree exactly as the earlier tests found it: the next test
-  // expects no plugin-auth.json at all (`skipped: "auth_missing"`) and no
-  // `accounts/` root left behind.
+  // expects no plugin-auth.json at all (the sweep runs and prunes nothing)
+  // and no `accounts/` root left behind.
   rmSync(join(tmp, "data", "accounts"), { recursive: true, force: true });
   rmSync(authFile, { force: true });
 });
@@ -355,7 +450,9 @@ test("POST /api/accounts/prune runs the orphan sweep and returns its report", as
     retired: [],
     skippedLive: [],
     failed: [],
-    skipped: "auth_missing",
+    // Both auth stores missing means "nothing signed in", not "cannot tell":
+    // the sweep runs and has nothing to reclaim.
+    skipped: null,
   });
 });
 

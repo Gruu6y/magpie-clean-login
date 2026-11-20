@@ -145,6 +145,21 @@ test("every in-page link lands on a real heading or anchor", () => {
   }
 });
 
+test("the CLI examples use the argument shapes the CLI actually parses", () => {
+  // The account commands take provider and key as two positionals
+  // (`accounts exit <provider> <key>`); the `<provider>#<recordId>` spelling
+  // is only for --only, where one value must name the whole account.
+  for (const markdown of [zh, en]) {
+    expect(markdown).toContain("accounts exit <provider> <key>");
+    expect(markdown).toContain("accounts note <provider> <key>");
+    expect(markdown).toContain("accounts delete <provider> <key>");
+    expect(markdown).toContain("--only <provider>#<recordId>");
+    expect(markdown).not.toContain("accounts exit <provider>#");
+    expect(markdown).not.toContain("accounts note <provider>#");
+    expect(markdown).not.toContain("accounts delete <provider>#");
+  }
+});
+
 test("the two languages carry the same factual limits", () => {
   // A translation that quietly drops a platform or a disk figure is worse than
   // no translation, so the load-bearing numbers are pinned in both files.

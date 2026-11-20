@@ -288,6 +288,15 @@ test("GET /api/accounts/:provider/:key/hosting inspects eligibility and reports 
   expect(typeof body.reason?.code).toBe("string");
 });
 
+test("GET /api/accounts/:provider/:key/hosting is a 404 for an account with no ledger", async () => {
+  // The neighbouring exit and delete routes already answer 404 for an
+  // account the plugin never signed in; hosting must say the same, not a 200
+  // that reads like a real-but-ineligible account.
+  const res = await api("GET", "/api/accounts/workbuddy/workbuddy%23nope/hosting");
+  expect(res.status).toBe(404);
+  expect((await res.json()).error).toBe("not_found");
+});
+
 test("POST /api/accounts/:provider/:key/hosting rejects missing enabled field", async () => {
   const res = await fetch(`http://127.0.0.1:${service.port}/api/accounts/workbuddy/workbuddy/hosting`, {
     method: "POST",

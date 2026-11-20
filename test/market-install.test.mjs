@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -102,7 +102,9 @@ test("createMarketInstaller spawns magpie plugin add detached and writes state",
     expect(state.pid).toBe(4321);
     expect(calls.length).toBe(1);
     expect(calls[0].cmd).toBe("magpie.exe");
-    expect(calls[0].args).toEqual(["plugin", "add", "@magpie-community/opencode-agnes-auth"]);
+    // The spawn gets the spec as requested, pin and all; only the allowlist
+    // check works on the normalized name.
+    expect(calls[0].args).toEqual(["plugin", "add", "@magpie-community/opencode-agnes-auth@latest"]);
     expect(calls[0].options.detached).toBe(true);
 
     // Reading while still running returns the running state
@@ -127,6 +129,61 @@ test("createMarketInstaller transitions to done when package appears installed",
     installed = true;
     const updated = installer.read();
     expect(updated.state).toBe("done");
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("createMarketInstaller passes the requested spec's version pin to spawn", () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "cl-inst-data-"));
+  try {
+    const calls = [];
+    const installer = createMarketInstaller({
+      dataDir,
+      cli: "magpie.exe",
+      allowedPackages: () => new Set(["@magpie-community/opencode-agnes-auth"]),
+      isInstalled: () => false,
+      spawn: (cmd, args) => {
+        calls.push(args);
+        return { unref: () => {}, pid: 1 };
+      },
+    });
+    // The allowlist matches the normalized name; the child gets the pin.
+    installer.start("@magpie-community/opencode-agnes-auth@1.2.3");
+    expect(calls[0]).toEqual(["plugin", "add", "@magpie-community/opencode-agnes-auth@1.2.3"]);
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("reading the install state never rewrites the state file", () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "cl-inst-data-"));
+  try {
+    const installer = createMarketInstaller({
+      dataDir,
+      allowedPackages: () => new Set(["@magpie-community/opencode-agnes-auth"]),
+      isInstalled: () => false,
+      // The fake child is not a real process: the first read marks the stale
+      // running job failed, deterministically on every platform.
+      isAlive: () => false,
+      spawn: () => ({ unref: () => {}, pid: 1 }),
+    });
+    installer.start("@magpie-community/opencode-agnes-auth");
+    const file = installer.stateFile;
+    // Settle the state without a filesystem side effect: a stale running job
+    // becomes failed on the first read, and every read after that must be a
+    // pure read.
+    const first = installer.read();
+    expect(first.state).toBe("failed");
+    const mtime = statSync(file).mtimeMs;
+    for (let i = 0; i < 3; i += 1) installer.read();
+    expect(statSync(file).mtimeMs).toBe(mtime);
+    // A done/failed state reads back as-is, still without touching the file.
+    writeFileSync(file, JSON.stringify({ package: "pkg", state: "done" }));
+    const doneMtime = statSync(file).mtimeMs;
+    expect(installer.read().state).toBe("done");
+    expect(installer.read().state).toBe("done");
+    expect(statSync(file).mtimeMs).toBe(doneMtime);
   } finally {
     rmSync(dataDir, { recursive: true, force: true });
   }

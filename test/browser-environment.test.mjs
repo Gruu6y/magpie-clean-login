@@ -516,6 +516,71 @@ test("cancel moves the job to cancelled", async () => {
   expect(manager.job().state).toBe("cancelled");
 });
 
+test("installedBytes never counts the model twice when the record has no bytes", async () => {
+  // Records written before bytes were tracked have `bytes: null`; the status
+  // fallback must measure only the browser part of the directory, because
+  // the model's bytes are reported (and added) separately.
+  const root = await tempRoot();
+  const exe = join(root, "camoufox.exe");
+  await writeFile(exe, "12345");
+  const env = {};
+  const manager = createEnvironmentManager({
+    root,
+    env,
+    freeBytes: requiredDiskBytes() + 1,
+    installer: async () => ({
+      version: BROWSER_VERSION,
+      executablePath: exe,
+      bytes: null,
+      checksumVerified: false,
+    }),
+    modelInstaller: fakeModelInstaller,
+  });
+  await manager.prepare();
+  await manager.whenSettled();
+
+  const status = await manager.status();
+  expect(status.modelBytes).toBe(7);
+  // The real on-disk total is the answer: executable + install.json + model.
+  // The old fallback counted the model a second time on top of it.
+  expect(status.installedBytes).toBe(await directoryBytes(root));
+});
+
+test("cancel during the starting window aborts the prepare it just missed", async () => {
+  // With no injected freeBytes the disk check awaits a real filesystem read,
+  // so a synchronous cancel() lands inside the `starting` window. The abort
+  // must still reach the controller the job is about to run with.
+  const root = await tempRoot();
+  const exe = join(root, "camoufox.exe");
+  let installerRan = false;
+  const manager = createEnvironmentManager({
+    root,
+    env: {},
+    installer: ({ signal }) => {
+      installerRan = true;
+      return new Promise((_resolve, reject) => {
+        const aborted = Object.assign(new Error("aborted"), { name: "AbortError" });
+        // The signal may already be aborted by the time the installer runs;
+        // the listener alone would never fire then.
+        if (signal.aborted) return reject(aborted);
+        signal.addEventListener("abort", () => reject(aborted), { once: true });
+      });
+    },
+    modelInstaller: fakeModelInstaller,
+  });
+
+  const preparing = manager.prepare();
+  const cancelled = manager.cancel();
+  expect(cancelled.cancelled).toBe(true);
+  await writeFile(exe, "exe"); // let the installer settle without stat errors
+  await preparing;
+  await manager.whenSettled();
+  expect(installerRan).toBe(true);
+  expect(manager.job().state).toBe("cancelled");
+  const status = await manager.status();
+  expect(status.state).toBe("cancelled");
+});
+
 test("a missing executable maps to install_failed", async () => {
   const root = await tempRoot();
   const manager = createEnvironmentManager({

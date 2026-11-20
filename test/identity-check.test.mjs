@@ -310,6 +310,34 @@ test("status starts idle and reports whether a window is open", async () => {
   pending.resolve({ text: VERDICT_TEXT });
 });
 
+test("a window the host closed itself stops reporting browserOpen", async () => {
+  // The check host exits after reporting its verdict; the handle's `closed`
+  // promise is what clears the window flag without touching the recorded
+  // job.
+  let resolveClosed;
+  const closedPromise = new Promise((resolve) => {
+    resolveClosed = resolve;
+  });
+  const { controller } = await harness({
+    launchBrowser: async () => ({
+      pid: 222,
+      // The verdict never arrives in this test; only the window's exit
+      // matters.
+      result: new Promise(() => {}),
+      closed: closedPromise,
+      close: async () => {},
+    }),
+  });
+  await controller.start({ provider: "workbuddy", key: "workbuddy" });
+  expect(controller.status().browserOpen).toBe(true);
+  resolveClosed();
+  await Bun.sleep(0);
+  expect(controller.status().browserOpen).toBe(false);
+  // The job itself is untouched: it is still mid-check.
+  expect(controller.status().job.state).toBe("checking");
+  await controller.cancel();
+});
+
 test("a swallowed onCheck failure does not turn a verdict into an error", async () => {
   const dir = await tempDir();
   const env = { MAGPIE_CLEAN_LOGIN_DATA: dir };

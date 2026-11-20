@@ -143,9 +143,13 @@ async function post(path, body) {
   return { status: response.status, body: response.body, data: JSON.parse(response.body) };
 }
 
+// Proxy names are unique now, so each row gets its own suffix.
+let proxyCounter = 0;
+
 async function newProxy() {
+  proxyCounter += 1;
   const response = await post("/api/proxies", {
-    name: "Exit A",
+    name: `Exit A-${proxyCounter}`,
     type: "http",
     host: "127.0.0.1",
     port: 7890,

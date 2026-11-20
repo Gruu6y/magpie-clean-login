@@ -552,6 +552,41 @@ test("a cancelled check never writes a score", async () => {
   expect(controller.status().job.score).toBe(null);
 });
 
+test("a window the user closed stops reporting browserOpen", async () => {
+  // The host exits on its own (the user closed the scoring window by hand):
+  // the handle's `closed` promise settles, and only that exact handle may be
+  // dropped -- a newer launch must never be cleared by an older exit.
+  const first = { pid: 1, result: new Promise(() => {}), async close() {}, closed: null };
+  const second = { pid: 2, result: new Promise(() => {}), async close() {}, closed: null };
+  let resolveFirst;
+  first.closed = new Promise((resolve) => {
+    resolveFirst = resolve;
+  });
+  let resolveSecond;
+  second.closed = new Promise((resolve) => {
+    resolveSecond = resolve;
+  });
+  const browsers = [first, second];
+  const { controller } = await harness({
+    launchBrowser: async () => browsers.shift(),
+  });
+
+  await controller.start({ id: "p1", name: "SG 01" });
+  expect(controller.status().browserOpen).toBe(true);
+  await controller.cancel();
+  expect(controller.status().browserOpen).toBe(false);
+
+  await controller.start({ id: "p1", name: "SG 01" });
+  // The first window's exit arriving late must not hide the second window.
+  resolveFirst();
+  await Bun.sleep(0);
+  expect(controller.status().browserOpen).toBe(true);
+
+  resolveSecond();
+  await Bun.sleep(0);
+  expect(controller.status().browserOpen).toBe(false);
+});
+
 test("closing the controller closes the window", async () => {
   const { controller, state } = await harness({
     timeoutMs: 50,

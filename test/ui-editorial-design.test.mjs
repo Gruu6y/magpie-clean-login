@@ -35,10 +35,15 @@ test("the page references no remote stylesheet or asset", () => {
   expect(html).not.toContain('href="http');
   expect(html).not.toContain("href='http");
   expect(html).not.toContain("//cdn");
-  // Every stylesheet link it does carry must resolve next to the page.
+  // Every stylesheet link it does carry must resolve next to the page. Other
+  // rels are allowed (the favicon is an inline data URL) but must not be
+  // remote either.
   for (const tag of html.match(/<link\b[^>]*>/gi) || []) {
-    expect(tag).toMatch(/rel="stylesheet"/i);
-    expect(tag).toMatch(/href="(?!https?:|\/\/)[^"]+"/i);
+    if (/rel="stylesheet"/i.test(tag)) {
+      expect(tag).toMatch(/href="(?!https?:|\/\/|data:)[^"]+"/i);
+    } else {
+      expect(tag).toMatch(/href="(?!https?:|\/\/)[^"]+"/i);
+    }
   }
 });
 

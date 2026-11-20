@@ -106,15 +106,27 @@ const pluginScanner = {
 };
 
 beforeAll(async () => {
+  // The check route 404s an account with no ownership ledger, so the account
+  // the tests poll gets one.
+  const { writeAccountMeta, accountDir } = await import("../lib/account-identity.mjs");
+  const env = {
+    ...process.env,
+    MAGPIE_CONFIG_DIR: join(tmp, "magpie-config"),
+    MAGPIE_CLEAN_LOGIN_DATA: join(tmp, "data"),
+    MAGPIE_CACHE_DIR: join(tmp, "magpie-cache"),
+  };
+  await writeAccountMeta(accountDir(env, "workbuddy", "workbuddy"), {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy",
+    accountId: "W",
+    uid: "u-w",
+    signedInAt: null,
+  });
   service = await startServer({
     port: 0,
     dataDir: join(tmp, "data"),
-    env: {
-      ...process.env,
-      MAGPIE_CONFIG_DIR: join(tmp, "magpie-config"),
-      MAGPIE_CLEAN_LOGIN_DATA: join(tmp, "data"),
-      MAGPIE_CACHE_DIR: join(tmp, "magpie-cache"),
-    },
+    env,
     pluginScanner,
     signIn,
     nativeSignIn,
