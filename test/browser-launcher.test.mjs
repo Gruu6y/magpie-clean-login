@@ -84,8 +84,48 @@ test("toPlaywrightProxy accepts both a stored record and a server string", () =>
   expect(toPlaywrightProxy({ type: "https", host: "h", port: 443 })).toEqual({
     server: "https://h:443",
   });
+  // An IPv6 literal is wrapped in brackets, like proxyUrlFor does for stored
+  // exits; without them the host:port split is ambiguous.
+  expect(toPlaywrightProxy({ type: "socks5", host: "2001:db8::1", port: 1080 })).toEqual({
+    server: "socks5://[2001:db8::1]:1080",
+  });
+  expect(toPlaywrightProxy({ type: "http", host: "[::1]", port: 8080 })).toEqual({
+    server: "http://[::1]:8080",
+  });
   expect(toPlaywrightProxy(null)).toBeNull();
   expect(toPlaywrightProxy({ type: "http", host: "", port: 1 })).toBeNull();
+});
+
+test("the launch handle's closed promise settles when the host exits", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const { EventEmitter } = await import("node:events");
+  const child = new EventEmitter();
+  child.pid = 9;
+  child.kill = () => {};
+  child.send = () => {};
+  child.unref = () => {};
+  child.channel = { unref: () => {} };
+  const handle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: join(dir, "profile"),
+    deps: {
+      fork: () => {
+        queueMicrotask(() => child.emit("message", { type: "ready", pid: 9 }));
+        return child;
+      },
+    },
+  });
+  let settled = false;
+  handle.closed.then(() => {
+    settled = true;
+  });
+  // The user closing the window is a host exit nobody asked for.
+  child.emit("exit", 0);
+  await handle.closed;
+  expect(settled).toBe(true);
 });
 
 test("openSignInBrowser passes the pin and the profile to camoufox", async () => {

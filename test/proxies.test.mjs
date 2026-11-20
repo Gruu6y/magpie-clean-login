@@ -239,6 +239,89 @@ test("changing the connection resets an old test result", async () => {
   expect(proxy.lastCheckedAt).toBe(null);
 });
 
+test("a connection change also clears the per-provider latency map", async () => {
+  const created = await createProxy({ name: "Provider latency proxy" });
+  const applied = await service.store.applyTestResult(
+    created.id,
+    {
+      ok: true,
+      latency: 42,
+      exitLatency: 50,
+      region: "Testland",
+      exitIp: "203.0.113.10",
+      checkedAt: "2026-01-02T03:04:05.000Z",
+      target: { kind: "provider", provider: "workbuddy", host: "api.workbuddy.test" },
+    },
+    created.updatedAt,
+  );
+  expect(applied.latencyByProvider.workbuddy.ms).toBe(42);
+
+  const changed = await raw(
+    "PATCH",
+    `/api/proxies/${created.id}`,
+    jsonHeaders(),
+    JSON.stringify({ port: okProxy.port + 1 }),
+  );
+  expect(changed.status).toBe(200);
+  const proxy = JSON.parse(changed.body).proxy;
+  // The old connection's per-provider numbers must not survive on the new
+  // connection: they were measured through a different exit.
+  expect(proxy.latencyByProvider).toEqual({});
+});
+
+test("proxy names must be unique and must not carry markup", async () => {
+  const named = await createProxy({ name: "Taken name" });
+
+  // A second proxy with the same name is refused instead of creating a pair
+  // the list cannot tell apart.
+  const dup = await raw(
+    "POST",
+    "/api/proxies",
+    jsonHeaders(),
+    JSON.stringify({ name: "Taken name", type: "http", host: "127.0.0.1", port: 8080 }),
+  );
+  expect(dup.status).toBe(409);
+  expect(JSON.parse(dup.body).error).toBe("name_taken");
+
+  const other = await createProxy({ name: "Free name" });
+  const renamed = await raw(
+    "PATCH",
+    `/api/proxies/${other.id}`,
+    jsonHeaders(),
+    JSON.stringify({ name: "Taken name" }),
+  );
+  expect(renamed.status).toBe(409);
+  expect(JSON.parse(renamed.body).error).toBe("name_taken");
+  // Renaming to the name it already has is not a clash.
+  const same = await raw(
+    "PATCH",
+    `/api/proxies/${named.id}`,
+    jsonHeaders(),
+    JSON.stringify({ name: "Taken name" }),
+  );
+  expect(same.status).toBe(200);
+
+  // Names are stored and rendered as text; markup is refused at the door.
+  for (const name of ["<script>alert(1)</script>", "a<b"]) {
+    const created = await raw(
+      "POST",
+      "/api/proxies",
+      jsonHeaders(),
+      JSON.stringify({ name, type: "http", host: "127.0.0.1", port: 8080 }),
+    );
+    expect(created.status).toBe(400);
+    expect(JSON.parse(created.body).error).toBe("invalid_name");
+    const patched = await raw(
+      "PATCH",
+      `/api/proxies/${other.id}`,
+      jsonHeaders(),
+      JSON.stringify({ name }),
+    );
+    expect(patched.status).toBe(400);
+    expect(JSON.parse(patched.body).error).toBe("invalid_name");
+  }
+});
+
 test("a new proxy starts with empty score fields", async () => {
   const created = await createProxy({ name: "Unscored proxy" });
   expect(created.score).toBe(null);

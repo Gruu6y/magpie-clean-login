@@ -75,6 +75,17 @@ beforeAll(async () => {
     uid: "u-1",
     signedInAt: "2026-11-03T10:00:00.000Z",
   });
+  // A second known account: the GET route 404s an account with no ownership
+  // ledger now, and the "different account" polling test needs one that
+  // exists but has no job.
+  await writeAccountMeta(accountDir(env, "workbuddy", "workbuddy#other"), {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy#other",
+    accountId: "signed-out",
+    uid: "u-2",
+    signedInAt: "2026-10-01T00:00:00.000Z",
+  });
 
   service = await startServer({
     port: 0,

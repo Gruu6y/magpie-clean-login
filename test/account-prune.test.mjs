@@ -468,9 +468,9 @@ test("a real key set keeps the keyed directory and removes only the orphan", asy
   await expect(stat(orphan)).rejects.toBeTruthy();
 });
 
-test("the real startup sweep leaves directories alone when auth is unreadable", async () => {
-  const { env } = await realEnv();
-  const dir = await account(env, "workbuddy", "workbuddy#orphan");
+test("the real startup sweep reclaims an orphan on a fresh install but not on a corrupt auth file", async () => {
+  const { env, config } = await realEnv();
+  const orphan = await account(env, "workbuddy", "workbuddy#orphan");
   const { startServer } = await import("../lib/server.mjs");
   const service = await startServer({
     port: 0,
@@ -489,9 +489,29 @@ test("the real startup sweep leaves directories alone when auth is unreadable", 
     },
   });
   try {
-    // Wait for the fire-and-forget startup sweep instead of racing it.
+    // No plugin-auth.json and no logins.json means no credential exists: a
+    // ledger-less directory is a dead pre-allocation, and the sweep reclaims
+    // it on the very first start of a fresh install.
     await service.prune();
-    await expect(stat(dir)).resolves.toBeTruthy();
+    await expect(stat(orphan)).rejects.toBeTruthy();
+
+    // A store that EXISTS but cannot be parsed is still "cannot tell":
+    // nothing is touched, exactly like before.
+    await writeFile(join(config, "plugin-auth.json"), "{ not json");
+    const second = await account(env, "workbuddy", "workbuddy#orphan2");
+    const report = await (await fetch(`http://127.0.0.1:${service.port}/`)).text()
+      .then((html) => /content="([0-9a-f]{64})"/.exec(html)?.[1])
+      .then((token) =>
+        fetch(`http://127.0.0.1:${service.port}/api/accounts/prune`, {
+          method: "POST",
+          headers: { "x-clean-login-token": token, "content-type": "application/json" },
+          body: "{}",
+        }),
+      )
+      .then((res) => res.json());
+    expect(report.report.skipped).toBe("auth_invalid");
+    expect(report.report.removed).toEqual([]);
+    await expect(stat(second)).resolves.toBeTruthy();
   } finally {
     await service.close();
   }

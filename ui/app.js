@@ -2843,6 +2843,21 @@ function providerLogoElement(logo, { onError } = {}) {
   return glyph;
 }
 
+// Every request through api() is the service's liveness signal: a request
+// that cannot reach the service (network error) or finds it dead (5xx) flips
+// the footer to the error state and shows Retry, and the first request that
+// answers 2xx restores "ready". A 4xx is a refused request, not a dead
+// service, so it changes nothing. A cancelled request proves nothing either.
+function markServiceDown() {
+  setServiceState("error", text.failed);
+  byId("retry").hidden = false;
+}
+
+function markServiceUp() {
+  setServiceState("ready", text.ready);
+  byId("retry").hidden = true;
+}
+
 async function api(path, { method = "GET", body, signal } = {}) {
   let response;
   try {
@@ -2858,6 +2873,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     });
   } catch (error) {
     if (error?.name === "AbortError") throw error;
+    markServiceDown();
     const wrapped = new Error("network");
     wrapped.code = "network";
     throw wrapped;
@@ -2876,6 +2892,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     if (data?.reload && reloadGuard.reloadOnce()) {
       return new Promise(() => {});
     }
+    if (response.status >= 500) markServiceDown();
     const error = new Error(data?.error || `http_${response.status}`);
     error.code = data?.error || `http_${response.status}`;
     // The server reports `{ error: code, message: humanText }`. Keep the two
@@ -2885,6 +2902,7 @@ async function api(path, { method = "GET", body, signal } = {}) {
     error.status = response.status;
     throw error;
   }
+  markServiceUp();
   return data;
 }
 

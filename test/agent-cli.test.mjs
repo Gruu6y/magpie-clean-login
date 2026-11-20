@@ -324,6 +324,90 @@ test("missing arguments and unknown commands fail with a specific code", async (
   });
 });
 
+test("a boolean flag in front of the command does not swallow it", async () => {
+  const digest = { state: { providers: [], proxies: [{ id: "p1" }], accounts: [] } };
+  const fake = fakeFetch({ "/api/agent": digest });
+  const r = runner(fake);
+  // `--raw proxies` must run the command, not read "proxies" as --raw's value.
+  expect(await r.run(["--raw", "proxies", "--token", TOKEN])).toBe(0);
+  expect(stdout(r)).toEqual(digest.state.proxies);
+});
+
+test("a bare value flag is a missing_value error, not a quiet true", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  await expect(
+    r.run(["assets", "add", "google-mail", "a@b.com", "--note", "--token", TOKEN]),
+  ).rejects.toMatchObject({ code: "missing_value" });
+  await expect(
+    r.run(["accounts", "import", "run", "--only", "--token", TOKEN]),
+  ).rejects.toMatchObject({ code: "missing_value" });
+  // Nothing was sent to the service: the flag error happens before any call.
+  expect(fake.calls).toEqual([]);
+});
+
+test("--wait rejects a non-numeric value instead of silently skipping the wait", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  await expect(r.run(["signin", "status", "--wait", "abc", "--token", TOKEN])).rejects.toMatchObject({
+    code: "invalid_wait",
+  });
+  // Any command: the flag is validated before dispatch.
+  await expect(r.run(["proxies", "--wait", "abc", "--token", TOKEN])).rejects.toMatchObject({
+    code: "invalid_wait",
+  });
+  expect(fake.calls).toEqual([]);
+});
+
+test("surplus positionals are an unexpected_arg error", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  for (const argv of [
+    ["status", "extra"],
+    ["proxies", "targets", "extra"],
+    ["accounts", "delete", "p", "k", "extra"],
+    ["signin", "code", "123456", "extra"],
+    ["proxy", "test", "p1", "extra"],
+    ["check", "p", "k", "extra"],
+  ]) {
+    await expect(r.run([...argv, "--token", TOKEN])).rejects.toMatchObject({
+      code: "unexpected_arg",
+    });
+  }
+  expect(fake.calls).toEqual([]);
+});
+
+test("accounts note without text is missing_text, not a note cleared by accident", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  await expect(
+    r.run(["accounts", "note", "workbuddy", "workbuddy#1", "--token", TOKEN]),
+  ).rejects.toMatchObject({ code: "missing_text" });
+  expect(fake.calls).toEqual([]);
+  // An explicit --note "" still clears the note on purpose.
+  await r.run(["accounts", "note", "workbuddy", "workbuddy#1", "--note", "", "--token", TOKEN]);
+  expect(fake.calls[0].body).toEqual({ note: "" });
+});
+
+test("proxy test returns exit code 1 when the probe reports a dead exit", async () => {
+  const fake = fakeFetch({ "/api/proxies/p1/test": { ok: false, result: { errorCode: "unreachable" } } });
+  const r = runner(fake);
+  expect(await r.run(["proxy", "test", "p1", "--token", TOKEN])).toBe(1);
+  const ok = fakeFetch({ "/api/proxies/p1/test": { ok: true, result: {} } });
+  expect(await runner(ok).run(["proxy", "test", "p1", "--token", TOKEN])).toBe(0);
+});
+
+test("check on an unknown account surfaces the service's 404 code", async () => {
+  const fake = fakeFetch({
+    "/api/accounts/workbuddy/workbuddy%23nope/check": { __status: 404, error: "not_found", message: "Account not found." },
+  });
+  const r = runner(fake);
+  await expect(r.run(["check", "workbuddy", "workbuddy#nope", "--token", TOKEN])).rejects.toMatchObject({
+    code: "not_found",
+    status: 404,
+  });
+});
+
 test("proxies add, delete and targets map to the proxy routes", async () => {
   const fake = fakeFetch({});
   const r = runner(fake);
@@ -544,9 +628,9 @@ test("the shipped binary drives the live service end to end", async () => {
 
   const signin = await cli("signin", "status", "--raw");
   expect(signin.status).toBe(0);
-  // No flow has run, so the real controller reports null; the CLI passes it
-  // through instead of inventing an idle object.
-  expect(JSON.parse(signin.stdout.trim()).flow).toBeNull();
+  // No flow has run, so the route reports the idle object; the CLI passes it
+  // through instead of inventing a different empty shape.
+  expect(JSON.parse(signin.stdout.trim()).flow).toEqual({ state: "idle" });
 
   // Round-trip proxy add + delete and the targets list against the live server.
   const added = await cli("proxies", "add", "家宽01", "http", "127.0.0.1", "7102", "--raw");

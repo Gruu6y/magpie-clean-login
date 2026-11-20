@@ -234,9 +234,9 @@ Accounts and exits are fully drivable from the command line, with no page open:
 bun bin/clean-login.mjs proxies add home-01 http 127.0.0.1 7102   # store an exit
 bun bin/clean-login.mjs accounts import plan                      # preview magpie's accounts
 bun bin/clean-login.mjs accounts import run --only <provider>#<recordId>
-bun bin/clean-login.mjs accounts exit <provider>#<recordId> --mode custom --proxy <proxyId>
-bun bin/clean-login.mjs accounts note <provider>#<recordId> spare
-bun bin/clean-login.mjs accounts delete <provider>#<recordId>
+bun bin/clean-login.mjs accounts exit <provider> <key> --mode custom --proxy <proxyId>
+bun bin/clean-login.mjs accounts note <provider> <key> spare
+bun bin/clean-login.mjs accounts delete <provider> <key>
 ```
 
 The read-only preview and the real import run through the same function, so the plan and the import can never disagree about which accounts exist; without `--only` the whole plan is imported.
