@@ -14,7 +14,7 @@ import {
   signInProxy,
   signInSettled,
 } from "../ui/signin-state.js";
-import { signInMethodFields } from "../ui/provider-state.js";
+import { signInDoor, signInMethodFields } from "../ui/provider-state.js";
 
 const root = join(import.meta.dir, "..");
 const app = readFileSync(join(root, "ui", "app.js"), "utf8");
@@ -39,8 +39,14 @@ test("a built-in provider's add entry goes through magpie's own command line", (
   // cannot reach magpie's API, so the service drives `magpie accounts add` and
   // the dialog has to talk to that door instead of the plugin one.
   expect(app).toContain("signInDoor(");
-  expect(app).toContain('signInDoor(context.provider) === "native"');
-  expect(app).toContain('api("api/native-signin", { method: "POST", body: { agent: context.provider.id } })');
+  // The door is read from the card. `context.provider` is the card's
+  // `signInProvider`, which is null on exactly the native-only cards, so the
+  // old `signInDoor(context.provider)` sent them to /api/signin with no
+  // provider and a 400.
+  expect(app).toContain('signInDoor(context.card) === "native"');
+  expect(app).not.toContain("signInDoor(context.provider)");
+  expect(app).toContain('api("api/native-signin", { method: "POST", body: { agent: nativeSignInAgent(context.card) } })');
+  expect(app).toContain("return String(card?.agentId || card?.id || \"\");");
   expect(app).toContain('api("api/native-signin/paste", { method: "POST", body: { text: code } })');
   // The native states are folded onto the vocabulary the dialog already
   // renders, so a paste-back looks exactly like a one-time code.
@@ -312,4 +318,16 @@ test("signInAwaitingCode marks exactly the waiting-code state", () => {
   for (const state of ["idle", "authorizing", "waiting-login", "finishing", "done", "error", "cancelled", "", undefined]) {
     expect(signInAwaitingCode(state)).toBe(false);
   }
+});
+
+test("a native-only card opens the native door; its signInProvider would not", () => {
+  // The shape a built-in (codex, antigravity) card has when no plugin covers it.
+  const card = { id: "codex", agentId: "codex", nativeSignIn: true, signInProvider: null };
+  expect(signInDoor(card)).toBe("native");
+  // What the dialog used to pass: the card's signInProvider, null here.
+  expect(signInDoor(card.signInProvider)).toBe("none");
+  // The dialog keeps the whole card next to the plugin id.
+  const opened = /function openSignInDialog[\s\S]*?signInContext = \{[\s\S]*?\n {2}\};/.exec(app)?.[0] || "";
+  expect(opened).toContain("provider: provider.signInProvider,");
+  expect(opened).toContain("card: provider,");
 });

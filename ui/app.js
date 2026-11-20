@@ -4790,6 +4790,12 @@ function nativeFlow(flow) {
   };
 }
 
+// magpie's own agent name for a card: the registry and magpie-only cards carry
+// it as `agentId`; the card id is the same name otherwise.
+function nativeSignInAgent(card) {
+  return String(card?.agentId || card?.id || "");
+}
+
 function signInIsNative(context) {
   return Boolean(context?.flow?.native);
 }
@@ -4807,9 +4813,12 @@ async function startSignIn() {
     // Two doors: an installed plugin's own method, or — when there is none —
     // magpie signing the provider in itself. The second one is what makes a
     // built-in provider reachable at all.
-    const native = signInDoor(context.provider) === "native";
+    // The door is read from the card: a native-only card has no
+    // `signInProvider`, so `context.provider` is null for exactly the cards
+    // that need the native door.
+    const native = signInDoor(context.card) === "native";
     const result = native
-      ? await api("api/native-signin", { method: "POST", body: { agent: context.provider.id } })
+      ? await api("api/native-signin", { method: "POST", body: { agent: nativeSignInAgent(context.card) } })
       : await api("api/signin", {
           method: "POST",
           body: signInPayload(

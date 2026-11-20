@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { request } from "node:http";
+import { connect } from "node:net";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -99,7 +100,35 @@ function raw(method, path, headers = {}, body) {
 
 const auth = () => ({ "x-clean-login-token": token });
 
+// One request written byte for byte, so a request-target no HTTP client would
+// send (`http://[::1/`) reaches the server as-is.
+function rawRequest(text) {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, "127.0.0.1");
+    let data = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => (data += chunk));
+    socket.on("end", () => resolve(data));
+    socket.on("close", () => resolve(data));
+    socket.on("error", reject);
+    socket.write(text);
+  });
+}
+
 // ---------- the Host side ----------
+
+test("a malformed request-target is a 400 and the service keeps serving", async () => {
+  // `new URL("http://[::1/", ...)` throws ERR_INVALID_URL. It used to run
+  // outside the route `try`, so this one request killed the process.
+  const answer = await rawRequest(
+    `GET http://[::1/ HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`,
+  );
+  expect(answer.split("\r\n")[0]).toBe("HTTP/1.1 400 Bad Request");
+  const next = await raw("GET", "/");
+  expect(next.status).toBe(200);
+  const health = await raw("GET", "/api/health", auth());
+  expect(health.status).toBe(200);
+});
 
 test("serves the UI with a per-process token", () => {
   expect(token).toMatch(/^[0-9a-f]{64}$/);

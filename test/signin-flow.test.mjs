@@ -19,6 +19,7 @@ import { SignInBrowserError } from "../lib/browser-launcher.mjs";
 import { currentSignInEgress } from "../lib/signin-egress.mjs";
 import {
   SIGNIN_STATES,
+  SIGNIN_TERMINAL_STATES,
   SignInFlowError,
   chooseBrowserMethod,
   createSignInFlow,
@@ -655,6 +656,76 @@ test("a code flow that is cancelled settles and never writes", async () => {
   expect(controller.status().state).toBe("cancelled");
   expect(clientCalls).toHaveLength(0);
   expect(existsSync(join(accountDir(env, "workbuddy", "workbuddy"), SIGNIN_FLOW_MARKER))).toBe(false);
+});
+
+test("a code flow nobody answers times out, settles and frees the sign-in lock", async () => {
+  const { env, clientCalls, controller } = await harness({
+    callbackTimeoutMs: 30,
+    methods: [codeMethod({ callback: async () => success() })],
+  });
+  await controller.startSignIn({ provider: "workbuddy" });
+  expect(controller.status().state).toBe("waiting-code");
+  await controller.whenSettled();
+  const flow = controller.status();
+  // Before the fix nothing armed a deadline here: the flow sat in
+  // `waiting-code` forever and every later startSignIn answered `busy`.
+  expect(flow.state).toBe("error");
+  expect(flow.error.code).toBe("code_timeout");
+  expect(flow.codeRequired).toBe(false);
+  expect(SIGNIN_TERMINAL_STATES.has(flow.state)).toBe(true);
+  expect(clientCalls).toHaveLength(0);
+  expect(existsSync(join(accountDir(env, "workbuddy", "workbuddy"), SIGNIN_FLOW_MARKER))).toBe(false);
+  await expect(controller.submitCode("123456")).rejects.toMatchObject({ code: "no_waiting_code" });
+  // The lock is free again.
+  await expect(controller.startSignIn({ provider: "workbuddy" })).resolves.toMatchObject({
+    key: expect.any(String),
+  });
+  await controller.cancel();
+});
+
+test("a code submitted in time disarms the code deadline", async () => {
+  let release;
+  const { controller } = await harness({
+    callbackTimeoutMs: 40,
+    methods: [
+      codeMethod({
+        callback: () =>
+          new Promise((resolve) => {
+            release = () => resolve(success());
+          }),
+      }),
+    ],
+  });
+  await controller.startSignIn({ provider: "workbuddy" });
+  await controller.submitCode("123456");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  release();
+  await controller.whenSettled();
+  expect(controller.status().state).toBe("done");
+});
+
+test("the in-flight marker is rewritten when the code arrives, sliding the sweep window", async () => {
+  const writes = [];
+  let clock = 0;
+  const { controller } = await harness({
+    methods: [codeMethod({ callback: async () => success() })],
+    writeFlowMarker: async (dir, marker) => {
+      writes.push({ dir, marker: { ...marker }, at: (clock += 1) });
+    },
+    clearFlowMarker: async () => {},
+  });
+  await controller.startSignIn({ provider: "workbuddy" });
+  expect(writes).toHaveLength(1);
+  await controller.submitCode("123456");
+  await controller.whenSettled();
+  // Written once at start and again when the callback started on the code:
+  // the sweep reads the marker's mtime, so the rewrite is what keeps a slow
+  // code entry from looking abandoned.
+  expect(writes).toHaveLength(2);
+  expect(writes[1].dir).toBe(writes[0].dir);
+  expect(writes[1].marker.flowId).toBe(writes[0].marker.flowId);
+  expect(writes[1].marker.startedAt).toBe(writes[0].marker.startedAt);
+  expect(typeof writes[1].marker.refreshedAt).toBe("string");
 });
 
 test("the typed form values reach authorize, and only the declared keys do", async () => {
