@@ -96,7 +96,7 @@ The macOS slim archive drops `Camoufox.app/Contents/Resources/fonts/` (~2.1 GB) 
 2. Find **Clean Login** by **Gruu6y** and click **Install**. If the list has not synced, click **Retry** — magpie caches whatever GitHub told it.
 3. Open **Clean Login** from the sidebar. You get the page in the screenshot above.
 
-Every release is tagged in this repository (`v0.1.x`); the [tag list](https://github.com/Gruu6y/magpie-clean-login/tags) is the version history.
+Every release is tagged in this repository (`v0.2.x` now, earlier `v0.1.x`); the [tag list](https://github.com/Gruu6y/magpie-clean-login/tags) is the version history.
 
 <a id="quick-start"></a>
 
