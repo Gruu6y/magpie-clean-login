@@ -100,6 +100,30 @@ function raw(method, path, headers = {}, body) {
 
 const auth = () => ({ "x-clean-login-token": token });
 
+// Same request helper against an ad-hoc service on another port (the seam
+// tests below each start their own instance).
+function rawWith(targetPort, method, path, headers = {}, body) {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: "127.0.0.1",
+        port: targetPort,
+        method,
+        path,
+        headers: { host: `127.0.0.1:${targetPort}`, ...headers },
+      },
+      (res) => {
+        let text = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (text += chunk));
+        res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: text }));
+      },
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
 // One request written byte for byte, so a request-target no HTTP client would
 // send (`http://[::1/`) reaches the server as-is.
 function rawRequest(text) {
@@ -762,6 +786,153 @@ test("an explicit dataDir still wins over env", async () => {
     await service?.close();
     restoreEnv(previous);
     rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// A corrupt proxies.json must report `recovered` on the very first GET: the
+// store only flags the quarantine while loading, so the route has to read the
+// flag after store.list() finishes, not before.
+test("GET /api/proxies reports recovered on the first request against a corrupt store", async () => {
+  const { startServer } = await import("../lib/server.mjs");
+  const root = mkdtempSync(join(tmpdir(), "clean-login-recovered-"));
+  const data = join(root, "data");
+  await mkdir(data, { recursive: true });
+  await writeFile(join(data, "proxies.json"), "{ this is not json !!!");
+  let local;
+  try {
+    local = await startServer({
+      port: 0,
+      dataDir: data,
+      env: {
+        ...process.env,
+        MAGPIE_CONFIG_DIR: join(root, "magpie-config"),
+        MAGPIE_CLEAN_LOGIN_DATA: data,
+      },
+      pluginScanner: seamScanner,
+    });
+    const page = await rawWith(local.port, "GET", "/");
+    const localToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(page.body)?.[1];
+    const response = await rawWith(local.port, "GET", "/api/proxies", {
+      "x-clean-login-token": localToken,
+    });
+    expect(response.status).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.proxies).toEqual([]);
+    expect(body.recovered).toBeTruthy();
+    expect(body.recovered.corruptFile).toMatch(/^proxies\.json\.corrupt-/);
+    // The quarantined bytes stay on disk for manual salvage.
+    expect(existsSync(join(data, body.recovered.corruptFile))).toBe(true);
+  } finally {
+    await local?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// The environment manager defaults to process.env; a caller with an isolated
+// env must not read the real browser cache root. The test points
+// process.env at a decoy root and plants an install record only in the
+// caller's env root: installed only flips when the manager honored the env.
+test("startServer({ env }) builds the environment manager from the caller's env", async () => {
+  const { startServer } = await import("../lib/server.mjs");
+  const root = mkdtempSync(join(tmpdir(), "clean-login-envmgr-"));
+  const envBrowserRoot = join(root, "env-browser");
+  const decoyBrowserRoot = join(root, "decoy-browser");
+  const executable = join(envBrowserRoot, "camoufox.exe");
+  await mkdir(envBrowserRoot, { recursive: true });
+  await writeFile(executable, "fake");
+  await writeFile(
+    join(envBrowserRoot, "install.json"),
+    JSON.stringify({ version: "0.0.0", executablePath: executable, checksumVerified: true }),
+  );
+  const previous = process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR;
+  process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR = decoyBrowserRoot;
+  let local;
+  try {
+    local = await startServer({
+      port: 0,
+      dataDir: join(root, "data"),
+      env: {
+        ...process.env,
+        MAGPIE_CONFIG_DIR: join(root, "magpie-config"),
+        MAGPIE_CLEAN_LOGIN_DATA: join(root, "data"),
+        MAGPIE_CLEAN_LOGIN_BROWSER_DIR: envBrowserRoot,
+      },
+      pluginScanner: seamScanner,
+    });
+    const page = await rawWith(local.port, "GET", "/");
+    const localToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(page.body)?.[1];
+    const response = await rawWith(local.port, "GET", "/api/environment", {
+      "x-clean-login-token": localToken,
+    });
+    expect(response.status).toBe(200);
+    // The record only exists in the env's root; the decoy root has none.
+    expect(JSON.parse(response.body).environment.installed).toBe(true);
+  } finally {
+    await local?.close();
+    if (previous === undefined) delete process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR;
+    else process.env.MAGPIE_CLEAN_LOGIN_BROWSER_DIR = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// The plugin scanner's child scan resolves the plugin root from
+// MAGPIE_CONFIG_DIR. With no env passed it would scan the real config root
+// and miss the provider planted under the caller's env root.
+test("startServer({ env }) builds the plugin scanner from the caller's env", { timeout: 30_000 }, async () => {
+  const { startServer } = await import("../lib/server.mjs");
+  const root = mkdtempSync(join(tmpdir(), "clean-login-scanner-"));
+  const config = join(root, "magpie-config");
+  const pkg = join(config, "plugins", "node_modules", "@seam", "seam-provider");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(
+    join(pkg, "package.json"),
+    JSON.stringify({ name: "@seam/seam-provider", main: "index.mjs" }),
+  );
+  await writeFile(
+    join(pkg, "index.mjs"),
+    `export default () => ({ auth: { provider: "seam-provider", methods: [{ type: "api", label: "Seam key", authorize: async () => {} }] } });\n`,
+  );
+  const callerEnv = { ...process.env, MAGPIE_CONFIG_DIR: config };
+  // The suite runs under NODE_ENV=test, which disables the scanner; the
+  // caller's env overrides that just for this service.
+  delete callerEnv.NODE_ENV;
+  let local;
+  try {
+    local = await startServer({
+      port: 0,
+      dataDir: join(root, "data"),
+      env: { ...callerEnv, MAGPIE_CLEAN_LOGIN_DATA: join(root, "data") },
+    });
+    const page = await rawWith(local.port, "GET", "/");
+    const localToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(page.body)?.[1];
+    const authHeaders = {
+      "x-clean-login-token": localToken,
+      "content-type": "application/json",
+    };
+    // refresh kicks the cache synchronously; the child scan finishes in the
+    // background, so poll until it lands.
+    await rawWith(local.port, "POST", "/api/provider-sources", authHeaders, JSON.stringify({ refresh: true }));
+    let plugins = null;
+    for (let i = 0; i < 60; i += 1) {
+      const scan = JSON.parse(
+        (await rawWith(local.port, "POST", "/api/provider-sources", authHeaders, "{}")).body,
+      ).pluginScan;
+      if (scan.scanned) {
+        plugins = scan;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    expect(plugins).toBeTruthy();
+    expect(plugins.error).toBe(null);
+    expect(plugins.available).toBe(true);
+    const merged = JSON.parse(
+      (await rawWith(local.port, "POST", "/api/provider-sources", authHeaders, "{}")).body,
+    );
+    expect(merged.providerSources.providers.some((item) => item.id === "seam-provider")).toBe(true);
+  } finally {
+    await local?.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

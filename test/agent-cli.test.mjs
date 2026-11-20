@@ -438,6 +438,70 @@ test("proxies add, delete and targets map to the proxy routes", async () => {
   });
 });
 
+test("proxies update patches only the fields the caller spelled out", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+
+  // Every updatable field in one call. `--exit-port` carries the exit's port
+  // because `--port` already means the service port (same ambiguity the
+  // positional arguments on `proxies add` were born to avoid).
+  await r.run([
+    "proxies",
+    "update",
+    "p-1",
+    "--name",
+    "家宽02",
+    "--type",
+    "socks5",
+    "--host",
+    "10.0.0.2",
+    "--exit-port",
+    "1080",
+    "--user",
+    "u",
+    "--pass",
+    "p",
+    ...args,
+  ]);
+  expect(fake.calls[0]).toMatchObject({ path: "/api/proxies/p-1", method: "PATCH" });
+  expect(fake.calls[0].body).toEqual({
+    name: "家宽02",
+    type: "socks5",
+    host: "10.0.0.2",
+    port: "1080",
+    username: "u",
+    password: "p",
+  });
+
+  // A single field sends that key alone, so the service cannot mistake an
+  // omitted flag for a request to clear it.
+  await r.run(["proxies", "update", "p-1", "--name", "只改名", ...args]);
+  expect(fake.calls[1].body).toEqual({ name: "只改名" });
+
+  // Credentials can be cleared with an explicit empty --pass.
+  await r.run(["proxies", "update", "p-1", "--pass", "", ...args]);
+  expect(fake.calls[2].body).toEqual({ password: "" });
+
+  // An update with no fields, a missing id, a surplus argument and an unknown
+  // field flag all fail before a request is sent.
+  const before = fake.calls.length;
+  await expect(r.run(["proxies", "update", "p-1", ...args])).rejects.toMatchObject({
+    code: "bad_command",
+  });
+  await expect(r.run(["proxies", "update", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(r.run(["proxies", "update", "p-1", "extra", "--name", "n", ...args])).rejects.toMatchObject({
+    code: "unexpected_arg",
+  });
+  await expect(r.run(["proxies", "update", "p-1", "--name", ...args])).rejects.toMatchObject({
+    code: "missing_value",
+  });
+  expect(fake.calls).toHaveLength(before);
+  expect(usage()).toContain("proxies update");
+});
+
 test("accounts import, exit, note, delete, prune and hosting map to the account routes and encode #", async () => {
   const fake = fakeFetch({});
   const r = runner(fake);
