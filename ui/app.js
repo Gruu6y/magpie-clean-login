@@ -2234,6 +2234,10 @@ if (
     self: window,
     origin: window.origin,
     ancestorOrigins: location.ancestorOrigins,
+    // location.origin is the URL's origin even inside the sandbox
+    // ("magpie web" serves this UI on the window's own origin); window.origin
+    // above reports "null" there and is checked separately.
+    pageOrigin: location.origin,
   })
 ) {
   const shell = document.querySelector(".shell");

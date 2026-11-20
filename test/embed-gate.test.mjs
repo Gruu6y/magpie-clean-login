@@ -53,6 +53,76 @@ test("a foreign http(s) parent is refused on Chromium", () => {
   ).toBe(true);
 });
 
+test("magpie's Windows WebView2 window is allowed (issue #99)", () => {
+  // On Windows the desktop window is a real http origin -- Wails serves it
+  // at http://wails.localhost -- and it sits in the ancestor chain. That
+  // transport is trusted: no browser resolves the name, only a native
+  // webview can be that parent. This is the v0.2.1 regression.
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["http://wails.localhost"],
+      pageOrigin: "http://127.0.0.1:3492",
+    }),
+  ).toBe(true);
+  // Tauri's twin name is trusted for the same reason; case is normalized.
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["null", "HTTPS://wails.localhost"],
+      pageOrigin: "http://127.0.0.1:3492",
+    }),
+  ).toBe(true);
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["http://tauri.localhost"],
+      pageOrigin: "http://127.0.0.1:3492",
+    }),
+  ).toBe(true);
+  // But a look-alike is still foreign: anything under *.localhost except
+  // the two webview transports stays refused.
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["http://evil.localhost"],
+      pageOrigin: "http://127.0.0.1:3492",
+    }),
+  ).toBe(false);
+});
+
+test("the magpie web window is allowed when the parent is our own origin", () => {
+  // Under `magpie web` the window is a real http(s) page and this UI is
+  // served through its service prefix, so the parent IS our URL's origin.
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["https://magpie.example.com:8443"],
+      pageOrigin: "https://magpie.example.com:8443",
+    }),
+  ).toBe(true);
+  // A foreign http(s) parent is still refused when the chain names one.
+  expect(
+    embedAllowed({
+      top: {},
+      self: {},
+      origin: "null",
+      ancestorOrigins: ["https://evil.test", "https://magpie.example.com:8443"],
+      pageOrigin: "https://magpie.example.com:8443",
+    }),
+  ).toBe(false);
+});
+
 test("the gate runs before the app boots and hides the shell", () => {
   expect(app).toContain('import { embedAllowed } from "./embed-gate.js"');
   expect(app).toContain("embedAllowed({");
