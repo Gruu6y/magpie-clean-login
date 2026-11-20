@@ -9,7 +9,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isInsideSandbox } from "../lib/camoufox-loader.mjs";
+import {
+  CamoufoxSandboxError,
+  ensureDarwinInstallSymlink,
+  isInsideSandbox,
+} from "../lib/camoufox-loader.mjs";
 
 test("isInsideSandbox accepts the sandbox itself and its children only", () => {
   const sandbox = join(tmpdir(), "cl-sandbox-x");
@@ -55,4 +59,57 @@ test("loadCamoufoxSandboxed pins INSTALL_DIR inside the sandbox (fresh process)"
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }
+});
+
+// macOS cannot redirect camoufox through env (os.homedir() ignores $HOME), so
+// the loader symlinks ~/Library/Caches/camoufox into the sandbox instead.
+// These tests drive that helper with an in-memory fs so no real home is ever
+// touched, whatever platform CI runs on.
+function fakeFs(entries = {}) {
+  // entries: path -> "dir" | {link: target} ; anything else throws ENOENT
+  const calls = [];
+  const enoent = (p) => Object.assign(new Error(`ENOENT ${p}`), { code: "ENOENT" });
+  return {
+    calls,
+    lstatSync(p) {
+      const e = entries[p];
+      if (e === "dir") return { isSymbolicLink: () => false };
+      if (e && typeof e === "object" && "link" in e) return { isSymbolicLink: () => true };
+      throw enoent(p);
+    },
+    existsSync: (p) => p in entries,
+    realpathSync: (p) => (entries[p] && entries[p].link) ?? p,
+    mkdirSync: (p) => calls.push(["mkdir", p]),
+    renameSync: (from, to) => calls.push(["rename", from, to]),
+    symlinkSync: (to, at) => calls.push(["symlink", to, at]),
+  };
+}
+
+const HOME = process.platform === "win32" ? "C:\\home" : "/home/user";
+const REAL = join(HOME, "Library", "Caches", "camoufox");
+const DIR = process.platform === "win32" ? "C:\\sandbox" : "/sandbox";
+const SANDBOX_INSTALL = join(DIR, "camoufox");
+
+test("darwin loader links a fresh cache path into the sandbox", () => {
+  const fs = fakeFs();
+  ensureDarwinInstallSymlink(DIR, { fs, home: HOME });
+  expect(fs.calls).toContainEqual(["symlink", SANDBOX_INSTALL, REAL]);
+  expect(fs.calls.filter(([op]) => op === "rename")).toEqual([]);
+});
+
+test("darwin loader migrates a pre-existing real install before linking", () => {
+  const fs = fakeFs({ [REAL]: "dir" });
+  ensureDarwinInstallSymlink(DIR, { fs, home: HOME });
+  expect(fs.calls).toContainEqual(["rename", REAL, SANDBOX_INSTALL]);
+  expect(fs.calls).toContainEqual(["symlink", SANDBOX_INSTALL, REAL]);
+});
+
+test("darwin loader refuses a foreign symlink and an occupied sandbox", () => {
+  const foreign = fakeFs({ [REAL]: { link: join(HOME, "elsewhere") } });
+  expect(() => ensureDarwinInstallSymlink(DIR, { fs: foreign, home: HOME })).toThrow(CamoufoxSandboxError);
+
+  // real dir exists AND the sandbox target is already occupied: no rename.
+  const occupied = fakeFs({ [REAL]: "dir", [SANDBOX_INSTALL]: "dir" });
+  expect(() => ensureDarwinInstallSymlink(DIR, { fs: occupied, home: HOME })).toThrow(CamoufoxSandboxError);
+  expect(occupied.calls.filter(([op]) => op === "rename" || op === "symlink")).toEqual([]);
 });
