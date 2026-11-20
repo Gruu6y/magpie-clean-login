@@ -2,10 +2,13 @@
 // the preflight checks are exercised directly, and the in-process launch path
 // is driven through injected camoufox/playwright stubs.
 import { afterEach, expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BROWSER_DIR_ENV, browserEnvironmentRoot } from "../lib/browser-environment.mjs";
+import { camoufoxCacheEnv } from "../lib/camoufox-loader.mjs";
 import {
   ScoreBrowserError,
   SignInBrowserError,
@@ -49,6 +52,27 @@ function fakeStdin() {
 
 function stdinPayload(child) {
   return JSON.parse(child.stdin.text.trim() || "{}");
+}
+
+// A fork stub that captures the spawn options and the stdin payload, then
+// reports the host ready. `send` exits the child so close() resolves.
+function captureFork(captured) {
+  const child = new EventEmitter();
+  child.pid = 1;
+  child.kill = () => {};
+  child.send = () => queueMicrotask(() => child.emit("exit", 0));
+  child.unref = () => {};
+  child.channel = { unref: () => {} };
+  captured.child = child;
+  return (_hostPath, _args, options) => {
+    captured.env = options?.env;
+    child.stdin = fakeStdin();
+    queueMicrotask(() => {
+      captured.payload = stdinPayload(child);
+      child.emit("message", { type: "ready", pid: child.pid });
+    });
+    return child;
+  };
 }
 
 test("the launch input pins the persistent profile and the fingerprint", () => {
@@ -455,6 +479,36 @@ test("launchSignInBrowser defaults to the plugin's model directory", async () =>
   await handle.close();
 });
 
+test("launchSignInBrowser sandboxes the forked host's cache dir (F-6)", async () => {
+  // The import-time redirect only covers this process: without the override
+  // the spawned host resolves the real user cache and runtime writes
+  // (camoufox's cache, fontconfig) land outside the plugin directory.
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const root = join(dir, "browser-root");
+  const captured = {};
+  const handle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: join(dir, "profile"),
+    env: {
+      MAGPIE_CLEAN_LOGIN_BROWSER_DIR: root,
+      XDG_CACHE_HOME: join(dir, "real-xdg"),
+      LOCALAPPDATA: join(dir, "real-local"),
+    },
+    deps: { fork: captureFork(captured) },
+  });
+  const cacheKey = process.platform === "win32" ? "LOCALAPPDATA" : "XDG_CACHE_HOME";
+  // darwin exports no cache env at all (the install symlink covers it).
+  if (process.platform !== "darwin") expect(captured.env[cacheKey]).toBe(root);
+  // The redirect would move browserEnvironmentRoot() inside the host, so the
+  // root is pinned explicitly.
+  expect(captured.env[BROWSER_DIR_ENV]).toBe(root);
+  expect(captured.env.FPGEN_DATA_DIR).toBe(join(root, "fpgen"));
+  await handle.close();
+});
+
 // ---------- the scoring launcher ----------
 
 test("openSignInBrowser also hands back the page it opened", async () => {
@@ -589,6 +643,94 @@ test("launchScoreBrowser refuses a missing executable before forking", async () 
       },
     }),
   ).rejects.toMatchObject({ code: "executable_missing" });
+});
+
+test("launchScoreBrowser sandboxes the forked host's cache dir (F-6)", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const root = join(dir, "browser-root");
+  const captured = {};
+  const handle = await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "profile"),
+    env: {
+      MAGPIE_CLEAN_LOGIN_BROWSER_DIR: root,
+      XDG_CACHE_HOME: join(dir, "real-xdg"),
+      LOCALAPPDATA: join(dir, "real-local"),
+    },
+    deps: { fork: captureFork(captured) },
+  });
+  const cacheKey = process.platform === "win32" ? "LOCALAPPDATA" : "XDG_CACHE_HOME";
+  if (process.platform !== "darwin") expect(captured.env[cacheKey]).toBe(root);
+  expect(captured.env[BROWSER_DIR_ENV]).toBe(root);
+  await handle.close();
+});
+
+test("launchScoreBrowser defaults to headless on linux without a display (F-8)", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+
+  const noDisplay = {};
+  await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "p1"),
+    env: {},
+    platform: "linux",
+    deps: { fork: captureFork(noDisplay) },
+  });
+  expect(noDisplay.payload.headless).toBe(true);
+
+  // A usable display (X11 or Wayland) keeps the windowed default.
+  const withDisplay = {};
+  await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "p2"),
+    env: { DISPLAY: ":0" },
+    platform: "linux",
+    deps: { fork: captureFork(withDisplay) },
+  });
+  expect(withDisplay.payload.headless).toBe(false);
+
+  const wayland = {};
+  await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "p3"),
+    env: { WAYLAND_DISPLAY: "wayland-0" },
+    platform: "linux",
+    deps: { fork: captureFork(wayland) },
+  });
+  expect(wayland.payload.headless).toBe(false);
+
+  // Other platforms keep the windowed default whatever DISPLAY says.
+  const windows = {};
+  await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "p4"),
+    env: {},
+    platform: "win32",
+    deps: { fork: captureFork(windows) },
+  });
+  expect(windows.payload.headless).toBe(false);
+
+  // An explicit request always wins over the display heuristic.
+  const forced = {};
+  await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "p5"),
+    env: { DISPLAY: ":0" },
+    platform: "linux",
+    headless: true,
+    deps: { fork: captureFork(forced) },
+  });
+  expect(forced.payload.headless).toBe(true);
 });
 
 test("launchScoreBrowser times out when the host never opens the browser", async () => {
