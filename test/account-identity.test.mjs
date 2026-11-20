@@ -51,6 +51,33 @@ test("safeSegment leaves filesystem-safe characters alone", () => {
   expect(safeSegment("../x")).toBe("..%2fx");
 });
 
+test("safeSegment can never emit a bare `.` or `..` traversal segment", () => {
+  // `.` and `..` are in the safe alphabet, so without a special case the
+  // encoder passed them through and `join()` resolved them as traversal. A
+  // DELETE on a decoded `..` key would have removed the whole provider
+  // directory.
+  expect(safeSegment(".")).toBe("%2e");
+  expect(safeSegment("..")).toBe("%2e%2e");
+  const env = { MAGPIE_CLEAN_LOGIN_DATA: join("/data", "clean-login") };
+  for (const key of [".", ".."]) {
+    const dir = accountDir(env, "workbuddy", key);
+    expect(dir).toContain(join("accounts", "workbuddy"));
+    expect(dir.endsWith(join("accounts", "workbuddy"))).toBe(false);
+    expect(dir).not.toContain("..");
+  }
+});
+
+test("the escaped dot-only segments are never decoded back into a name", () => {
+  // `%2e` decodes to `.`, a character the encoder leaves alone, so the
+  // decoder rejects it: the escape cannot smuggle a traversal name back in
+  // through directory listing either.
+  expect(decodeSegment(safeSegment("."))).toBeNull();
+  expect(decodeSegment(safeSegment(".."))).toBeNull();
+  // The orphan sweep compares `safeSegment(key)` to raw segments, so a
+  // dot-only key still maps to its own on-disk name.
+  expect(safeSegment("..")).toBe("%2e%2e");
+});
+
 test("decodeSegment is the inverse of safeSegment", () => {
   for (const value of [
     "",

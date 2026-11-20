@@ -33,7 +33,8 @@ test("the three email types accept an email and reject a phone number", () => {
     expect(validateAssetForm({ type, account: "name@example.com", note: "" })).toBeNull();
     expect(validateAssetForm({ type, account: "13800138000", note: "" })).toBe("invalid_account");
     expect(validateAssetForm({ type, account: "missing@tld", note: "" })).toBe("invalid_account");
-    expect(validateAssetForm({ type, account: "   ", note: "" })).toBe("invalid_account");
+    // A blank account is not a malformed one; it gets the required-field code.
+    expect(validateAssetForm({ type, account: "   ", note: "" })).toBe("account_required");
     expect(validateAssetForm({ type, account: "@example.com", note: "" })).toBe("invalid_account");
   }
 });

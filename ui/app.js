@@ -84,6 +84,7 @@ import {
   formatBytes,
 } from "./environment-state.js";
 import { createReloadGuard } from "./reload-guard.js";
+import { embedAllowed } from "./embed-gate.js";
 import { followHostTheme } from "./host-theme.js";
 import { guideSections } from "./guide-content.js";
 
@@ -339,6 +340,7 @@ const messages = {
     errorAccountMismatch: "The sign-in returned a different account than the chosen identity, so nothing was written.",
     errorNetwork: "The local service could not be reached.",
     errorGeneric: "The request failed.",
+    embedDenied: "This page only works inside magpie.",
     testTimeout: "Connection timed out.",
     testRefused: "The proxy refused the connection.",
     testDns: "The proxy host could not be resolved.",
@@ -613,6 +615,7 @@ const messages = {
     assetDeleteCopy: "Delete {account}? This cannot be undone.",
     assetDeleteConfirm: "Delete",
     errorInvalidAssetType: "Choose a valid asset type.",
+    errorAssetAccountRequired: "Enter the account.",
     errorInvalidAssetAccount: "This account does not match the chosen type.",
     errorInvalidAssetNote: "The note must be 200 characters or fewer.",
     errorInvalidAssetBody: "The request was incomplete.",
@@ -864,6 +867,7 @@ const messages = {
     errorAccountMismatch: "登录返回的账号与所选身份不一致，因此没有写入任何凭据。",
     errorNetwork: "无法连接本地服务。",
     errorGeneric: "请求失败。",
+    embedDenied: "此页面只能在 magpie 内运行。",
     testTimeout: "连接超时。",
     testRefused: "代理拒绝了连接。",
     testDns: "无法解析代理地址。",
@@ -1138,6 +1142,7 @@ const messages = {
     assetDeleteCopy: "确定删除 {account}？此操作无法撤销。",
     assetDeleteConfirm: "删除",
     errorInvalidAssetType: "请选择有效的资产类型。",
+    errorAssetAccountRequired: "请输入账号。",
     errorInvalidAssetAccount: "该账号与所选类型不匹配。",
     errorInvalidAssetNote: "备注不能超过 200 个字符。",
     errorInvalidAssetBody: "请求内容不完整。",
@@ -1389,6 +1394,7 @@ const messages = {
     errorAccountMismatch: "登入傳回的帳號與所選身分不一致，因此沒有寫入任何憑證。",
     errorNetwork: "無法連線本機服務。",
     errorGeneric: "請求失敗。",
+    embedDenied: "此頁面只能在 magpie 內執行。",
     testTimeout: "連線逾時。",
     testRefused: "代理拒絕了連線。",
     testDns: "無法解析代理位址。",
@@ -1663,6 +1669,7 @@ const messages = {
     assetDeleteCopy: "確定刪除 {account}？此操作無法復原。",
     assetDeleteConfirm: "刪除",
     errorInvalidAssetType: "請選擇有效的資產類型。",
+    errorAssetAccountRequired: "請輸入帳號。",
     errorInvalidAssetAccount: "該帳號與所選類型不符。",
     errorInvalidAssetNote: "備註不能超過 200 個字元。",
     errorInvalidAssetBody: "請求內容不完整。",
@@ -1914,6 +1921,7 @@ const messages = {
     errorAccountMismatch: "サインインで返されたアカウントが選択したIDと異なるため、何も書き込みませんでした。",
     errorNetwork: "ローカルサービスに接続できません。",
     errorGeneric: "リクエストに失敗しました。",
+    embedDenied: "このページは magpie 内でのみ動作します。",
     testTimeout: "接続がタイムアウトしました。",
     testRefused: "プロキシが接続を拒否しました。",
     testDns: "プロキシホストを解決できません。",
@@ -2188,6 +2196,7 @@ const messages = {
     assetDeleteCopy: "{account} を削除しますか？この操作は取り消せません。",
     assetDeleteConfirm: "削除",
     errorInvalidAssetType: "有効な資産の種類を選んでください。",
+    errorAssetAccountRequired: "アカウントを入力してください。",
     errorInvalidAssetAccount: "このアカウントは選択した種類と一致しません。",
     errorInvalidAssetNote: "メモは 200 文字以内にしてください。",
     errorInvalidAssetBody: "リクエストが不完全です。",
@@ -2213,6 +2222,29 @@ const query = new URLSearchParams(location.search);
 const langKey = languageOf(query.get("lang") || navigator.language);
 const text = messages[langKey] || messages.en;
 document.documentElement.lang = messages[langKey] ? langKey : "en";
+
+// The management UI only exists inside magpie: its launcher frame navigates
+// here from an opaque-origin sandbox, so a live page is always framed and
+// always opaque-origin itself. The document embeds the per-process API token,
+// so a page loaded any other way -- a plain browser tab, or a readable
+// (non-sandboxed) foreign iframe -- is given a stub instead of a working UI.
+if (
+  !embedAllowed({
+    top: window.top,
+    self: window,
+    origin: window.origin,
+    ancestorOrigins: location.ancestorOrigins,
+  })
+) {
+  const shell = document.querySelector(".shell");
+  if (shell) shell.hidden = true;
+  const denied = document.getElementById("embed-denied");
+  if (denied) {
+    denied.textContent = text.embedDenied;
+    denied.hidden = false;
+  }
+  throw new Error(text.embedDenied);
+}
 
 // The launcher passes the window theme it read from magpie. Fall back to the
 // OS preference when there is none, so a plain browser visit still looks right.
@@ -2404,6 +2436,7 @@ function accountErrorText(error) {
 // an account, so it gets its own wording instead of the shared proxy text.
 const assetErrorKeys = {
   invalid_type: "errorInvalidAssetType",
+  account_required: "errorAssetAccountRequired",
   invalid_account: "errorInvalidAssetAccount",
   invalid_note: "errorInvalidAssetNote",
   invalid_body: "errorInvalidAssetBody",
@@ -4292,6 +4325,11 @@ function setSignInError(message) {
 }
 
 // The server's exact code/message, never wrapped as an "unknown error".
+// A code the UI can already say properly (proxy validation, the check dialog's
+// own failures) is rendered localized; anything else keeps the raw pair.
+// `not_found` is deliberately unmapped: the shared string names a proxy, but
+// this renderer also serves account and hosting routes where it means an
+// account, so the server's own message is the honest one there.
 function serverErrorText(error) {
   const code = error?.code ? String(error.code) : "";
   const message = error?.serverMessage ? String(error.serverMessage) : "";
@@ -4299,6 +4337,8 @@ function serverErrorText(error) {
   // has no serverMessage. Showing that bare word in the sign-in dialog tells
   // the user nothing; it has a localized string like every other code.
   if (code === "network") return text.errorNetwork;
+  const key = (code !== "not_found" ? errorKeys[code] : undefined) || checkErrorKeys[code];
+  if (key && text[key]) return text[key];
   return [code, message].filter(Boolean).join(" · ") || apiErrorText(error?.code);
 }
 
@@ -5326,11 +5366,15 @@ function renderEnvironment() {
   const total = Number(progress.totalBytes) || Number(environment.downloadBytes) || 0;
   const preparing = phase === "preparing";
   byId("environment-progress").hidden = !preparing;
-  byId("environment-progress-bar").style.width = `${percent}%`;
-  byId("environment-progress-text").textContent = text.environmentProgress
-    .replace("{percent}", String(percent))
-    .replace("{received}", formatBytes(received) || text.unknown)
-    .replace("{total}", formatBytes(total) || text.unknown);
+  // A finished or failed job must not leave its last percentage in the bar:
+  // the strip is hidden but the next prepare starts from whatever is painted.
+  byId("environment-progress-bar").style.width = `${preparing ? percent : 0}%`;
+  byId("environment-progress-text").textContent = preparing
+    ? text.environmentProgress
+        .replace("{percent}", String(percent))
+        .replace("{received}", formatBytes(received) || text.unknown)
+        .replace("{total}", formatBytes(total) || text.unknown)
+    : "";
 
   const errorText = phase === "error"
     ? environmentErrorText(environmentJob?.error?.code)
@@ -7436,6 +7480,14 @@ byId("proxy-form").addEventListener("submit", (event) => {
   event.preventDefault();
   saveProxy();
 });
+// In the sandboxed frame the browser never fires `submit`, so Enter in a text
+// field would do nothing at all. Wire it explicitly; saveProxy() still runs
+// validation first, so an incomplete form just focuses the bad field.
+byId("proxy-form").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement)) return;
+  event.preventDefault();
+  saveProxy();
+});
 byId("test-proxy").addEventListener("click", testDialogProxy);
 byId("proxy-cancel").addEventListener("click", closeProxyDialog);
 byId("proxy-close").addEventListener("click", closeProxyDialog);
@@ -7448,6 +7500,9 @@ byId("proxy-form").addEventListener("input", () => {
     setDialogBusy(false);
   }
   clearTestResult();
+  // A validation error names a field; leaving it up while the user edits that
+  // field reads as if the new value were already wrong.
+  setFormError("");
 });
 byId("confirm-cancel").addEventListener("click", () => {
   confirmController.cancel();

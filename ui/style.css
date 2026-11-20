@@ -93,6 +93,18 @@ button { font: inherit; color: inherit; }
 
 code, .mono { font-family: var(--mono); }
 
+/* The `<defs>` holder for the inline brand marks; kept out of the layout. */
+svg.defs { position: absolute; visibility: hidden; }
+
+/* The stub the embed gate shows outside magpie's sandbox frame. */
+.embed-denied {
+  margin: 0;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: center;
+}
+
 /* --- fixed chrome ------------------------------------------------------- */
 
 /* Left vermilion spine: the page's book edge. */
@@ -212,9 +224,13 @@ code, .mono { font-family: var(--mono); }
 
 .tabs {
   display: flex;
-  flex-wrap: wrap;
+  /* One row, scrolling sideways on a phone: wrapping puts every CJK label
+     character on its own line at 375px. */
+  flex-wrap: nowrap;
   gap: 4px;
   border-bottom: 1px solid var(--ink);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tab {
@@ -222,6 +238,7 @@ code, .mono { font-family: var(--mono); }
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
+  flex: 0 0 auto;
   margin: 0 0 -1px;
   padding: 12px 4px;
   border: 0;
@@ -232,6 +249,7 @@ code, .mono { font-family: var(--mono); }
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.01em;
+  white-space: nowrap;
   transition: color 0.25s ease, border-color 0.25s ease;
 }
 .tab + .tab { margin-left: clamp(14px, 2.4vw, 30px); }

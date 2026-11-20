@@ -154,6 +154,9 @@ test("a claimed identity keeps its key and its pin byte for byte", async () => {
     accountId: "me",
     uid: "u-1",
     signedInAt: expect.any(String),
+    // The label of the method the sign-in ran under: hosted renewal replays
+    // it on multi-method plugins.
+    methodLabel: "Provider (browser)",
     lastLogin: directLogin,
     loginHistory: [directLogin],
   });

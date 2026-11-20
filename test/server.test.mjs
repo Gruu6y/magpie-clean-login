@@ -562,6 +562,7 @@ test("the token-bearing HTML document is never CORS-readable", async () => {
   for (const path of ["/", "/index.html"]) {
     const res = await raw("GET", path, { origin: "null" });
     expect(res.status).toBe(200);
+    expect(res.headers["content-security-policy"]).toContain("default-src 'self'");
     for (const key of Object.keys(res.headers)) {
       expect(key.startsWith("access-control-")).toBe(false);
     }
@@ -596,6 +597,22 @@ test("static assets carry no token and no placeholder", async () => {
     expect(res.body).not.toContain(token);
     expect(res.body).not.toContain("__CLEAN_LOGIN_TOKEN__");
   }
+});
+
+test("a non-iframe embed fetch gets a token-free stub", async () => {
+  // magpie's launcher navigates here in an iframe. A `<embed>`/`<object>`
+  // (nested-document) load is never legitimate, so the served document must
+  // not carry the API token into it. Top-level (`document`) and iframe
+  // navigations still get the real page; the in-page embed gate is what
+  // refuses a bare tab.
+  const stub = await raw("GET", "/", { "sec-fetch-dest": "nested-document" });
+  expect(stub.status).toBe(200);
+  expect(stub.body).not.toContain("__CLEAN_LOGIN_TOKEN__");
+  expect(stub.body).not.toContain(token);
+  const frame = await raw("GET", "/", { "sec-fetch-dest": "iframe" });
+  expect(frame.body).toContain(token);
+  const document_ = await raw("GET", "/", { "sec-fetch-dest": "document" });
+  expect(document_.body).toContain(token);
 });
 
 test("the UI is genuinely Host-driven", () => {
