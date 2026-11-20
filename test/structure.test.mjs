@@ -57,6 +57,16 @@ test("declares a standalone repository the topic channel can find", () => {
   expect(pkg.keywords).toContain("magpie-plugin");
 });
 
+test("declares npm publish settings for the scoped package", () => {
+  // The package name is @gruu6y/page-clean-login — a scoped name defaults to
+  // restricted access, so npm publish would 402/403 without access: public.
+  // Pin the registry too so a global .npmrc mirror can't redirect the release.
+  expect(pkg.publishConfig).toEqual({
+    access: "public",
+    registry: "https://registry.npmjs.org/",
+  });
+});
+
 test("never hand the model directory to the host through the inert name", () => {
   // fpgen-js reads FPGEN_DATA_DIR. The old code wrote CAMOUFOX_FPGEN_DATA and
   // claimed the forked host read it back; that handoff is not the fix anymore.

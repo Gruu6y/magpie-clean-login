@@ -3,6 +3,10 @@
   "version": "0.2.2",
   "description": "在 magpie 中管理代理 IP 与供应商登录，每个账号通过独立浏览器身份登录；一个带仅回环主机服务的页面插件。",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "./index.mjs",
   "bin": {
