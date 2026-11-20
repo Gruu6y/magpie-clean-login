@@ -108,5 +108,41 @@ PR 当前指向的 head，提前合并会把版本号那行丢掉。
 - [ ] 在分支上把 `version` 设为 `main` 当前版本 +1，提交并推送
 - [ ] 等 CI 再次转绿
 - [ ] 合并到 `main`
-- [ ] 在 `main` 尖上打 annotated tag `v<version>`
+- [ ] 在 `main` 尖上打 annotated tag `v<version>`（推上远端后 `.github/workflows/publish.yml` 自动发 npm，见下节）
 - [ ] 广播：新 `main` 版本 + tag
+
+## npm 发布自动化（`.github/workflows/publish.yml`）
+
+合并方在 `main` 尖推 `v<version>` tag 时，publish workflow 自动跑全量测试并
+`npm publish --provenance --access public`。tag 名校验（`refs/tags/v<version>`
+必须等于 `package.json` 的 `version`）在 publish 之前挡住打错的 tag。
+`workflow_dispatch` 是兑底入口，同样必须对着 tag ref 触发才会过校验。
+
+### 认证：Trusted Publishing（OIDC）优先，NPM_TOKEN 兑底
+
+npm CLI ≥ 11.5.1（Node ≥ 22.14.0）内置 trusted publishing：workflow 的
+`permissions: id-token: write` 让它拿到 OIDC token，npm CLI **自动检测 OIDC
+环境并优先于传统 token 使用**，不需要任何 `NODE_AUTH_TOKEN`。所以 publish
+步骤分两条：`secrets.NPM_TOKEN` 不存在时走 OIDC（不注入 token env——空
+`NODE_AUTH_TOKEN` 只会是多余噪声）；存在时才注入走 token 路径。
+
+仓库侧的一次性配置（在 npmjs.com 手动做，只能人做）：
+
+- npmjs.com → 包 `@gruu6y/page-clean-login` → Settings → **Trusted Publisher**
+  → GitHub Actions：
+  - Organization or user: `Gruu6y`
+  - Repository: `magpie-clean-login`
+  - Workflow filename: `publish.yml`（只填文件名，不带路径；必须在
+    `.github/workflows/` 下）
+  - Environment name: **留空**（本 workflow 不用 GitHub environment）
+  - Allowed actions: 勾选 `npm publish`（provenance 随附，无需额外配）
+- 备用路径（二选一即可，配了 Trusted Publisher 就不需要）：GitHub repo
+  → Settings → Secrets and variables → Actions → 新建 `NPM_TOKEN`，值为
+  npmjs.com 的 **granular access token**（限定该包、publish 权限）。
+
+两个注意点：
+
+- GitHub Actions 不允许 `if:` 里直接读 `secrets.*`，所以 workflow 把
+  `secrets.NPM_TOKEN` 透到 job env 再判空——这不是泄露，env 值不进日志。
+- `--provenance` 只在 GitHub 托管 runner + 公开仓库上出签名；本仓库两者都满足。
+- 手动 `npm publish`（本地 CLI）不受 trusted publisher 影响，原路径照旧。

@@ -67,6 +67,21 @@ test("declares npm publish settings for the scoped package", () => {
   });
 });
 
+test("declares a tag-triggered npm publish workflow", () => {
+  // The tag `v<version>` pushed by merge-release.mjs is what reaches npm; the
+  // workflow must exist under exactly this name — npmjs.com's trusted
+  // publisher config matches on the workflow filename.
+  const file = join(root, ".github/workflows/publish.yml");
+  expect(existsSync(file)).toBe(true);
+  const yml = readFileSync(file, "utf8");
+  expect(yml).toContain("tags:");
+  expect(yml).toContain("id-token: write");
+  expect(yml).toContain("npm publish");
+  // A mis-pushed tag must be caught before publish: the workflow compares the
+  // pushed ref against package.json's version.
+  expect(yml).toContain("refs/tags/v");
+});
+
 test("never hand the model directory to the host through the inert name", () => {
   // fpgen-js reads FPGEN_DATA_DIR. The old code wrote CAMOUFOX_FPGEN_DATA and
   // claimed the forked host read it back; that handoff is not the fix anymore.

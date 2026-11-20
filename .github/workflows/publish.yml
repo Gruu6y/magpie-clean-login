@@ -1,0 +1,74 @@
+name: publish
+
+# Publishes @gruu6y/page-clean-login to npm. Preferred auth is npm Trusted
+# Publishing (GitHub Actions OIDC — no long-lived token); NPM_TOKEN secret is
+# a fallback path for environments where the trusted publisher is not (yet)
+# configured on npmjs.com. See docs/releasing.md.
+#
+# npmjs.com → package → Settings → Trusted Publisher:
+#   Organization or user: Gruu6y
+#   Repository:           magpie-clean-login
+#   Workflow filename:    publish.yml      (this file; filename only)
+#   Environment name:     (leave empty — this workflow uses no environment)
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual fallback: dispatch from the tag ref (same tag check still applies).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for OIDC trusted publishing and --provenance
+    env:
+      # GitHub Actions forbids secrets.* in if: conditions; surface it through
+      # job env so the publish step below can branch on its presence. When
+      # unset the OIDC step runs and no token env is injected at all — an
+      # empty NODE_AUTH_TOKEN would only shadow trusted publishing.
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org/"
+          package-manager-cache: false # never cache in release builds
+
+      # Trusted publishing requires npm CLI >= 11.5.1 and Node >= 22.14.0.
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+
+      - run: bun install --ignore-scripts
+
+      - run: bun test
+
+      - name: Verify the tag matches package.json version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF" != "refs/tags/v$VERSION" ]; then
+            echo "::error::ref '$GITHUB_REF' does not equal 'refs/tags/v$VERSION' (package.json version). Tag the release commit as v$VERSION."
+            exit 1
+          fi
+          echo "tag check ok: v$VERSION"
+
+      - name: Publish via npm Trusted Publishing (OIDC)
+        if: ${{ !env.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Publish via NPM_TOKEN
+        if: ${{ env.NPM_TOKEN }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
