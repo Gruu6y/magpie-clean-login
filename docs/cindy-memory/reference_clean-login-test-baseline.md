@@ -43,6 +43,13 @@ updatedAt: '2026-11-10T01:45:15.883Z'
 - 账本 exit 字段：`lib/account-records.mjs withExit`；`accountRow` 显示 `view.exit ?? view.lastLogin`。
 - 托管续期优先级：`lib/renew-hosting.mjs resolveExit` 优先 `meta.exit`。
 
+## Devin 云会话使用事实（2026-11-20 查证）
+- **swe-2 的“免费”仅限 Devin Desktop/CLI 本地促销（到 2026-11-30），不含 Devin Cloud 云会话；swe-2-flash 官方文档明确云会话不可用（Desktop/CLI 免费到 12-04 18:00 UTC）。云会话照常扣套餐额度→on-demand credits（自助）或 ACU（企业）。** Teams Free(powered by SWE-2) 模式才有每人 2 个免费云会话。
+- 用户订阅上限：**最多同时 2 个 Linux 云会话**；Mac 云会话仅 Apple Silicon arm64（Intel 只能 Rosetta 冒烟）。
+- 计费按 Devin 动作+VM 时间，不只 token；核对 Session Insights / Settings>Usage & limits，别只看 CLI `--model` 参数。
+- Devin 独立会话**不会自动 send_to_session 回传**——固定规则（已记入项目记忆）：新任务 brief 必须要求其收尾用 send_to_session 通知调度会话。
+- 云会话是「修复工人」，别一口气修完整张表：拆工单分批、每批一个 PR、PR 不绿不合、云里只提交分支不碰 main；真机/窗口类验收回本地做。
+
 ## 测试与工具坑
 - `merge-release.mjs` 幂等，可安全重跑。
 - rebase-merge 后入库 SHA 变正常，核验要比文件树。
