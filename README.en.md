@@ -293,6 +293,19 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 
 Pull requests are welcome. The test suite is the contract: `bun test` runs all of it, and a change without a test is a change nobody will dare trust later. Touching `lib/`, `ui/`, `page/` or `index.mjs` does **not** require a version bump of your own -- the merger assigns the version at the merge point; `node scripts/check-version-bump.mjs` still refuses a downgrade or a number already released. Read [AGENTS.md](AGENTS.md) and [docs/releasing.md](docs/releasing.md) before you start.
 
+### Submitting issues and dual-line triage
+
+When opening a bug report or feature request, the **预计改动范围 / 风险区域** (`route_scope`) dropdown in the issue form determines which maintainer line handles the issue (see [docs/auto-maintainer.md](docs/auto-maintainer.md) for full rules):
+
+- **`agent:cindy` (Cindy line)**: handles clearly scoped, low-risk tasks. An issue is routed here only when `route_scope` selects one of:
+  - `纯文档 / README / Issue 模板修改` (docs / README / issue templates only)
+  - `纯文案或不涉及逻辑的简单样式修改` (copy or non-logic styling only)
+  - `纯测试补充` (tests only)
+  - `单个非核心文件小 Bug（已附完整复现步骤与验收条件）` (single non-core-file bug with both **reproduction steps** and **acceptance criteria** filled in)
+  - For Feature Requests, **是否需要对应 CLI 支持** must also be `不需要（仅涉及页面展示或内部逻辑）` (no CLI support needed).
+- **`agent:agy` (agy line)**: handles general, complex, cross-platform, core-logic, or CLI-related tasks. Keeping the default `核心功能 / 复杂改动 / 跨平台 / 不确定`, omitting required fields, selecting `需要` or `不确定` for CLI support on a feature request, opening a blank issue, or reporting via the card's **Report a problem** button (`from-plugin`) all route to `agent:agy`.
+- **Not sure which to pick?** Keep the default `核心功能 / 复杂改动 / 跨平台 / 不确定`. Maintainers can manually adjust `agent:cindy` / `agent:agy` labels at any time, and Cindy will also hand the issue back to `agent:agy` if it finds the change is out of scope.
+
 <a id="license"></a>
 
 ## License
