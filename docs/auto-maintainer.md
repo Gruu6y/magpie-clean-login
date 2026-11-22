@@ -12,7 +12,8 @@
 
 1. **Webhook 接收与校验**：通过 Tailscale Funnel 暴露 HTTPS 入口接收 GitHub 事件（`issues`、`issue_comment`、`pull_request`），校验 `X-Hub-Signature-256` 并按 `X-GitHub-Delivery` 去重。
 2. **串行任务调度**：同一时间只运行 1 个分析/修复任务，只向工作代理传递结构化标识（仓库、任务类型、Issue/PR 编号、模式配置等），绝不将未受信任文本直接拼入系统提示词。
-3. **微信双向通信**：通过 iLink bot 协议与维护者微信保持长轮询连接，向维护者推送告警/状态汇报，并接收维护者的合并、关闭、切模式等指令。
+3. **零 LLM 规则分流**：`webhook.mjs` 在 `issues.opened` 阶段用纯 JS 规则读取 Issue 表单结构化字段，只打 `agent:cindy` / `agent:agy` 路由标签、不派发任务；两个执行器均只由 `issues.labeled` 触发，避免抢跑竞态（`cindyRoutingEnabled` 开关默认 `false`，联调通过后才启用）。
+4. **微信双向通信**：通过 iLink bot 协议与维护者微信保持长轮询连接，向维护者推送告警/状态汇报，并接收维护者的合并、关闭、切模式等指令。
 
 ### 两种模式对比
 
@@ -100,6 +101,24 @@
       - 若为**低 / 中风险**：执行 `node scripts/merge-release.mjs <PR>`；合并发版成功后在原 Issue 下发表中文结果评论（若发布新版本需注明 `vX.Y.Z`，末尾带 `<!-- cl-auto-maintainer -->`），打上 `agent:done`（移除 `agent:in-progress` / `agent:ready-to-merge`），并发送微信 `merged` 通知。
       - 若为**高风险**：不自动合并，保持灰度路径（标 `agent:ready-to-merge` 并微信汇报维护者）。
 
+### Tier 3 执行器分流（agy ↔ Cindy 双线）
+
+`agent:cindy` 与 `agent:agy` 标签由 `issues.opened` 的零 LLM 规则写入；`issues.labeled` 才是两个执行器各自的启动信号。
+
+**`agent:cindy` 放行条件（任一不满足即走 `agent:agy`）：**
+
+- 表单 `### 预计改动范围 / 风险区域` 选择：「纯文档 / README / Issue 模板修改」「纯文案或不涉及逻辑的简单样式修改」「纯测试补充」三选一；
+- 或选择「单个非核心文件小 Bug（已附完整复现步骤与验收条件）」，且 `### 复现步骤` 非空/非 `_No response_`（若表单含 `### 验收条件` 也须非空）；
+- 功能建议还须 `### 是否需要对应 CLI 支持` 为「不需要（仅涉及页面展示或内部逻辑）」，选「需要」或「不确定」一律走 `agent:agy`；
+- 空白 Issue、`from-plugin` 报告、未填写结构化路由字段的 Issue 一律 `agent:agy`；
+- 自由文本仅供执行器分析，不参与自动路由；维护者手动改标签可覆盖规则结果；重复标题或代码块内伪造标题保守走 `agent:agy`。
+
+**Cindy → agy 回退顺序**：Cindy 判定超范围时，先移除 `agent:cindy` 与 `agent:in-progress`，确认移除成功后再添加 `agent:agy`；否则 `issues.labeled (agent:agy)` 的 payload 残留旧标签会被锁定规则跳过。
+
+**双向忽略**：agy 侧忽略正文含 `<!-- cl-cindy-maintainer -->` 的评论并跳过带 `agent:cindy` 的 Issue；Cindy 侧对称忽略 `<!-- cl-auto-maintainer -->` 并跳过带 `agent:agy` / `agent:in-progress` / `agent:done` 的 Issue。维护者（`Gruu6y`）的 `/agent ` 强制接管判断位于 `agent:cindy` 跳过规则之前；接管时同样先清 `agent:cindy` / `agent:in-progress` 再加 `agent:agy`，**严禁两侧并行施工**。
+
+**Cindy 侧收尾**：Cindy 推送 `cindy-default/issue-<N>` 分支并建 PR，等 3-OS CI 全绿后移除 `agent:in-progress`、打 `agent:ready-to-merge` 并通知主人；后续合并统一走 `scripts/merge-release.mjs` 或微信 `合并 #<PR>`。agy 不再对 Cindy 内部 PR 重复启动 LLM 审计。
+
 ### Tier 4：外部贡献者 PR（`pull_request`）
 
 - **触发范围**：非 `cindy-default/*` 分支触发的 `opened` / `reopened` / `synchronize` 事件。
@@ -115,9 +134,9 @@
 
 ### 防循环规则（Anti-Loop）
 
-1. **评论 HTML 标记**：代理在 GitHub 上发表的**每一条** Issue/PR 评论都必须包含 `<!-- cl-auto-maintainer -->`。Webhook 处理器一旦检测到评论正文包含该标记，立即忽略，彻底杜绝自回复死循环。
-2. **Bot 账号过滤**：`sender.type === "Bot"` 的事件全部忽略。
-3. **维护者评论保护**：`sender.login === ownerLogin`（默认 `Gruu6y`）的普通评论全部忽略；仅当评论正文以 `/agent ` 开头时，才作为 `owner_issue_command` 派发。
+1. **评论 HTML 标记**：agy 侧评论带 `<!-- cl-auto-maintainer -->`，Cindy 侧评论带 `<!-- cl-cindy-maintainer -->`；两侧处理器检测到任一标记即忽略，彻底杜绝自回复死循环。
+2. **Bot 账号过滤**：`sender.type === "Bot"` 的事件默认忽略；仅 `issues.labeled` 放行 `config.json` 中 `trustedLabelBots` 白名单内的 bot sender（如 Cindy GitHub App 的 `<app-slug>[bot]`）。
+3. **维护者评论保护**：`sender.login === ownerLogin`（默认 `Gruu6y`）的普通评论全部忽略；仅当评论正文以 `/agent ` 开头时，才作为 `owner_issue_command` 派发，且该判断位于 `agent:cindy` 跳过规则之前（保留维护者强制接管逃生口）。
 4. **施工中/已完成锁定**：当 Issue 已带 `agent:in-progress` 或 `agent:done` 时，忽略外部用户的追加 `issue_comment`，避免打断正在进行的修复或重复唤醒已完结工单。
 5. **自研 PR 分支过滤**：`head.ref` 以 `cindy-default/` 开头的 PR 不会触发 Tier 4 外部 PR 审计。
 6. **Delivery 去重**：通过 `X-GitHub-Delivery` 记录最近 500 条已处理投递 ID，防止 GitHub 重试导致重复派发。
@@ -128,6 +147,8 @@
 | --- | --- | --- |
 | `triage` | `#fbca04` | 新建 Issue 等待首次分流（Issue 表单与 Webhook 自动挂载） |
 | `from-plugin` | `#1d76db` | 通过插件内供应商卡片「报告问题」按钮发起（参考 [docs/reporting.md](reporting.md)） |
+| `agent:cindy` | `#7057ff` | Tier 3 简单任务，由 Cindy 自动化执行（零 LLM 规则打标，agy 侧跳过） |
+| `agent:agy` | `#d4a72c` | Tier 3 常规/复杂任务，由 agy 工作代理执行 |
 | `agent:in-progress` | `#0e8a16` | 自动维护代理正在分析或开发修复中 |
 | `agent:needs-info` | `#d876e3` | 缺少必要环境/版本/复现信息，等待提问者补充 |
 | `agent:needs-owner` | `#d93f0b` | 阻塞、高风险或疑似恶意/注入，已升级交由维护者处理 |
