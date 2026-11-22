@@ -117,7 +117,7 @@
 
 **双向忽略**：agy 侧忽略正文含 `<!-- cl-cindy-maintainer -->` 的评论并跳过带 `agent:cindy` 的 Issue；Cindy 侧对称忽略 `<!-- cl-auto-maintainer -->` 并跳过带 `agent:agy` / `agent:in-progress` / `agent:done` 的 Issue。维护者（`Gruu6y`）的 `/agent ` 强制接管判断位于 `agent:cindy` 跳过规则之前；接管时同样先清 `agent:cindy` / `agent:in-progress` 再加 `agent:agy`，**严禁两侧并行施工**。
 
-**Cindy 侧收尾**：Cindy 推送 `cindy-default/issue-<N>` 分支并建 PR，等 3-OS CI 全绿后移除 `agent:in-progress`、打 `agent:ready-to-merge` 并通知主人；后续合并统一走 `scripts/merge-release.mjs` 或微信 `合并 #<PR>`。agy 不再对 Cindy 内部 PR 重复启动 LLM 审计。
+**Cindy 侧收尾**：Cindy 推送 `cindy-default/issue-<N>` 分支并建 PR，等 3-OS CI 全绿后先复核 diff 与风险等级——确认低/中风险且属于 Cindy 自研 PR 时，由 Cindy 自己运行 `node scripts/merge-release.mjs <PR号>` 完成合并（脚本自动做发布校验、按需分配版本并在 main 尖打 tag；纯文档/测试 PR 不 bump 不发 tag），随后给 Issue 打 `agent:done` 并发完成评论、通知主人。merge-release 中途 `Stopped` 绝不绕过；高风险或脚本停住无法自行解决时，停在 `agent:ready-to-merge` 交主人处理。agy 不再对 Cindy 内部 PR 重复启动 LLM 审计。
 
 **Webhook 投递边界（预期行为，非故障）：**
 
