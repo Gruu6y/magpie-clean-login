@@ -43,6 +43,11 @@ updatedAt: '2026-11-10T01:45:15.883Z'
 - 账本 exit 字段：`lib/account-records.mjs withExit`；`accountRow` 显示 `view.exit ?? view.lastLogin`。
 - 托管续期优先级：`lib/renew-hosting.mjs resolveExit` 优先 `meta.exit`。
 
+## npm 下载量口径（2026-11-22 查证）
+- `@gruu6y/page-clean-login` 首次发布 2026-11-20（0.0.0-stage / 0.2.2 当日；0.2.4~0.2.6 于 11-22）。
+- npm `last-week` 下载数 = tarball HTTP 200 计数，含镜像同步/CI/Docker/爬虫；**发版日尖峰属镜像拉取脉冲，不等于真实用户**。本包 446 次里 386 次落在发布次日。
+- 统计 UTC 零点后每日结算，当日 0 = 未结算非无人装；查各版本分布：`https://api.npmjs.org/versions/<pkg>/last-week`。
+
 ## Devin 云会话使用事实（2026-11-20 查证）
 - **swe-2 的“免费”仅限 Devin Desktop/CLI 本地促销（到 2026-11-30），不含 Devin Cloud 云会话；swe-2-flash 官方文档明确云会话不可用（Desktop/CLI 免费到 12-04 18:00 UTC）。云会话照常扣套餐额度→on-demand credits（自助）或 ACU（企业）。** Teams Free(powered by SWE-2) 模式才有每人 2 个免费云会话。
 - 用户订阅上限：**最多同时 2 个 Linux 云会话**；Mac 云会话仅 Apple Silicon arm64（Intel 只能 Rosetta 冒烟）。
