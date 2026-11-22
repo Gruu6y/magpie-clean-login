@@ -10,9 +10,13 @@ import { join } from "node:path";
 import { BROWSER_DIR_ENV, browserEnvironmentRoot } from "../lib/browser-environment.mjs";
 import { camoufoxCacheEnv } from "../lib/camoufox-loader.mjs";
 import {
+  DISPLAY_ENV,
+  FONTCONFIG_ENV,
+  SYSTEM_FONTCONFIG_PATH,
   ScoreBrowserError,
   SignInBrowserError,
   buildLaunchInput,
+  hostEnv,
   launchIdentityCheckBrowser,
   launchScoreBrowser,
   launchSignInBrowser,
@@ -1354,4 +1358,190 @@ test("launchScoreBrowser surfaces a navigation warning from the host", async () 
   expect(handle.warning).toEqual({ code: "navigation_failed", status: 504, message: "page did not load" });
   expect(await handle.result).toEqual({ score: 92, label: "优异", ip: "203.0.113.7" });
   await handle.close();
+});
+
+// ---------- Linux DISPLAY & FONTCONFIG opt-ins (#5, #6) ----------
+
+test("hostEnv keeps DISPLAY and FONTCONFIG_FILE unset by default on linux", () => {
+  expect(DISPLAY_ENV).toBe("MAGPIE_CLEAN_LOGIN_DISPLAY");
+  expect(FONTCONFIG_ENV).toBe("MAGPIE_CLEAN_LOGIN_FONTCONFIG");
+  expect(SYSTEM_FONTCONFIG_PATH).toBe("/etc/fonts/fonts.conf");
+
+  const result = hostEnv({}, "/sandbox", "/sandbox/fpgen", "linux", { existsSync: () => true });
+  expect(result.DISPLAY).toBeUndefined();
+  expect(result.FONTCONFIG_FILE).toBeUndefined();
+  expect(result.XDG_CACHE_HOME).toBe("/sandbox");
+  expect(result[BROWSER_DIR_ENV]).toBe("/sandbox");
+  expect(result.FPGEN_DATA_DIR).toBe("/sandbox/fpgen");
+});
+
+test("hostEnv applies explicit DISPLAY opt-in only on linux without an active display", () => {
+  expect(
+    hostEnv({ [DISPLAY_ENV]: "  :99  " }, "/sandbox", "/m", "linux", { existsSync: () => false }).DISPLAY,
+  ).toBe(":99");
+
+  expect(
+    hostEnv({ [DISPLAY_ENV]: "   " }, "/sandbox", "/m", "linux", { existsSync: () => false }).DISPLAY,
+  ).toBeUndefined();
+
+  // Existing DISPLAY or WAYLAND_DISPLAY is never overridden.
+  expect(
+    hostEnv({ DISPLAY: ":0", [DISPLAY_ENV]: ":99" }, "/sandbox", "/m", "linux").DISPLAY,
+  ).toBe(":0");
+
+  const wayland = hostEnv(
+    { WAYLAND_DISPLAY: "wayland-0", [DISPLAY_ENV]: ":99" },
+    "/sandbox",
+    "/m",
+    "linux",
+  );
+  expect(wayland.WAYLAND_DISPLAY).toBe("wayland-0");
+  expect(wayland.DISPLAY).toBeUndefined();
+
+  // Non-linux platforms never synthesize DISPLAY from MAGPIE_CLEAN_LOGIN_DISPLAY.
+  for (const platform of ["win32", "darwin"]) {
+    expect(hostEnv({ [DISPLAY_ENV]: ":99" }, "/sandbox", "/m", platform).DISPLAY).toBeUndefined();
+  }
+});
+
+test("hostEnv applies explicit FONTCONFIG_FILE opt-in on linux when the target exists", async () => {
+  const dir = await tempDir();
+  const realCustom = join(dir, "fonts.conf");
+  await writeFile(realCustom, "<fontconfig/>");
+
+  // "system" resolves to SYSTEM_FONTCONFIG_PATH when present, and stays unset when missing.
+  for (const flag of ["system", " SYSTEM "]) {
+    expect(
+      hostEnv({ [FONTCONFIG_ENV]: flag }, "/sandbox", "/m", "linux", {
+        existsSync: (p) => p === SYSTEM_FONTCONFIG_PATH,
+      }).FONTCONFIG_FILE,
+    ).toBe(SYSTEM_FONTCONFIG_PATH);
+  }
+  expect(
+    hostEnv({ [FONTCONFIG_ENV]: "system" }, "/sandbox", "/m", "linux", { existsSync: () => false })
+      .FONTCONFIG_FILE,
+  ).toBeUndefined();
+
+  // Custom paths are trimmed, checked on disk, and ignored when absent or "off".
+  expect(
+    hostEnv({ [FONTCONFIG_ENV]: ` ${realCustom} ` }, "/sandbox", "/m", "linux").FONTCONFIG_FILE,
+  ).toBe(realCustom);
+  expect(
+    hostEnv({ [FONTCONFIG_ENV]: join(dir, "missing.conf") }, "/sandbox", "/m", "linux").FONTCONFIG_FILE,
+  ).toBeUndefined();
+
+  for (const off of ["off", " OFF ", ""]) {
+    expect(
+      hostEnv({ [FONTCONFIG_ENV]: off }, "/sandbox", "/m", "linux", { existsSync: () => true })
+        .FONTCONFIG_FILE,
+    ).toBeUndefined();
+  }
+
+  // An existing FONTCONFIG_FILE is always preserved.
+  expect(
+    hostEnv(
+      { FONTCONFIG_FILE: "/already/fonts.conf", [FONTCONFIG_ENV]: "system" },
+      "/sandbox",
+      "/m",
+      "linux",
+      { existsSync: () => true },
+    ).FONTCONFIG_FILE,
+  ).toBe("/already/fonts.conf");
+
+  // Non-linux platforms never set FONTCONFIG_FILE.
+  for (const platform of ["win32", "darwin"]) {
+    expect(
+      hostEnv({ [FONTCONFIG_ENV]: "system" }, "/sandbox", "/m", platform, { existsSync: () => true })
+        .FONTCONFIG_FILE,
+    ).toBeUndefined();
+  }
+});
+
+test("launchScoreBrowser keeps F-8 headless=true when MAGPIE_CLEAN_LOGIN_DISPLAY is set without DISPLAY", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const captured = {};
+  const handle = await launchScoreBrowser({
+    executablePath: exe,
+    url: "https://ip.net.coffee/claude/",
+    profileDir: join(dir, "profile"),
+    env: {
+      [DISPLAY_ENV]: ":99",
+      [FONTCONFIG_ENV]: "system",
+    },
+    platform: "linux",
+    deps: {
+      existsSync: (p) => p === SYSTEM_FONTCONFIG_PATH,
+      fork: captureFork(captured),
+    },
+  });
+  expect(captured.payload.headless).toBe(true);
+  expect(captured.env.DISPLAY).toBe(":99");
+  expect(captured.env.FONTCONFIG_FILE).toBe(SYSTEM_FONTCONFIG_PATH);
+  await handle.close();
+});
+
+test("launchSignInBrowser and launchIdentityCheckBrowser forward platform and existsSync to hostEnv", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+
+  const signInCaptured = {};
+  const signInHandle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: join(dir, "signin-profile"),
+    env: {
+      [DISPLAY_ENV]: ":99",
+      [FONTCONFIG_ENV]: "system",
+    },
+    platform: "linux",
+    deps: {
+      existsSync: (p) => p === SYSTEM_FONTCONFIG_PATH,
+      fork: captureFork(signInCaptured),
+    },
+  });
+  expect(signInCaptured.env.DISPLAY).toBe(":99");
+  expect(signInCaptured.env.FONTCONFIG_FILE).toBe(SYSTEM_FONTCONFIG_PATH);
+  await signInHandle.close();
+
+  const identityCaptured = {};
+  const identityHandle = await launchIdentityCheckBrowser({
+    executablePath: exe,
+    url: "https://who.1ms.dog/zh-cn/",
+    profileDir: join(dir, "check-profile"),
+    identity: {},
+    env: {
+      [DISPLAY_ENV]: ":98",
+      [FONTCONFIG_ENV]: "/etc/fonts/custom.conf",
+    },
+    platform: "linux",
+    deps: {
+      existsSync: (p) => p === "/etc/fonts/custom.conf",
+      fork: captureFork(identityCaptured),
+    },
+  });
+  expect(identityCaptured.env.DISPLAY).toBe(":98");
+  expect(identityCaptured.env.FONTCONFIG_FILE).toBe("/etc/fonts/custom.conf");
+  await identityHandle.close();
+
+  const winCaptured = {};
+  const winHandle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: join(dir, "win-profile"),
+    env: {
+      [DISPLAY_ENV]: ":99",
+      [FONTCONFIG_ENV]: "system",
+    },
+    platform: "win32",
+    deps: {
+      existsSync: () => true,
+      fork: captureFork(winCaptured),
+    },
+  });
+  expect(winCaptured.env.DISPLAY).toBeUndefined();
+  expect(winCaptured.env.FONTCONFIG_FILE).toBeUndefined();
+  await winHandle.close();
 });

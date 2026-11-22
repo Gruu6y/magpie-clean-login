@@ -284,6 +284,7 @@ Run `bun bin/clean-login.mjs help` for the full command list. A remote service (
 - No telemetry and no account. The only network calls are the ones you start: proxy tests, the trust-score page, the identity-check page, the runtime download, and the provider's own sign-in.
 - Proxies, accounts, fingerprints and browser profiles live in `~/.config/magpie/magpie-clean-login/` (override with `MAGPIE_CLEAN_LOGIN_DATA`; the config root itself with `MAGPIE_CONFIG_DIR`). The market catalog is read from `~/.cache/magpie/` (`MAGPIE_CACHE_DIR`). Hosted-renewal switches and recent records live in `renew-hosting.json` in that same directory; it holds switches, times and outcomes, never a credential.
 - The login browser unpacks to `%LOCALAPPDATA%/magpie-clean-login/camoufox` on Windows, `~/Library/Caches/magpie-clean-login/camoufox` on macOS, and `$XDG_CACHE_HOME/magpie-clean-login/camoufox` on Linux (all overridable with `MAGPIE_CLEAN_LOGIN_BROWSER_DIR`).
+- On Linux without `DISPLAY` or `WAYLAND_DISPLAY`, opt into an X11 display (such as `:99`) with `MAGPIE_CLEAN_LOGIN_DISPLAY`; to opt into the system fontconfig instead of Camoufox's stock anti-fingerprinting config, set `MAGPIE_CLEAN_LOGIN_FONTCONFIG=system` (`/etc/fonts/fonts.conf`) or a custom `fonts.conf` path (an existing `FONTCONFIG_FILE` is never overridden).
 - Stored proxy passwords never reach the page and are never logged. The page token is per-process and exists only in the page the service serves.
 
 <a id="contributing"></a>

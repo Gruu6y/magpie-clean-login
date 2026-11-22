@@ -143,3 +143,110 @@ test("exports that are neither factories nor host shapes still fail honestly", a
   expect(failure?.status).toBe(502);
   expect(String(failure?.message)).toContain("exposes no sign-in method");
 });
+
+test("defaultLoadProvider loads via entry.dir when directory name differs from package.json name", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cl-signin-dir-mismatch-"));
+  roots.push(root);
+  const pluginDir = join(root, "plugins", "node_modules", "opencode-amazon-quick-auth");
+  mkdirSync(pluginDir, { recursive: true });
+  writeFileSync(
+    join(pluginDir, "package.json"),
+    JSON.stringify({ name: "magpie-amazon-quick", type: "module", main: "./index.mjs" }),
+  );
+  writeFileSync(
+    join(pluginDir, "index.mjs"),
+    `export const Auth = async () => ({ auth: { provider: "amazon-quick", methods: [{ type: "oauth", label: "Amazon Quick (browser)" }] } });\n`,
+  );
+
+  const loaded = await defaultLoadProvider({
+    provider: "amazon-quick",
+    env: { MAGPIE_CONFIG_DIR: root },
+    client: {},
+    magpie: {},
+    pluginScanner: {
+      get: () => ({
+        available: true,
+        providers: [
+          {
+            id: "amazon-quick",
+            package: "magpie-amazon-quick",
+            dir: "opencode-amazon-quick-auth",
+            methods: [],
+          },
+        ],
+      }),
+    },
+  });
+
+  expect(loaded.package).toBe("magpie-amazon-quick");
+  expect(loaded.methods).toEqual([{ type: "oauth", label: "Amazon Quick (browser)" }]);
+});
+
+test("defaultLoadProvider falls back to entry.package when entry.dir is null", async () => {
+  const { env } = fixture({
+    "package.json": manifest,
+    "opencode.mjs": 'export { default } from "./index.mjs";\n',
+    "index.mjs":
+      'export default { id: "agy-cli", server: async () => ({ auth: { provider: "agy-cli", methods: [{ type: "oauth", label: "Fallback package" }] } }) };\n',
+  });
+
+  const loaded = await defaultLoadProvider({
+    provider: "agy-cli",
+    env,
+    client: {},
+    magpie: {},
+    pluginScanner: {
+      get: () => ({
+        available: true,
+        providers: [{ id: "agy-cli", package: "@fixture/agy", dir: null, methods: [] }],
+      }),
+    },
+  });
+
+  expect(loaded.package).toBe("@fixture/agy");
+  expect(loaded.methods).toEqual([{ type: "oauth", label: "Fallback package" }]);
+
+  const dirOnly = await defaultLoadProvider({
+    provider: "agy-cli",
+    env,
+    client: {},
+    magpie: {},
+    pluginScanner: {
+      get: () => ({
+        available: true,
+        providers: [{ id: "agy-cli", dir: "@fixture/agy", package: null, methods: [] }],
+      }),
+    },
+  });
+  expect(dirOnly.package).toBe("@fixture/agy");
+  expect(dirOnly.methods).toEqual([{ type: "oauth", label: "Fallback package" }]);
+});
+
+test("defaultLoadProvider rejects traversal and unsafe entry.dir values with plugin_load_failed", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cl-signin-traversal-"));
+  roots.push(root);
+
+  for (const badDir of ["../escape", "/etc/passwd", "\\evil", "C:/foo", "./escape", "@scope/../../escape", "bad\u0000dir"]) {
+    let failure = null;
+    try {
+      await defaultLoadProvider({
+        provider: "agy-cli",
+        env: { MAGPIE_CONFIG_DIR: root },
+        client: {},
+        magpie: {},
+        pluginScanner: {
+          get: () => ({
+            available: true,
+            providers: [{ id: "agy-cli", package: "@fixture/agy", dir: badDir, methods: [] }],
+          }),
+        },
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure?.code).toBe("plugin_load_failed");
+    expect(failure?.status).toBe(502);
+    expect(String(failure?.message)).toContain("Invalid plugin directory");
+  }
+});
