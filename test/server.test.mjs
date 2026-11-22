@@ -597,6 +597,23 @@ test("the token-bearing HTML document is never CORS-readable", async () => {
   }
 });
 
+// Guards against the Apple WKWebView / Safari opaque-sandbox CSP regression
+// caught on macos-latest (`wails://wails` and `magpie web`): bare `connect-src 'self';`
+// causes WebKit to block relative `/api/*` fetches inside `<iframe sandbox="allow-scripts">`.
+test("HTML CSP permits http/https connect-src for WKWebView opaque sandbox while keeping script/document locks", async () => {
+  for (const path of ["/", "/index.html"]) {
+    const res = await raw("GET", path, { origin: "null" });
+    expect(res.status).toBe(200);
+    const csp = res.headers["content-security-policy"] || "";
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("connect-src 'self' http: https:;");
+    expect(csp).not.toContain("connect-src 'self';");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'none'");
+    expect(csp).toContain("form-action 'none'");
+  }
+});
+
 test("refuses a DNS-rebound Host", async () => {
   const res = await raw("GET", "/", { host: "evil.example" });
   expect(res.status).toBe(403);
