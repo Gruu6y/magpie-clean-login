@@ -189,7 +189,11 @@ test("environment routes publish no host paths and an idle job shape", async () 
   const res = await raw("GET", "/api/environment", auth());
   expect(res.status).toBe(200);
   const body = JSON.parse(res.body);
-  expect(body.environment.installDir).toBeUndefined();
+  // `installDir` stays public so the UI can render the sandbox browser location;
+  // internal launch details (`executablePath`, `modelDir`) and service data
+  // paths (`tmp`) stay stripped.
+  expect(typeof body.environment.installDir).toBe("string");
+  expect(body.environment.installDir.length).toBeGreaterThan(0);
   expect(body.environment.modelDir).toBeUndefined();
   expect(body.environment.executablePath).toBeUndefined();
   expect(res.body).not.toContain(tmp);

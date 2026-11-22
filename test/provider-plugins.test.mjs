@@ -122,7 +122,7 @@ test("a recognized browser method creates the sign-in gate regardless of readine
 });
 
 test("the presences are worded apart in all four languages", () => {
-  const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "cursor", "mystery-ai"], plugins: PLUGINS });
+  const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "cursor", "gemini", "mystery-ai"], plugins: PLUGINS });
   const map = byId(view);
 
   // (a) A card whose plugin layer found a browser method says so and invites a
@@ -136,11 +136,10 @@ test("the presences are worded apart in all four languages", () => {
   expect(found.capability.reason.en).not.toMatch(/not verified|unverified/i);
   for (const lang of LANGS) expect(found.capability.reason[lang]).toBeTruthy();
 
-  // (b) A magpie-only card prints no paragraph, whichever way the scan went. It
-  // always carries a door of its own, so a sentence about what it lacks would
-  // be a claim the card itself contradicts. The projection still carries the
-  // methods and the browser flag.
-  for (const provider of [map.cursor, map["mystery-ai"]]) {
+  // (b) A magpie-only card prints no paragraph, whichever way the scan went.
+  // Built-in CLI agents without a plugin keep magpie's native door; custom
+  // providers without a plugin do not get a dead native door.
+  for (const provider of [map.cursor, map.gemini, map["mystery-ai"]]) {
     expect(provider.presence).toBe("magpie-only");
     expect(provider.description).toEqual({});
     expect(provider.capability.reason).toEqual({});
@@ -149,9 +148,12 @@ test("the presences are worded apart in all four languages", () => {
   }
   expect(map.cursor.browserMethod).toBe(true);
   expect(providerCanSignIn(map.cursor)).toBe(true);
+  expect(map.gemini.browserMethod).toBe(false);
+  expect(map.gemini.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(map.gemini)).toBe(true);
   expect(map["mystery-ai"].browserMethod).toBe(false);
-  expect(map["mystery-ai"].nativeSignIn).toBe(true);
-  expect(providerCanSignIn(map["mystery-ai"])).toBe(true);
+  expect(map["mystery-ai"].nativeSignIn).toBe(false);
+  expect(providerCanSignIn(map["mystery-ai"])).toBe(false);
 
   // The local registry writes no verification reason at all. Claude is a
   // registry-only card, so it sits in the other-providers list and keeps only
@@ -168,7 +170,7 @@ test("the presences are worded apart in all four languages", () => {
 
 test("an unavailable plugin scan degrades to the first layer with no false claims", () => {
   for (const plugins of [undefined, null, { available: false, providers: [] }, 42]) {
-    const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "mystery-ai"], plugins });
+    const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "gemini", "mystery-ai"], plugins });
     expect(view.plugins.available).toBe(false);
     expect(view.plugins.count).toBe(0);
     const map = byId(view);
@@ -178,13 +180,20 @@ test("an unavailable plugin scan degrades to the first layer with no false claim
       expect(provider.pluginPackage).toBeNull();
     }
     // A scan that never ran has nothing to say about the installed plugins, so
-    // the magpie-only card says nothing rather than claiming an absence. It
-    // still has magpie's own door.
+    // the magpie-only cards say nothing rather than claiming an absence. Only
+    // the built-in agent keeps magpie's native door.
+    expect(map.gemini.capability.reason).toEqual({});
+    expect(map.gemini.description).toEqual({});
+    expect(map.gemini.notice).toBeNull();
+    expect(map.gemini.nativeSignIn).toBe(true);
+    expect(providerCanSignIn(map.gemini)).toBe(true);
+
     expect(map["mystery-ai"].capability.reason).toEqual({});
     expect(map["mystery-ai"].description).toEqual({});
     expect(map["mystery-ai"].notice).toBeNull();
-    expect(map["mystery-ai"].nativeSignIn).toBe(true);
-    expect(view.counts).toEqual({ total: 4, both: 1, localOnly: 2, magpieOnly: 1, pluginOnly: 0, catalogOnly: 0 });
+    expect(map["mystery-ai"].nativeSignIn).toBe(false);
+    expect(providerCanSignIn(map["mystery-ai"])).toBe(false);
+    expect(view.counts).toEqual({ total: 5, both: 1, localOnly: 2, magpieOnly: 2, pluginOnly: 0, catalogOnly: 0 });
   }
 });
 
@@ -221,11 +230,15 @@ test("a failed plugin scan is worded as a failure, not as an unverified flow", (
   // A scan that never ran has no failure to report, so it must NOT claim one.
   const never = byId(mergeProviderSources({
     local: LOCAL,
-    magpie: ["mystery-ai"],
+    magpie: ["gemini", "mystery-ai"],
     plugins: { available: false, providers: [] },
   }));
+  expect(never.gemini.capability.reason).toEqual({});
+  expect(never.gemini.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(never.gemini)).toBe(true);
   expect(never["mystery-ai"].capability.reason).toEqual({});
-  expect(never["mystery-ai"].nativeSignIn).toBe(true);
+  expect(never["mystery-ai"].nativeSignIn).toBe(false);
+  expect(providerCanSignIn(never["mystery-ai"])).toBe(false);
 });
 
 // A method that asks something before it starts carries the questions on the

@@ -87,41 +87,64 @@ test("a magpie-only card whose plugin exposes a browser method prints no prose",
   for (const lang of LANGS) expect(cardLines(card, lang)).toEqual([]);
 });
 
-test("a magpie-only card no plugin covers prints no prose and still has magpie's door", () => {
-  const card = magpieOnlyCard(["mystery-ai"], { available: true, providers: [] }, "mystery-ai");
-  expect(card).toBeTruthy();
-  expect(card.browserMethod).toBe(false);
-  expect(card.signInProvider).toBeNull();
-  expect(card.nativeSignIn).toBe(true);
-  expect(providerCanSignIn(card)).toBe(true);
-  for (const lang of LANGS) expect(cardLines(card, lang)).toEqual([]);
+test("a magpie-only card no plugin covers prints no prose and offers magpie's door only for built-in agents", () => {
+  const builtin = magpieOnlyCard(["gemini"], { available: true, providers: [] }, "gemini");
+  expect(builtin).toBeTruthy();
+  expect(builtin.browserMethod).toBe(false);
+  expect(builtin.signInProvider).toBeNull();
+  expect(builtin.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(builtin)).toBe(true);
+  for (const lang of LANGS) expect(cardLines(builtin, lang)).toEqual([]);
+
+  const custom = magpieOnlyCard(["mystery-ai"], { available: true, providers: [] }, "mystery-ai");
+  expect(custom).toBeTruthy();
+  expect(custom.browserMethod).toBe(false);
+  expect(custom.signInProvider).toBeNull();
+  expect(custom.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(custom)).toBe(false);
+  for (const lang of LANGS) expect(cardLines(custom, lang)).toEqual([]);
 });
 
 test("a scan that never ran prints no prose and claims no failure", () => {
-  const card = magpieOnlyCard(["mystery-ai"], { available: false, providers: [] }, "mystery-ai");
-  expect(card).toBeTruthy();
-  expect(card.nativeSignIn).toBe(true);
-  expect(providerCanSignIn(card)).toBe(true);
-  for (const lang of LANGS) expect(cardLines(card, lang)).toEqual([]);
+  const builtin = magpieOnlyCard(["gemini"], { available: false, providers: [] }, "gemini");
+  expect(builtin).toBeTruthy();
+  expect(builtin.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(builtin)).toBe(true);
+  for (const lang of LANGS) expect(cardLines(builtin, lang)).toEqual([]);
+
+  const custom = magpieOnlyCard(["mystery-ai"], { available: false, providers: [] }, "mystery-ai");
+  expect(custom).toBeTruthy();
+  expect(custom.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(custom)).toBe(false);
+  for (const lang of LANGS) expect(cardLines(custom, lang)).toEqual([]);
 });
 
 // --- 4. the one line a magpie-only card may print: a broken scan ----------
 
 test("a failed plugin scan is the single line on a magpie-only card, in every language", () => {
-  const card = magpieOnlyCard(["mystery-ai"], {
+  const scanFailure = {
     available: false,
     providers: [],
     error: "dirent is not defined",
     scanned: true,
-  }, "mystery-ai");
-  expect(card).toBeTruthy();
-  expect(card.nativeSignIn).toBe(true);
-  expect(providerCanSignIn(card)).toBe(true);
-  for (const lang of LANGS) {
-    const lines = cardLines(card, lang);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("dirent is not defined");
-    expect(lines[0]).not.toMatch(/not verified|unverified/i);
+  };
+  const builtin = magpieOnlyCard(["gemini"], scanFailure, "gemini");
+  expect(builtin).toBeTruthy();
+  expect(builtin.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(builtin)).toBe(true);
+
+  const custom = magpieOnlyCard(["mystery-ai"], scanFailure, "mystery-ai");
+  expect(custom).toBeTruthy();
+  expect(custom.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(custom)).toBe(false);
+
+  for (const card of [builtin, custom]) {
+    for (const lang of LANGS) {
+      const lines = cardLines(card, lang);
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain("dirent is not defined");
+      expect(lines[0]).not.toMatch(/not verified|unverified/i);
+    }
+    expect(card.capability.reason.en).toContain("The installed-plugin scan failed");
   }
-  expect(card.capability.reason.en).toContain("The installed-plugin scan failed");
 });

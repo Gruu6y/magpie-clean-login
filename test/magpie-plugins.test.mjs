@@ -5,13 +5,14 @@
 // accepts an injected `scan`, so both are exercised entirely in-process.
 
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   LOCAL_HINT,
   classifyMethod,
   createPluginScanner,
+  normalizePluginDir,
   normalizeScan,
   pluginRootDir,
   scanMagpiePlugins,
@@ -131,6 +132,7 @@ test("normalizeScan keeps only public, bounded fields", () => {
       name: null,
       api: "",
       package: "@magpie-community/opencode-cursor-auth",
+      dir: null,
       methods: [
         { type: "oauth", label: "Cursor (browser)", browser: true, category: "browser", prompts: [], runnable: true },
         { type: "oauth", label: "cursor-agent's sign-in", browser: false, category: "local", prompts: [], runnable: true },
@@ -209,6 +211,56 @@ test("normalizeScan re-derives a category for a legacy fixture without one", () 
     "unknown",
     "key",
     "pending",
+  ]);
+});
+
+test("normalizeScan keeps valid dirs, normalizes backslashes, and rejects unsafe dirs", () => {
+  expect(normalizePluginDir("@scope/pkg")).toBe("@scope/pkg");
+  expect(normalizePluginDir("opencode-xfyun-maas-auth")).toBe("opencode-xfyun-maas-auth");
+  expect(normalizePluginDir("@scope\\pkg")).toBe("@scope/pkg");
+
+  for (const bad of [
+    null,
+    undefined,
+    42,
+    "",
+    "a".repeat(257),
+    "../outside",
+    "..\\outside",
+    "/etc",
+    "\\etc",
+    "C:/foo",
+    "a/b/c",
+    "./pkg",
+    "@scope",
+    "@/pkg",
+    ".hidden",
+    "@scope/.hidden",
+    "pkg/",
+    "foo\u0000bar",
+    "foo\nbar",
+  ]) {
+    expect(normalizePluginDir(bad)).toBeNull();
+  }
+
+  const scan = normalizeScan({
+    available: true,
+    providers: [
+      { id: "scoped", dir: "@scope\\pkg", methods: [] },
+      { id: "unscoped", dir: "opencode-xfyun-maas-auth", methods: [] },
+      { id: "traversal", dir: "../outside", methods: [] },
+      { id: "abs", dir: "/etc", methods: [] },
+      { id: "drive", dir: "C:/foo", methods: [] },
+      { id: "nested", dir: "a/b/c", methods: [] },
+    ],
+  });
+  expect(scan.providers.map((provider) => [provider.id, provider.dir])).toEqual([
+    ["scoped", "@scope/pkg"],
+    ["unscoped", "opencode-xfyun-maas-auth"],
+    ["traversal", null],
+    ["abs", null],
+    ["drive", null],
+    ["nested", null],
   ]);
 });
 
@@ -326,15 +378,33 @@ test("a package without a name degrades to itself, never to a failed scan", asyn
       `export const F = async () => ({ auth: { provider: "good", methods: [{ type: "oauth", label: "Good (browser)", authorize: async () => {} }] } });\n`,
     );
 
-    // A bundled build really ships a package.json without a name (for example
-    // yaml/browser on the machine this bug was found on). Only the directory
-    // name identifies it.
-    const nameless = join(root, "badpkg", "browser");
+    // A bundled build can ship a package.json without a name; when placed under
+    // a scope it falls back to the directory name instead of crashing.
+    const nameless = join(root, "@scope", "browser");
     mkdirSync(nameless, { recursive: true });
     writeFileSync(join(nameless, "package.json"), JSON.stringify({ type: "module", main: "./index.mjs" }));
     writeFileSync(
       join(nameless, "index.mjs"),
       `export const F = async () => ({ auth: { provider: "nameless", methods: [] } });\n`,
+    );
+
+    // An ordinary unscoped dependency (for example yaml with yaml/browser)
+    // must be skipped AND its subdirectories must never be descended into.
+    const badpkg = join(root, "badpkg");
+    const badSub = join(badpkg, "browser");
+    mkdirSync(badSub, { recursive: true });
+    writeFileSync(
+      join(badpkg, "package.json"),
+      JSON.stringify({ name: "badpkg", type: "module", main: "./index.mjs" }),
+    );
+    writeFileSync(
+      join(badpkg, "index.mjs"),
+      `export const F = async () => ({ auth: { provider: "badpkg", methods: [] } });\n`,
+    );
+    writeFileSync(join(badSub, "package.json"), JSON.stringify({ type: "module", main: "./index.mjs" }));
+    writeFileSync(
+      join(badSub, "index.mjs"),
+      `export const F = async () => ({ auth: { provider: "nested-bad", methods: [] } });\n`,
     );
 
     // A factory that throws must cost its own package only, never the scan.
@@ -356,7 +426,9 @@ test("a package without a name degrades to itself, never to a failed scan", asyn
     expect(scan.error).toBeUndefined();
     expect(scan.providers.map((provider) => provider.id).sort()).toEqual(["good", "nameless"]);
     // The nameless package falls back to its directory name, not to a crash.
-    expect(scan.providers.find((provider) => provider.id === "nameless").package).toBe("browser");
+    const namelessScan = scan.providers.find((provider) => provider.id === "nameless");
+    expect(namelessScan.package).toBe("browser");
+    expect(namelessScan.dir).toBe("@scope/browser");
     // The good provider keeps its browser method, which is what makes a card
     // signable again.
     const goodScan = scan.providers.find((provider) => provider.id === "good");
@@ -434,7 +506,88 @@ test("scanMagpiePlugins ignores noise and parses the marked JSON line", async ()
   const output = JSON.stringify({ available: true, providers: [{ id: "x", methods: [] }] });
   const exec = fakeExecFile((_f, _a, _o, callback) => callback(null, `warn: something\n${output}\n`));
   const scan = await scanMagpiePlugins({ execFile: exec });
-  expect(scan.providers).toEqual([{ id: "x", name: null, api: "", package: null, methods: [] }]);
+  expect(scan.providers).toEqual([{ id: "x", name: null, api: "", package: null, dir: null, methods: [] }]);
+  expect(exec.calls[0].options.timeout).toBe(30_000);
+});
+
+test("scanMagpiePlugins discovers unscoped plugins, skips ordinary deps and page plugins without importing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "clean-login-unscoped-"));
+  try {
+    const pluginsDir = join(dir, "plugins");
+    const root = join(pluginsDir, "node_modules");
+    mkdirSync(root, { recursive: true });
+    writeFileSync(
+      join(pluginsDir, "package.json"),
+      JSON.stringify({
+        dependencies: { "listed-dep-plugin": "^1.0.0" },
+        optionalDependencies: { "optional-dep-plugin": "^1.0.0" },
+      }),
+    );
+
+    const addPlugin = (relDir, pkgJson, providerId) => {
+      const p = join(root, relDir);
+      mkdirSync(p, { recursive: true });
+      writeFileSync(join(p, "package.json"), JSON.stringify({ type: "module", main: "./index.mjs", ...pkgJson }));
+      writeFileSync(
+        join(p, "index.mjs"),
+        `export const F = async () => ({ auth: { provider: ${JSON.stringify(providerId)}, methods: [{ type: "oauth", label: "${providerId} (browser)", authorize: async () => {} }] } });\n`,
+      );
+    };
+
+    // Discovered unscoped plugins across all four admission paths:
+    addPlugin("opencode-xfyun-maas-auth", { name: "opencode-xfyun-maas-auth" }, "xfyun");
+    addPlugin("magpie-custom", { name: "magpie-custom" }, "magpie-custom");
+    addPlugin("custom-meta-plugin", { name: "custom-meta-plugin", magpie: { auth: true } }, "custom-meta");
+    addPlugin("listed-dep-plugin", { name: "listed-dep-plugin" }, "listed-dep");
+    addPlugin("optional-dep-plugin", { name: "optional-dep-plugin" }, "optional-dep");
+    // GitHub install where directory name differs from package.json name:
+    addPlugin("opencode-amazon-quick-auth", { name: "magpie-amazon-quick" }, "amazon-quick");
+
+    // Skipped without importing: ordinary unscoped dependency & scoped/unscoped page plugins.
+    const skippedMarker = join(dir, "should-never-exist.txt");
+    const addSkipped = (relDir, pkgJson, providerId) => {
+      const p = join(root, relDir);
+      mkdirSync(p, { recursive: true });
+      writeFileSync(join(p, "package.json"), JSON.stringify({ type: "module", main: "./index.mjs", ...pkgJson }));
+      writeFileSync(
+        join(p, "index.mjs"),
+        [
+          `import { writeFileSync } from "node:fs";`,
+          `writeFileSync(${JSON.stringify(skippedMarker)}, ${JSON.stringify(relDir)});`,
+          `export const F = async () => ({ auth: { provider: ${JSON.stringify(providerId)}, methods: [] } });`,
+          "",
+        ].join("\n"),
+      );
+    };
+
+    addSkipped("plain-dep", { name: "plain-dep" }, "plain-dep");
+    addSkipped("magpie-page-unscoped", { name: "magpie-page-unscoped", magpie: { page: true } }, "page-unscoped");
+    addSkipped(join("@scope", "magpie-page-scoped"), { name: "@scope/magpie-page-scoped", magpie: { page: { id: "p" } } }, "page-scoped");
+
+    const scan = await scanMagpiePlugins({ env: { MAGPIE_CONFIG_DIR: dir }, timeoutMs: 15000 });
+    expect(scan.available).toBe(true);
+    expect(scan.providers.map((provider) => provider.id).sort()).toEqual([
+      "amazon-quick",
+      "custom-meta",
+      "listed-dep",
+      "magpie-custom",
+      "optional-dep",
+      "xfyun",
+    ]);
+
+    const byId = new Map(scan.providers.map((provider) => [provider.id, provider]));
+    expect(byId.get("xfyun").dir).toBe("opencode-xfyun-maas-auth");
+    expect(byId.get("magpie-custom").dir).toBe("magpie-custom");
+    expect(byId.get("custom-meta").dir).toBe("custom-meta-plugin");
+    expect(byId.get("listed-dep").dir).toBe("listed-dep-plugin");
+    expect(byId.get("optional-dep").dir).toBe("optional-dep-plugin");
+    expect(byId.get("amazon-quick").package).toBe("magpie-amazon-quick");
+    expect(byId.get("amazon-quick").dir).toBe("opencode-amazon-quick-auth");
+
+    expect(existsSync(skippedMarker)).toBe(false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a child error or timeout degrades to unavailable without throwing", async () => {

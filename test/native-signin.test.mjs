@@ -5,6 +5,7 @@ import {
   NATIVE_SIGNIN_STATES,
   NativeSignInError,
   createNativeSignIn,
+  isSignInUrl,
   magpieCli,
   normalizeAgent,
   readNativeLine,
@@ -241,4 +242,73 @@ test("a paste after the child's stdin died is an error, not a process crash", as
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(controller.status().state).toBe("paste-required");
   expect(() => controller.paste("http://localhost/x")).toThrow(NativeSignInError);
+});
+
+test("isSignInUrl accepts https sign-in pages and rejects proxy, credentialed, script and oversized URLs", () => {
+  expect(isSignInUrl("https://accounts.google.com/o/oauth2/auth?client=1")).toBe(true);
+  expect(isSignInUrl("http://127.0.0.1:7890")).toBe(false);
+  expect(isSignInUrl("https://u:p@example.com")).toBe(false);
+  expect(isSignInUrl("javascript:alert(1)")).toBe(false);
+  expect(isSignInUrl(`https://accounts.google.com/${"a".repeat(8193)}`)).toBe(false);
+});
+
+test("readNativeLine ignores proxy env lines and plain http URLs while extracting codes, https URLs and unsupported-agent errors", () => {
+  expect(readNativeLine("HTTPS_PROXY=http://127.0.0.1:7890")).toBeNull();
+  expect(readNativeLine("HTTPS_PROXY=https://proxy.example.com:8443")).toBeNull();
+  expect(readNativeLine("  all_proxy=https://proxy.example.com:8443")).toBeNull();
+
+  expect(readNativeLine("Callback http://127.0.0.1:1455/auth/callback and confirm the code ABCD-1234")).toEqual({
+    kind: "code",
+    code: "ABCD-1234",
+  });
+
+  expect(
+    readNativeLine("Proxy http://127.0.0.1:7890 -> https://accounts.google.com/o/oauth2/auth?x=1"),
+  ).toEqual({
+    kind: "url",
+    url: "https://accounts.google.com/o/oauth2/auth?x=1",
+    code: "",
+  });
+
+  const unsupported = 'magpie: "xfyun": only Claude Code, Codex, GitHub Copilot, Gemini CLI, Antigravity, Zed, Factory, and MiMo can be added and switched';
+  expect(readNativeLine(`  ${unsupported}  `)).toEqual({
+    kind: "failed",
+    text: unsupported,
+  });
+});
+
+test("a flow hitting proxy logs and an unsupported-agent error fails with the verbatim CLI message without opening a browser", async () => {
+  const opened = [];
+  const { controller, say, end } = harness({ openUrl: (url) => opened.push(url) });
+  const unsupported = 'magpie: "xfyun": only Claude Code, Codex, ... can be added and switched';
+
+  await controller.start({ agent: "xfyun" });
+  say(0, "HTTPS_PROXY=http://127.0.0.1:7890\n");
+  say(0, "HTTPS_PROXY=https://proxy.example.com:8443\n");
+  say(0, `${unsupported}\n`);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  end(0, 1);
+
+  const state = controller.status();
+  expect(state.state).toBe("error");
+  expect(state.error).toBe(unsupported);
+  expect(state.url).toBe("");
+  expect(opened).toEqual([]);
+});
+
+test("a flow with proxy logs followed by an https sign-in link opens the https link", async () => {
+  const opened = [];
+  const { controller, say } = harness({ openUrl: (url) => opened.push(url) });
+  const signInUrl = "https://accounts.google.com/o/oauth2/auth?client=1";
+
+  await controller.start({ agent: "antigravity" });
+  say(0, "HTTPS_PROXY=http://127.0.0.1:7890\n");
+  say(0, "HTTPS_PROXY=https://proxy.example.com:8443\n");
+  say(0, `${signInUrl}\n`);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const state = controller.status();
+  expect(state.state).toBe("waiting");
+  expect(state.url).toBe(signInUrl);
+  expect(opened).toEqual([signInUrl]);
 });

@@ -7,8 +7,10 @@ import { listProviders, publicProvider } from "../lib/provider-registry.mjs";
 import { providerCanSignIn, signInDoor } from "../ui/provider-state.js";
 import {
   MAGPIE_PROVIDERS_READ,
+  NATIVE_ACCOUNT_AGENTS,
   PROVIDER_PRESENCES,
   mergeProviderSources,
+  nativeAgentId,
   normalizeMagpieProviders,
 } from "../lib/provider-sources.mjs";
 
@@ -154,26 +156,70 @@ test("case a: a provider in both sources is normal and carries the local sign-in
   }
 });
 
-test("case b: a magpie-only provider has a card, a door and no paragraph", () => {
-  const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "mystery-ai"] });
-  const card = view.providers.find((provider) => provider.id === "mystery-ai");
-  expect(card).toBeTruthy();
-  expect(card.presence).toBe("magpie-only");
-  expect(card.sources).toEqual({ local: false, magpie: true });
-  expect(card.capability.state).toBe("pending");
-  // The card always carries a door: with no installed plugin covering it, that
-  // door is magpie's own command line. So it prints no paragraph claiming it
-  // has none — and no note repeating that claim.
-  expect(card.nativeSignIn).toBe(true);
-  expect(card.description).toEqual({});
-  expect(card.capability.reason).toEqual({});
-  expect(card.notice).toBeNull();
-  expect(card.presenceNote).toBeNull();
+test("claude (token-import) keeps nativeSignIn false even when magpie lists it", () => {
+  const view = mergeProviderSources({ local: LOCAL, magpie: ["antigravity", "codex", "claude"] });
+  const byId = Object.fromEntries(view.providers.map((provider) => [provider.id, provider]));
+  expect(byId.antigravity.nativeSignIn).toBe(true);
+  expect(byId.codex.nativeSignIn).toBe(true);
+  expect(byId.claude.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(byId.claude)).toBe(false);
+  expect(signInDoor(byId.claude)).toBe("none");
+});
+
+test("NATIVE_ACCOUNT_AGENTS and nativeAgentId gate native sign-in to built-in CLI agents", () => {
+  expect([...NATIVE_ACCOUNT_AGENTS]).toEqual([
+    "claude",
+    "codex",
+    "copilot",
+    "gemini",
+    "antigravity",
+    "zed",
+    "factory",
+    "mimo",
+  ]);
+  expect(nativeAgentId("  Gemini ")).toBe("gemini");
+  expect(nativeAgentId("mystery-ai")).toBeNull();
+  expect(nativeAgentId("xfyun")).toBeNull();
+  expect(nativeAgentId("")).toBeNull();
+  expect(nativeAgentId(null)).toBeNull();
+
+  const customLocal = [{ ...LOCAL[0], id: "custom-oauth", agentId: "custom-oauth", name: "Custom OAuth" }];
+  const view = mergeProviderSources({ local: customLocal, magpie: ["custom-oauth"] });
+  expect(view.providers[0].nativeSignIn).toBe(false);
+  expect(providerCanSignIn(view.providers[0])).toBe(false);
+});
+
+test("case b: a magpie-only card distinguishes built-in agents from custom providers and prints no paragraph", () => {
+  const view = mergeProviderSources({ local: LOCAL, magpie: ["codex", "gemini", "mystery-ai"] });
+  const builtin = view.providers.find((provider) => provider.id === "gemini");
+  expect(builtin).toBeTruthy();
+  expect(builtin.presence).toBe("magpie-only");
+  expect(builtin.sources).toEqual({ local: false, magpie: true });
+  expect(builtin.nativeSignIn).toBe(true);
+  expect(providerCanSignIn(builtin)).toBe(true);
+  expect(builtin.description).toEqual({});
+  expect(builtin.capability.reason).toEqual({});
+  expect(builtin.notice).toBeNull();
+  expect(builtin.presenceNote).toBeNull();
+
+  const custom = view.providers.find((provider) => provider.id === "mystery-ai");
+  expect(custom).toBeTruthy();
+  expect(custom.presence).toBe("magpie-only");
+  expect(custom.sources).toEqual({ local: false, magpie: true });
+  expect(custom.capability.state).toBe("pending");
+  // Without an installed plugin, a custom non-built-in provider does not get a
+  // dead `magpie accounts add` door, and still prints no prose.
+  expect(custom.nativeSignIn).toBe(false);
+  expect(providerCanSignIn(custom)).toBe(false);
+  expect(custom.description).toEqual({});
+  expect(custom.capability.reason).toEqual({});
+  expect(custom.notice).toBeNull();
+  expect(custom.presenceNote).toBeNull();
   // It carries none of the local capabilities, so nothing can be promoted.
-  expect(card.agentId).toBe("mystery-ai");
-  expect(card.authHosts).toEqual([]);
-  expect(card.callbackPort).toBeNull();
-  expect(view.counts).toEqual({ total: 4, both: 1, localOnly: 2, magpieOnly: 1, pluginOnly: 0, catalogOnly: 0 });
+  expect(custom.agentId).toBe("mystery-ai");
+  expect(custom.authHosts).toEqual([]);
+  expect(custom.callbackPort).toBeNull();
+  expect(view.counts).toEqual({ total: 5, both: 1, localOnly: 2, magpieOnly: 2, pluginOnly: 0, catalogOnly: 0 });
 });
 
 test("case c: a local provider magpie omits is annotated, not removed", () => {
