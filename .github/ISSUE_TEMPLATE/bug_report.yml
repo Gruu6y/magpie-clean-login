@@ -1,0 +1,61 @@
+name: 问题反馈 (Bug Report)
+description: 报告使用 Clean Login 时遇到的问题或异常
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        如果是某个供应商卡片本身无法登录或出错，也可以直接在 Clean Login 界面该卡片上点击 **报告问题**，会自动预填卡片和环境诊断信息（不含任何凭据）。
+        ⚠️ **安全提醒**：提交内容将公开可见，请勿粘贴 Cookie、Token、账号密钥、代理用户名或代理密码。
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 问题现象
+      description: 请简述实际发生了什么，以及你期望发生什么。
+      placeholder: 例如：点击「启动干净登录」后浏览器未弹出，页面提示……
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境（OS/架构、是否远程/无头 Linux）
+      description: 请填写操作系统与 CPU 架构（如 Windows 11 x64、macOS arm64、Linux x64/arm64），以及是否处于远程桌面、SSH 或无头（headless）Linux 环境。
+      placeholder: |
+        操作系统与架构：例如 Windows 11 x64 / macOS arm64 / Ubuntu 24.04 x64
+        是否远程或无头 Linux：否 / 是（如使用 Xvfb、远程 X11/Wayland 或 magpie web，请说明）
+        运行时：Bun 版本（如 1.4.5）
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: clean-login 版本与 magpie 版本
+      description: 可在 magpie 的 Plugins 面板或本仓库 package.json 中查看版本号。
+      placeholder: 例如：clean-login 0.2.4 / magpie x.y.z
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      description: 按顺序列出稳定复现该问题的操作步骤。
+      placeholder: |
+        1. 打开 Clean Login 页面并进入……
+        2. 选择供应商 / 账号 / 出口代理……
+        3. 点击……后出现异常
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 报错日志 / 控制台输出
+      description: "⚠️ 请先脱敏再粘贴！绝对不要粘贴 Cookie、Token、授权码、账号密钥或代理密码。"
+      placeholder: 请粘贴脱敏后的终端输出、错误堆栈或页面报错信息……
+    validations:
+      required: false
