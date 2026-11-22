@@ -119,6 +119,11 @@
 
 **Cindy 侧收尾**：Cindy 推送 `cindy-default/issue-<N>` 分支并建 PR，等 3-OS CI 全绿后移除 `agent:in-progress`、打 `agent:ready-to-merge` 并通知主人；后续合并统一走 `scripts/merge-release.mjs` 或微信 `合并 #<PR>`。agy 不再对 Cindy 内部 PR 重复启动 LLM 审计。
 
+**Webhook 投递边界（预期行为，非故障）：**
+
+- 对 **PR** 打标投递的是 `pull_request.labeled`，不是 `issues.labeled`——Cindy 执行器不会因 PR 打标被唤醒，不要误判为漏触发。
+- Cindy 侧 webhook 有约 **5 分钟事件批处理**：同一自动化短时间内多个事件会合并进一次 run；对标签做连续的 remove/add 也可能只合并触发一次，排查分流问题时先看批处理窗口再判定漏投递。
+
 ### Tier 4：外部贡献者 PR（`pull_request`）
 
 - **触发范围**：非 `cindy-default/*` 分支触发的 `opened` / `reopened` / `synchronize` 事件。
