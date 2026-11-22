@@ -1,0 +1,72 @@
+name: macos-e2e
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_headed:
+        description: "Skip headed Camoufox launch & desktop screenshot"
+        required: false
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/macos-e2e.yml
+      - scripts/macos-e2e.mjs
+      - scripts/macos-wkwebview-smoke.swift
+      - lib/camoufox-loader.mjs
+      - lib/browser-environment.mjs
+      - lib/browser-launcher.mjs
+      - lib/signin-browser-host.mjs
+      - lib/score-browser-host.mjs
+      - lib/identity-check-browser-host.mjs
+      - lib/open-external.mjs
+      - lib/provider-icons.mjs
+      - lib/account-identity.mjs
+      - ui/embed-gate.js
+      - lib/server.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-e2e:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      # Keep dependency install deterministic; macos-e2e.mjs drives the real
+      # plugin environment prepare path (/api/environment/prepare) itself.
+      - name: Install dependencies
+        run: bun install --ignore-scripts
+      - name: Run macOS E2E
+        run: |
+          ARGS="--artifacts-dir macos-e2e-artifacts"
+          if [ "${{ inputs.skip_headed }}" = "true" ]; then
+            ARGS="$ARGS --skip-headed"
+          fi
+          bun scripts/macos-e2e.mjs $ARGS
+      - name: Print diagnostic summary on failure
+        if: failure()
+        run: |
+          sw_vers || true
+          uname -a || true
+          ls -la ~/Library/Caches || true
+          ls -la ~/Library/Caches/camoufox || true
+          if [ -f macos-e2e-artifacts/report.json ]; then
+            cat macos-e2e-artifacts/report.json
+          fi
+      - name: Upload macOS E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-e2e-artifacts
+          path: macos-e2e-artifacts/
+          retention-days: 14
+          if-no-files-found: warn

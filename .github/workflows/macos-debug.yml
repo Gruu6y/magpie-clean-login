@@ -1,0 +1,61 @@
+# On-demand interactive macOS debug shell for diagnosing darwin-only issues
+# without pushing trial commits. Trigger manually after this workflow is on main:
+#   gh workflow run macos-debug.yml --ref <branch>
+#
+# Security:
+# - Manual workflow_dispatch only (never runs on pull_request or push).
+# - Minimal read-only permissions (contents: read) and zero repository secrets (never injects secrets).
+# - limit-access-to-actor: true restricts SSH access to the GitHub SSH public
+#   keys registered on the account that dispatched the run.
+
+name: macos-debug
+
+on:
+  workflow_dispatch:
+    inputs:
+      timeout_minutes:
+        description: "Maximum debug shell lifetime (minutes)"
+        required: false
+        type: choice
+        default: "20"
+        options:
+          - "10"
+          - "20"
+          - "30"
+      install_deps:
+        description: "Run bun install --ignore-scripts before opening tmate"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-debug-${{ github.actor }}
+  cancel-in-progress: true
+
+jobs:
+  debug-shell:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Install dependencies
+        if: ${{ inputs.install_deps != false }}
+        run: bun install --ignore-scripts
+      - name: Print host baseline
+        run: |
+          sw_vers
+          uname -a
+          bun --version
+          ls -la ~/Library/Caches || true
+      - name: Start interactive tmate session
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: ${{ fromJSON(inputs.timeout_minutes || '20') }}
+        with:
+          limit-access-to-actor: true
+          detached: false

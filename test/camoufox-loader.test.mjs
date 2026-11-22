@@ -6,8 +6,8 @@
 // cache).
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, lstatSync, mkdtempSync, readlinkSync, realpathSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CamoufoxSandboxError,
@@ -15,6 +15,51 @@ import {
   ensureDarwinInstallSymlink,
   isInsideSandbox,
 } from "../lib/camoufox-loader.mjs";
+
+function safeRealpath(target) {
+  try {
+    return realpathSync(target);
+  } catch {
+    return null;
+  }
+}
+
+function darwinHostDiagnostics(sandbox) {
+  const home = homedir();
+  const tmp = tmpdir();
+  const cachePath = join(home, "Library", "Caches", "camoufox");
+  const cacheLink = {
+    path: cachePath,
+    exists: false,
+    isSymbolicLink: false,
+    readlinkTarget: null,
+    realpath: null,
+    error: null,
+  };
+  try {
+    const lst = lstatSync(cachePath);
+    cacheLink.isSymbolicLink = lst.isSymbolicLink();
+    cacheLink.exists = existsSync(cachePath);
+    if (cacheLink.isSymbolicLink) {
+      cacheLink.readlinkTarget = readlinkSync(cachePath);
+    }
+    cacheLink.realpath = safeRealpath(cachePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      cacheLink.error = String(error?.message ?? error);
+    }
+  }
+  return {
+    platform: process.platform,
+    arch: process.arch,
+    homedir: home,
+    tmpdir: tmp,
+    realTmpdir: safeRealpath(tmp),
+    sandbox,
+    realSandbox: safeRealpath(sandbox),
+    cacheLink,
+  };
+}
 
 test("camoufoxCacheEnv mirrors the import-time redirect for forked hosts", () => {
   // win32 paths.js reads LOCALAPPDATA; linux reads XDG_CACHE_HOME (which also
@@ -67,12 +112,14 @@ test("loadCamoufoxSandboxed pins INSTALL_DIR inside the sandbox (fresh process)"
         return;
       }
       console.log(`subprocess failed: ${result.stderr ?? result.stdout}`);
+      console.log(`hostDiagnostics=${JSON.stringify(darwinHostDiagnostics(sandbox))}`);
     }
     expect(result.status).toBe(0);
-    const { installDir, homedir } = JSON.parse(result.stdout.trim().split("\n").pop());
+    const { installDir, homedir: subprocessHomedir } = JSON.parse(result.stdout.trim().split("\n").pop());
     if (!isInsideSandbox(installDir, sandbox)) {
       // Diagnose before asserting: which of the two paths escaped the sandbox?
-      console.log(`installDir=${installDir} homedir=${homedir} sandbox=${sandbox}`);
+      console.log(`installDir=${installDir} homedir=${subprocessHomedir} sandbox=${sandbox}`);
+      console.log(`hostDiagnostics=${JSON.stringify(darwinHostDiagnostics(sandbox))}`);
     }
     expect(installDir).toBeTruthy();
     expect(isInsideSandbox(installDir, sandbox)).toBe(true);
