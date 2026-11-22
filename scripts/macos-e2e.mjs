@@ -508,7 +508,12 @@ async function main() {
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; padding: 32px;">
   <h1 id="headline">Clean Login E2E · 干净登录 🚀</h1>
   <p id="mode">${req.url || "/"}</p>
-  <script>window.__e2e = { ok: true, ua: navigator.userAgent, platform: navigator.platform };</script>
+  <pre id="script-probe" data-ok="false"></pre>
+  <script>
+    const el = document.getElementById("script-probe");
+    el.dataset.ok = "true";
+    el.textContent = JSON.stringify({ ok: true, ua: navigator.userAgent, platform: navigator.platform });
+  </script>
 </body>
 </html>`);
     });
@@ -533,15 +538,26 @@ async function main() {
     let headlessEval = null;
     try {
       assert.equal(headlessHandle.navigationError, null, "headless navigationError must be null");
-      headlessEval = await headlessHandle.page.evaluate(() => ({
-        userAgent: navigator.userAgent,
-        platform: navigator.platform,
-        title: document.title,
-        probeOk: Boolean(window.__e2e?.ok),
-        fontsCount: document.fonts?.size ?? 0,
-        text: document.getElementById("headline")?.textContent ?? "",
-      }));
-      assert.equal(headlessEval.probeOk, true);
+      // Camoufox evaluates Playwright scripts in an isolated sandbox world, so
+      // read page-script proof via DOM attributes/text rather than window.* expandos.
+      headlessEval = await headlessHandle.page.evaluate(() => {
+        const probeEl = document.getElementById("script-probe");
+        let parsed = null;
+        try {
+          parsed = probeEl?.textContent ? JSON.parse(probeEl.textContent) : null;
+        } catch {
+          parsed = null;
+        }
+        return {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          title: document.title,
+          probeOk: probeEl?.dataset?.ok === "true" && parsed?.ok === true,
+          fontsCount: document.fonts?.size ?? 0,
+          text: document.getElementById("headline")?.textContent ?? "",
+        };
+      });
+      assert.equal(headlessEval.probeOk, true, `headless DOM probe failed: ${JSON.stringify(headlessEval)}`);
       assert.equal(headlessEval.title, "Clean Login Mac E2E");
       const headlessShot = join(artifactsDir, "camoufox-headless.png");
       await headlessHandle.page.screenshot({ path: headlessShot });
