@@ -1,0 +1,43 @@
+name: 功能建议 (Feature Request)
+description: 提出新功能、交互改进或供应商 / CLI 支持建议
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: 使用场景
+      description: 请描述你目前遇到的痛点，或希望在什么场景下使用该功能。
+      placeholder: 例如：在多账号批量管理或自动化脚本中，希望能……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: 期望行为
+      description: 你希望 Clean Login 如何表现？如果有界面交互或参数设想，请一并说明。
+      placeholder: 请尽量具体地描述期望的行为、边界情况或输出格式。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cli_support
+    attributes:
+      label: 是否需要对应 CLI 支持
+      description: 仓库约定「不开网页也能完成整套操作」，请说明该功能是否需要同步在 clean-login CLI（lib/agent-cli.mjs）中提供子命令或参数。
+      options:
+        - 需要（希望在 CLI 中也能完成相同操作）
+        - 不需要（仅涉及页面展示或内部逻辑）
+        - 不确定（由维护者根据项目 CLI 同步约定评估）
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充说明（可选）
+      description: 如有参考实现、预期 CLI 命令示例或其他补充信息，可在此填写。
+      placeholder: 例如：期望命令 `clean-login ...`
+    validations:
+      required: false
