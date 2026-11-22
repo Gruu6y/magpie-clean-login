@@ -434,6 +434,13 @@ async function main() {
     assert.ok(tokenMatch?.[1], "GET / must contain clean-login-token meta tag");
     const token = tokenMatch[1];
 
+    const bootResp = await fetch(`http://127.0.0.1:${service.port}/api/bootstrap`, {
+      headers: { [TOKEN_HEADER]: token },
+    });
+    assert.equal(bootResp.status, 200, `GET /api/bootstrap expected 200, got ${bootResp.status}`);
+    const bootJson = await bootResp.json();
+    assert.equal(bootJson?.service?.status, "ready", `GET /api/bootstrap unexpected body: ${JSON.stringify(bootJson)}`);
+
     const prepResp = await fetch(`http://127.0.0.1:${service.port}/api/environment/prepare`, {
       method: "POST",
       headers: { [TOKEN_HEADER]: token },
@@ -646,6 +653,7 @@ async function main() {
       report.stages.wkwebviewEmbedGate = { skipped: true };
     } else {
       const t5 = Date.now();
+      const proxyTrace = [];
       sameOriginProxy = await startLocalServer((req, res) => {
         if ((req.url || "/").startsWith("/__magpie_host__")) {
           res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
@@ -667,6 +675,20 @@ async function main() {
             headers,
           },
           (proxyRes) => {
+            if (proxyTrace.length < 40) {
+              proxyTrace.push({
+                method: req.method ?? null,
+                url: req.url ?? "/",
+                origin: req.headers.origin ?? null,
+                acrm: req.headers["access-control-request-method"] ?? null,
+                acrh: req.headers["access-control-request-headers"] ?? null,
+                hasToken: Boolean(req.headers[TOKEN_HEADER]),
+                status: proxyRes.statusCode ?? 0,
+                acao: proxyRes.headers["access-control-allow-origin"] ?? null,
+                acah: proxyRes.headers["access-control-allow-headers"] ?? null,
+                acam: proxyRes.headers["access-control-allow-methods"] ?? null,
+              });
+            }
             res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
             proxyRes.pipe(res);
           },
@@ -721,17 +743,19 @@ async function main() {
       }
 
       const wkReport = JSON.parse(readFileSync(wkReportPath, "utf8"));
-      const verified = verifyWkWebViewReport(wkReport);
       const wkShotBytes = existsSync(wkShotPath) ? statSync(wkShotPath).size : 0;
-      assert.ok(wkShotBytes > 1000, `wkwebview-wails-allow.png too small (${wkShotBytes} bytes)`);
-
       report.stages.wkwebviewEmbedGate = {
-        ok: true,
+        ok: false,
         durationMs: Date.now() - t5,
-        verified,
+        proxyTrace,
         screenshotBytes: wkShotBytes,
         scenarios: wkReport.scenarios,
       };
+      const verified = verifyWkWebViewReport(wkReport);
+      assert.ok(wkShotBytes > 1000, `wkwebview-wails-allow.png too small (${wkShotBytes} bytes)`);
+
+      report.stages.wkwebviewEmbedGate.ok = true;
+      report.stages.wkwebviewEmbedGate.verified = verified;
     }
 
     // Stage 6: Non-fatal Rosetta 2 probe
