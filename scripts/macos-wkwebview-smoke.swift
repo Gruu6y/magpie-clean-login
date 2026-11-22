@@ -113,6 +113,26 @@ final class SmokeRunner: NSObject, NSApplicationDelegate, WKScriptMessageHandler
   var screenshotError: String?
   var settledCurrent = false
 
+  private let cspMonitorSource = """
+  (function () {
+    if (window.__clCspMonitorInstalled) return;
+    window.__clCspMonitorInstalled = true;
+    window.__clCspViolations = window.__clCspViolations || [];
+    function recordViolation(ev) {
+      try {
+        window.__clCspViolations.push({
+          effectiveDirective: String(ev && ev.effectiveDirective || ""),
+          violatedDirective: String(ev && ev.violatedDirective || ""),
+          blockedURI: String(ev && ev.blockedURI || ""),
+          documentURI: String(ev && ev.documentURI || "")
+        });
+      } catch (e) {}
+    }
+    document.addEventListener("securitypolicyviolation", recordViolation, true);
+    window.addEventListener("securitypolicyviolation", recordViolation, true);
+  })();
+  """
+
   private let probeSource = """
   (function () {
     if (window.__clProbeStarted) return;
@@ -120,12 +140,11 @@ final class SmokeRunner: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     window.__clProbeStarted = true;
     var sent = false;
     var ticks = 0;
-    function send(timedOut) {
-      if (sent) return;
-      sent = true;
+    function buildPayload(timedOut, errorDiagnostics) {
       var shell = document.querySelector(".shell");
       var denied = document.getElementById("embed-denied");
       var svc = document.getElementById("service-state");
+      var svcLabel = document.getElementById("service-label");
       var ancestors = [];
       try {
         ancestors = Array.from(location.ancestorOrigins || []);
@@ -142,12 +161,91 @@ final class SmokeRunner: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         deniedHidden: Boolean(!denied || denied.hidden),
         deniedText: denied ? String(denied.textContent || "").trim() : "",
         serviceState: svc ? String(svc.dataset.state || "") : "",
+        serviceLabel: svcLabel ? String(svcLabel.textContent || "").trim() : "",
         theme: String(document.documentElement.dataset.theme || ""),
+        cspViolations: Array.isArray(window.__clCspViolations) ? window.__clCspViolations.slice(0, 10) : [],
         timedOut: Boolean(timedOut)
       };
+      if (errorDiagnostics !== undefined) {
+        payload.errorDiagnostics = errorDiagnostics;
+      }
+      return payload;
+    }
+    function postPayload(payload) {
       try {
         window.webkit.messageHandlers.probe.postMessage(payload);
       } catch (e) {}
+    }
+    function probeFetch(label, url, init, timeoutMs) {
+      return new Promise(function (resolve) {
+        var settled = false;
+        var controller = typeof AbortController === "function" ? new AbortController() : null;
+        var timer = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          if (controller) {
+            try { controller.abort(); } catch (e) {}
+          }
+          resolve([label, { error: "probe_timeout_" + timeoutMs + "ms" }]);
+        }, timeoutMs);
+        var opts = Object.assign({}, init || {});
+        if (controller) opts.signal = controller.signal;
+        fetch(url, opts).then(
+          function (resp) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve([label, { status: resp.status, ok: Boolean(resp.ok) }]);
+          },
+          function (err) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve([label, { error: String(err) }]);
+          }
+        );
+      });
+    }
+    function runErrorDiagnostics(done) {
+      var tokenMeta = document.querySelector('meta[name="clean-login-token"]');
+      var metaToken = tokenMeta ? String(tokenMeta.getAttribute("content") || "") : "";
+      var finished = false;
+      var deadline = setTimeout(function () {
+        if (finished) return;
+        finished = true;
+        done({ timedOut: true, hasMetaToken: metaToken.length > 0 });
+      }, 3000);
+      Promise.all([
+        probeFetch("healthSimple", "api/health", { cache: "no-store" }, 2500),
+        probeFetch("bootstrapNoStore", "api/bootstrap", { headers: { "x-clean-login-token": metaToken }, cache: "no-store" }, 2500),
+        probeFetch("bootstrapDefaultCache", "api/bootstrap", { headers: { "x-clean-login-token": metaToken } }, 2500)
+      ]).then(function (entries) {
+        if (finished) return;
+        setTimeout(function () {
+          if (finished) return;
+          finished = true;
+          clearTimeout(deadline);
+          var out = { hasMetaToken: metaToken.length > 0 };
+          for (var i = 0; i < entries.length; i += 1) {
+            out[entries[i][0]] = entries[i][1];
+          }
+          done(out);
+        }, 100);
+      });
+    }
+    function send(timedOut) {
+      if (sent) return;
+      sent = true;
+      var denied = document.getElementById("embed-denied");
+      var svc = document.getElementById("service-state");
+      var deniedReady = Boolean(denied && !denied.hidden && String(denied.textContent || "").trim().length > 0);
+      if (!deniedReady && svc && svc.dataset.state === "error") {
+        runErrorDiagnostics(function (diag) {
+          postPayload(buildPayload(timedOut, diag));
+        });
+        return;
+      }
+      postPayload(buildPayload(timedOut, undefined));
     }
     function check() {
       if (sent) return;
@@ -222,6 +320,13 @@ final class SmokeRunner: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
     let controller = WKUserContentController()
     controller.add(self, contentWorld: .defaultClient, name: "probe")
+    let cspUserScript = WKUserScript(
+      source: cspMonitorSource,
+      injectionTime: .atDocumentStart,
+      forMainFrameOnly: false,
+      in: .defaultClient
+    )
+    controller.addUserScript(cspUserScript)
     let userScript = WKUserScript(
       source: probeSource,
       injectionTime: .atDocumentEnd,
