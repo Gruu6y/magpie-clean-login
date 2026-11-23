@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test";
 import {
+  AGY_FAMILY_NOTICE,
+  CLAUDE_NOTICE,
   PROVIDERS,
   PROVIDER_CAPABILITY_STATES,
+  PROVIDER_NOTICE_TONES,
   PROVIDER_PUBLIC_FIELDS,
   listProviders,
+  providerSpecialNotice,
   publicProvider,
 } from "../lib/provider-registry.mjs";
 
@@ -61,6 +65,7 @@ test("the registry has fixed, uniquely identified providers with every public fi
     for (const value of Object.values(provider.notice)) {
       expect(typeof value).toBe("string");
     }
+    expect(provider.noticeTone === null || PROVIDER_NOTICE_TONES.includes(provider.noticeTone)).toBe(true);
     // No verification reason is written any more. A state that can never change
     // does not deserve a sentence on every card.
     expect(Object.keys(provider.capability.reason)).toEqual([]);
@@ -77,34 +82,87 @@ test("the registry writes no verification reason and no card claims readiness", 
   }
 });
 
-// Every language has to name the missing service: a card that only said "not
-// recommended" would leave the reader guessing what is missing.
-const SANDBOX_LINE = {
-  en: /sandbox service/i,
-  "zh-Hans": /沙箱服务/,
-  "zh-Hant": /沙箱服務/,
-  ja: /サンドボックスサービス/,
-};
-
-test("codex and claude say the sandbox service is not ready, and only those two", () => {
+test("antigravity and claude carry their specialized notices while codex carries none", () => {
   const byId = Object.fromEntries(PROVIDERS.map((provider) => [provider.id, provider]));
-  for (const id of ["codex", "claude"]) {
-    expect(byId[id].notice).toBeTruthy();
-    for (const lang of LANGS) {
-      expect(byId[id].notice[lang]).toMatch(SANDBOX_LINE[lang]);
-    }
-    // The warning belongs to the notice, not to the description: a description
-    // says what the provider is, a notice says what to do about it.
-    expect(JSON.stringify(byId[id].description)).not.toMatch(SANDBOX_LINE.en);
-  }
-  // The Claude card keeps the one fact about how magpie signs in at all.
-  expect(byId.claude.notice.en).toMatch(/claude-token/);
-  // antigravity warns about unpaid accounts getting banned under Google ToS.
-  expect(byId.antigravity.notice).toBeTruthy();
+
+  // Google AGY family warns about unpaid accounts and using AGY through magpie.
+  expect(byId.antigravity.noticeTone).toBe("warn");
   for (const lang of LANGS) {
+    expect(byId.antigravity.notice[lang]).toBe(AGY_FAMILY_NOTICE[lang]);
     expect(byId.antigravity.notice[lang]).toBeTruthy();
   }
-  expect(byId.antigravity.notice["zh-Hans"]).toContain("神仙来了也得封");
+  expect(byId.antigravity.notice["zh-Hans"]).toContain("未实付的账号无法通过本插件缓解你的封禁焦虑");
+  expect(byId.antigravity.notice["zh-Hans"]).toContain("暂时不建议通过 magpie 使用 agy 供应商");
+
+  // Claude directs users to claude-cage and drops the old sandbox/token-import wording.
+  expect(byId.claude.noticeTone).toBe("danger");
+  for (const lang of LANGS) {
+    expect(byId.claude.notice[lang]).toBe(CLAUDE_NOTICE[lang]);
+    expect(byId.claude.notice[lang]).toContain("claude-cage");
+  }
+  expect(byId.claude.notice["zh-Hans"]).toContain("请不要通过本插件来使用 Claude");
+  expect(JSON.stringify(byId.claude.notice)).not.toMatch(/sandbox|沙箱|claude-token/i);
+  expect(JSON.stringify(byId.claude.description)).not.toMatch(/sandbox|沙箱|token/i);
+
+  // Codex no longer carries a special warning notice.
+  expect(byId.codex.notice).toEqual({});
+  expect(byId.codex.noticeTone).toBeNull();
+});
+
+test("providerSpecialNotice matches the Google AGY and Claude families without false positives", () => {
+  const agyCases = [
+    { id: "antigravity" },
+    { id: "google-antigravity" },
+    { id: "antigravity-cli" },
+    { id: "agy" },
+    { id: "agy-cli" },
+    { id: "agy-local" },
+    { id: "custom", name: "Antigravity (local agy)" },
+    { id: "custom", pluginPackage: "@magpie-community/opencode-agy-cli-auth" },
+    { id: "custom", package: "@magpie-community/opencode-antigravity-auth" },
+  ];
+  for (const input of agyCases) {
+    const match = providerSpecialNotice(input);
+    expect(match, JSON.stringify(input)).toEqual({
+      notice: { ...AGY_FAMILY_NOTICE },
+      noticeTone: "warn",
+    });
+  }
+
+  const claudeCases = [
+    { id: "claude" },
+    { id: "claude-code" },
+    { id: "claudecode" },
+    { id: "claude-max" },
+    { id: "anthropic-claude" },
+    { id: "custom", name: "Claude Code" },
+    { id: "custom", pluginPackage: "@magpie-community/opencode-claude-auth" },
+  ];
+  for (const input of claudeCases) {
+    const match = providerSpecialNotice(input);
+    expect(match, JSON.stringify(input)).toEqual({
+      notice: { ...CLAUDE_NOTICE },
+      noticeTone: "danger",
+    });
+  }
+
+  const nonMatches = [
+    null,
+    undefined,
+    {},
+    { id: "codex", name: "Codex" },
+    { id: "gemini", name: "Gemini" },
+    { id: "gemini-cli", name: "Gemini CLI" },
+    { id: "anthropic", name: "Anthropic" },
+    { id: "cursor", name: "Cursor" },
+    { id: "voyage", name: "Voyage AI" },
+    { id: "strategy", name: "Strategy" },
+    { id: "cloudflare", name: "Cloudflare" },
+    { id: "demo-plugin", package: "@example/demo-plugin" },
+  ];
+  for (const input of nonMatches) {
+    expect(providerSpecialNotice(input), JSON.stringify(input)).toBeNull();
+  }
 });
 
 test("the registry contains no secret fields or credential values", () => {

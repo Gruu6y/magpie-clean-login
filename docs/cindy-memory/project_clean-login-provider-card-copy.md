@@ -1,20 +1,27 @@
 ---
 title: clean-login 供应商卡片的用户可见文案决定
 description: >-
-  clean-login 卡片文案决定（antigravity已确认立住不再动、沙箱/其他订阅卡去文案+排版已上线
-  0.1.68）与两条待拍事项（shownLines 护栏已在 PR #44 闭环）
+  clean-login 供应商卡片特化提醒最新拍板（2026-11-23：Google AGY 系与 Claude 系按家族匹配并配醒目警示样式、开放登录入口；Codex 清空旧沙箱提醒）
 type: project
-updatedAt: '2026-11-07T18:30:17.827Z'
+updatedAt: '2026-11-23T12:48:00.000Z'
 ---
 # clean-login 供应商卡片的用户可见文案决定
 
-## codex / claude 沙箱提示（0.1.53）
-- 主人决定：codex 与 claude「暂时不建议使用本插件登录」，原因「暂时未准备提供沙箱服务」。
-- 落地：`lib/provider-registry.mjs` 里两者的 `notice`（共享常量 `NO_SANDBOX_NOTICE`；claude 另拼 `CLAUDE_TOKEN_NOTICE`）。只是提示，没有禁用入口。撤除条件：沙箱就绪或主人改口。
+## 2026-11-23 供应商页特化提醒更新（取代旧 0.1.53 / 0.1.65 口径）
+- 主人原话：
+  1. 针对 Google AGY 系：`提醒:未实付的账号无法通过本插件缓解你的封禁焦虑,且暂时不建议通过magpie使用agy供应商`
+  2. 针对 Claude：`提醒:请不要通过本插件来使用claude,请使用claude-cage`
+  3. Codex：`codex这个不需要特殊提醒了,openai不管反代,只要通过本插件做好隔离,可以一定程度上降低降智风险`
+- 拍板细则：
+  - **样式与入口**：卡片与登录弹窗使用醒目警示样式（AGY 系 `noticeTone: "warn"` 琥珀色警示框；Claude 系 `noticeTone: "danger"` 朱红色警示框），**但开放登录入口**（不禁用、不隐藏任何可登录供应商的「添加账号」入口）。
+  - **家族匹配**：`lib/provider-registry.mjs` 的 `providerSpecialNotice()` 统一按家族匹配并接到 `lib/provider-sources.mjs` 的 `magpie-only`、`plugin-only`、`catalog` 层——AGY 系覆盖 `antigravity` / `agy-cli` 及 `antigravity-*` / `agy-*`（含插件包名与名称）；Claude 系覆盖 `claude` / `claude-*` / `claudecode`（不含裸 `anthropic`）。
+  - **旧文案清理**：移除 `NO_SANDBOX_NOTICE` 与 `CLAUDE_TOKEN_NOTICE`；Claude 卡片只保留新的 `claude-cage` 提醒并简化 description；Codex 清空特殊提醒（`notice: {}`, `noticeTone: null`）。
 
-## antigravity 未付费提醒（0.1.65，三号机 PR #40，口径已定立住）
-- `ANTIGRAVITY_NOTICE` 四语言进 antigravity 的 `notice`。
-- 口气（「一块钱都没给 Google 付的订阅账号，神仙来了也得封了。」）：**已于 2026-11-08 由三号机与主人确认彻底立住**。三号机证实此句为主人亲口原话（原句「一块钱都没给google付的订阅账号,神仙来了也得封了」），提交前预览图给主人看过，主人亲口确认「行联系初号机合并吧」。虽与 codex/claude 的克制口径不统一，但既然是主人原话定版，**在主人明确改口前任何伙伴均不动它**，不再列入待拍事项。
+## 历史记录：codex / claude 沙箱提示（0.1.53，已于 2026-11-23 取代）
+- 旧决定：codex 与 claude 曾共享 `NO_SANDBOX_NOTICE`（claude 另拼 `CLAUDE_TOKEN_NOTICE`）。已于 2026-11-23 撤除。
+
+## 历史记录：antigravity 未付费提醒（0.1.65，已于 2026-11-23 改口更新）
+- 旧口径（「一块钱都没给 Google 付的订阅账号，神仙来了也得封了。」）已按 2026-11-23 主人新原话更新为 `AGY_FAMILY_NOTICE` 并扩展至整个 Google AGY 系。
 
 ## 其他订阅类卡片去文案 + 排版（2026-11-08，PR #39，实发 0.1.67/0.1.68）
 - 主人连着三轮「动一处修一处」，要求去掉重复段落。
