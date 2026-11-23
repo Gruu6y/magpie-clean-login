@@ -335,3 +335,13 @@ test("a native-only card opens the native door; its signInProvider would not", (
   expect(opened).toContain("provider: provider.signInProvider,");
   expect(opened).toContain("card: provider,");
 });
+
+test("the sign-in dialog mirrors a card's specialized risk notice and clears it on close", () => {
+  const dialog = /<dialog id="signin-dialog"[\s\S]*?<\/dialog>/.exec(html)?.[0] || "";
+  expect(dialog).toContain('id="signin-provider-notice"');
+  expect(app).toContain("renderSignInProviderNotice(provider);");
+  expect(app).toContain("function renderSignInProviderNotice(provider)");
+  expect(app).toContain('byId("signin-provider-notice")');
+  const cleanup = /function cleanupSignInDialog\(\) \{[\s\S]*?\n\}/.exec(app)?.[0] || "";
+  expect(cleanup).toContain("renderSignInProviderNotice(null);");
+});

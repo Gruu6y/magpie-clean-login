@@ -56,11 +56,13 @@ test("every local provider id lines up with magpie's own ids", () => {
   // importing a token through POST /api/signin/claude-token), so it stays
   // local-only and the card says so.
   expect(byId.claude.presence).toBe("local-only");
-  // The registry's notice has to survive the merge: it is the line that keeps a
-  // sign-in this plugin should not run yet from looking like a normal one.
-  expect(byId.codex.notice["zh-Hans"]).toContain("沙箱服务");
-  expect(byId.claude.notice["zh-Hans"]).toContain("沙箱服务");
-  expect(byId.antigravity.notice["zh-Hans"]).toContain("神仙来了也得封");
+  // The registry's specialized notices survive the merge, while codex stays clear.
+  expect(byId.codex.notice).toEqual({});
+  expect(byId.codex.noticeTone).toBeNull();
+  expect(byId.claude.notice["zh-Hans"]).toContain("claude-cage");
+  expect(byId.claude.noticeTone).toBe("danger");
+  expect(byId.antigravity.notice["zh-Hans"]).toContain("未实付的账号无法通过本插件缓解你的封禁焦虑");
+  expect(byId.antigravity.noticeTone).toBe("warn");
 });
 
 test("normalization accepts a bare string array", () => {
@@ -236,7 +238,8 @@ test("case c: a local provider magpie omits is annotated, not removed", () => {
   for (const lang of ["en", "zh-Hans", "zh-Hant", "ja"]) {
     expect(card.notice[lang]).toBeTruthy();
   }
-  expect(card.notice["zh-Hans"]).toContain("暂时不建议使用本插件登录");
+  expect(card.notice["zh-Hans"]).toContain("claude-cage");
+  expect(card.noticeTone).toBe("danger");
   expect(view.counts).toEqual({ total: 3, both: 1, localOnly: 2, magpieOnly: 0, pluginOnly: 0, catalogOnly: 0 });
 });
 
@@ -401,4 +404,72 @@ test("an unavailable catalog adds nothing rather than an empty claim", () => {
   expect(merged.providers.every((item) => item.presence !== "catalog")).toBe(true);
   expect(merged.counts.catalogOnly).toBe(0);
   expect(merged.catalog).toEqual({ available: false, count: 0 });
+});
+
+test("Google AGY and Claude family notices apply across magpie-only, plugin-only and catalog cards while keeping sign-in open", () => {
+  const oauthMethod = [{ type: "oauth", label: "Sign in", browser: true, category: "browser", runnable: true }];
+  const merged = mergeProviderSources({
+    local: LOCAL,
+    magpie: [
+      { id: "agy-cli", name: "Antigravity (local agy)" },
+      { id: "claude-code", name: "Claude Code" },
+      "codex",
+      "gemini",
+      "anthropic",
+    ],
+    plugins: {
+      available: true,
+      providers: [
+        { id: "agy-cli", package: "@magpie-community/opencode-agy-cli-auth", methods: oauthMethod },
+        { id: "claude-code", package: "@magpie-community/opencode-claude-code-auth", methods: oauthMethod },
+        { id: "agy-extra", name: "AGY Extra", package: "@example/opencode-agy-extra", methods: oauthMethod },
+        { id: "claudecode", name: "ClaudeCode", package: "@example/opencode-claudecode", methods: oauthMethod },
+      ],
+    },
+    catalog: {
+      available: true,
+      providers: [
+        { id: "antigravity-pro", name: "Antigravity Pro", package: "@magpie-community/opencode-antigravity-pro" },
+        { id: "claude-max", name: "Claude Max", package: "@magpie-community/opencode-claude-max" },
+        { id: "cursor", name: "Cursor", package: "@magpie-community/opencode-cursor-auth" },
+      ],
+    },
+  });
+  const byId = Object.fromEntries(merged.providers.map((provider) => [provider.id, provider]));
+
+  // AGY family across magpie-only, plugin-only and catalog cards.
+  for (const id of ["agy-cli", "agy-extra", "antigravity-pro"]) {
+    expect(byId[id], id).toBeTruthy();
+    expect(byId[id].noticeTone, id).toBe("warn");
+    expect(byId[id].notice["zh-Hans"], id).toContain("未实付的账号无法通过本插件缓解你的封禁焦虑");
+    expect(byId[id].notice["zh-Hans"], id).toContain("暂时不建议通过 magpie 使用 agy 供应商");
+    expect(byId[id].notice.en, id).toBeTruthy();
+  }
+  expect(byId["agy-cli"].presence).toBe("magpie-only");
+  expect(providerCanSignIn(byId["agy-cli"])).toBe(true);
+  expect(byId["agy-extra"].presence).toBe("plugin-only");
+  expect(providerCanSignIn(byId["agy-extra"])).toBe(true);
+  expect(byId["antigravity-pro"].presence).toBe("catalog");
+
+  // Claude family across magpie-only, plugin-only and catalog cards.
+  for (const id of ["claude-code", "claudecode", "claude-max"]) {
+    expect(byId[id], id).toBeTruthy();
+    expect(byId[id].noticeTone, id).toBe("danger");
+    expect(byId[id].notice["zh-Hans"], id).toContain("请不要通过本插件来使用 Claude");
+    expect(byId[id].notice["zh-Hans"], id).toContain("claude-cage");
+    expect(byId[id].notice.en, id).toContain("claude-cage");
+  }
+  expect(byId["claude-code"].presence).toBe("magpie-only");
+  expect(providerCanSignIn(byId["claude-code"])).toBe(true);
+  expect(byId.claudecode.presence).toBe("plugin-only");
+  expect(providerCanSignIn(byId.claudecode)).toBe(true);
+  expect(byId["claude-max"].presence).toBe("catalog");
+
+  // Codex, Gemini, Anthropic and Cursor remain free of specialized warnings.
+  expect(byId.codex.notice).toEqual({});
+  expect(byId.codex.noticeTone).toBeNull();
+  for (const id of ["gemini", "anthropic", "cursor"]) {
+    expect(byId[id].notice, id).toBeNull();
+    expect(byId[id].noticeTone, id).toBeNull();
+  }
 });

@@ -4016,6 +4016,15 @@ function providerCard(provider) {
   const notice = document.createElement("p");
   notice.className = "provider-notice";
   notice.textContent = localizedText(provider.notice, langKey);
+  const noticeTone =
+    provider.noticeTone === "danger" || provider.noticeTone === "warn"
+      ? provider.noticeTone
+      : "";
+  if (noticeTone && notice.textContent) {
+    notice.dataset.tone = noticeTone;
+    notice.setAttribute("role", noticeTone === "danger" ? "alert" : "note");
+    card.dataset.noticeTone = noticeTone;
+  }
 
   // A card appends only the lines it actually carries. Some presences
   // deliberately have no description or no reason — a `magpie-only` card, for
@@ -5212,6 +5221,7 @@ function openSignInDialog(provider, options = {}) {
     busy: false,
   };
   byId("signin-provider").textContent = signInContext.name;
+  renderSignInProviderNotice(provider);
   renderSignInMethods(provider);
   renderSignInInputs(provider);
   renderSignInAccounts(provider);
@@ -5232,6 +5242,35 @@ function openSignInDialog(provider, options = {}) {
     renderSignInProxies();
     renderSignInPreselection();
   });
+}
+
+// Mirrors a card's specialized risk notice inside the sign-in dialog so users
+// opening sign-in directly (including from the Accounts tab) still see it while
+// keeping the sign-in entry open.
+function renderSignInProviderNotice(provider) {
+  const node = byId("signin-provider-notice");
+  if (!node) return;
+  const message = localizedText(provider?.notice, langKey);
+  const tone =
+    provider?.noticeTone === "danger" || provider?.noticeTone === "warn"
+      ? provider.noticeTone
+      : "";
+  if (!message) {
+    node.textContent = "";
+    delete node.dataset.tone;
+    node.removeAttribute("role");
+    node.hidden = true;
+    return;
+  }
+  node.textContent = message;
+  if (tone) {
+    node.dataset.tone = tone;
+    node.setAttribute("role", tone === "danger" ? "alert" : "note");
+  } else {
+    delete node.dataset.tone;
+    node.setAttribute("role", "note");
+  }
+  node.hidden = false;
 }
 
 // The account row's "sign in again" action preselects the kept identity, so
@@ -5453,6 +5492,7 @@ function cleanupSignInDialog() {
   stopSignInPolling();
   cancelSignInProxyTests();
   signInContext = null;
+  renderSignInProviderNotice(null);
   setSignInNotice("");
   setSignInError("");
   byId("signin-inputs").textContent = "";

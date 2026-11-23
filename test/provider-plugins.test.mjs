@@ -157,15 +157,17 @@ test("the presences are worded apart in all four languages", () => {
 
   // The local registry writes no verification reason at all. Claude is a
   // registry-only card, so it sits in the other-providers list and keeps only
-  // its curated reminder: the description it used to carry repeated the same
-  // token-import fact the reminder already states.
+  // its curated claude-cage warning.
   const claude = map.claude;
   expect(claude.browserMethod).toBe(false);
   expect(claude.capability.reason).toEqual({});
   expect(claude.presence).toBe("local-only");
   expect(claude.description).toEqual({});
   expect(claude.presenceNote).toBeNull();
-  expect(claude.notice.en).toContain("sandbox service is not ready");
+  expect(claude.notice.en).toContain("claude-cage");
+  expect(claude.noticeTone).toBe("danger");
+  expect(map.codex.notice).toEqual({});
+  expect(map.codex.noticeTone).toBeNull();
 });
 
 test("an unavailable plugin scan degrades to the first layer with no false claims", () => {

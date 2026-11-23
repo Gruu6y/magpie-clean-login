@@ -246,3 +246,21 @@ test("the proxy Save button survives magpie's allow-scripts-only sandbox", () =>
   // click cannot double-trigger it.
   expect(app).toContain('byId("proxy-form").addEventListener("submit"');
 });
+
+test("specialized provider notices get prominent warning styling without gating sign-in", () => {
+  const css = readFileSync(join(root, "ui", "style.css"), "utf8").replaceAll("\r\n", "\n");
+  const card = /function providerCard\(provider\) \{[\s\S]*?\n\}/.exec(app)?.[0] || "";
+  expect(card).toContain('provider.noticeTone === "danger" || provider.noticeTone === "warn"');
+  expect(card).toContain("notice.dataset.tone = noticeTone;");
+  expect(card).toContain("card.dataset.noticeTone = noticeTone;");
+  // Specialized cards carry warning styles for both tones and dark mode contrast.
+  expect(css).toContain('.provider-notice[data-tone="warn"]');
+  expect(css).toContain('.provider-notice[data-tone="danger"]');
+  expect(css).toContain('.provider-card[data-notice-tone="warn"]');
+  expect(css).toContain('.provider-card[data-notice-tone="danger"]');
+  expect(css).toContain(':root[data-theme="dark"] .provider-notice[data-tone="danger"]');
+  // Neither warning tone blocks providerCanSignIn().
+  expect(providerCanSignIn({ id: "antigravity", nativeSignIn: true, noticeTone: "warn" })).toBe(true);
+  expect(providerCanSignIn({ id: "agy-cli", signableMethod: true, signInProvider: "agy-cli", noticeTone: "warn" })).toBe(true);
+  expect(providerCanSignIn({ id: "claude-code", signableMethod: true, signInProvider: "claude-code", noticeTone: "danger" })).toBe(true);
+});
