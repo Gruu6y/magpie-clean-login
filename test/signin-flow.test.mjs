@@ -1067,3 +1067,90 @@ test("a callback whose uid matches the claimed ledger still writes", async () =>
   const { controller } = await claimedHarness(success({ uid: "ledger-uid", accountId: "ledger-acct" }));
   expect(controller.status().state).toBe("done");
 });
+
+test("rotatePin keeps old identity and profile untouched when authorize or executable resolution fails, and clears stale checks on success", async () => {
+  let genCount = 0;
+  let browserMissing = true;
+  const { env, controller } = await harness({
+    methods: [browserMethod({ callback: async () => success({ uid: "u-1" }) })],
+    identityGenerator: async () => ({ tag: `pin-${++genCount}` }),
+    resolveExecutable: async () => (browserMissing ? null : "/fake/browser"),
+  });
+  const dir = accountDir(env, "workbuddy", "workbuddy#rot");
+  await ensureIdentity(dir, { generate: async () => ({ tag: "original-pin" }) });
+  await writeAccountMeta(dir, {
+    version: 1,
+    provider: "workbuddy",
+    key: "workbuddy#rot",
+    accountId: "me",
+    uid: "u-1",
+    signedInAt: "2026-11-01T00:00:00.000Z",
+    checks: [{ at: "2026-11-01T00:00:00.000Z", grade: "B", exposure: 1, summary: [] }],
+  });
+
+  await expect(
+    controller.startSignIn({
+      provider: "workbuddy",
+      account: { key: "workbuddy#rot", rotate: true },
+    }),
+  ).rejects.toMatchObject({ code: "browser_missing" });
+  expect(genCount).toBe(0);
+  expect(await readIdentity(dir)).toEqual({ tag: "original-pin" });
+
+  browserMissing = false;
+  await controller.startSignIn({
+    provider: "workbuddy",
+    account: { key: "workbuddy#rot", rotate: true },
+  });
+  await controller.whenSettled();
+  expect(controller.status().state).toBe("done");
+  expect(controller.status().rotated).toBe(true);
+  expect(await readIdentity(dir)).toEqual({ tag: "pin-1" });
+  const meta = await readAccountMeta(dir);
+  expect(meta.checks).toBeUndefined();
+});
+
+test("a code method with an HTTP URL launches the browser when non-silent and closes it on code_timeout", async () => {
+  const { state, controller } = await harness({
+    callbackTimeoutMs: 25,
+    methods: [
+      {
+        type: "oauth",
+        label: "Hybrid code",
+        authorize: async () => ({
+          url: "https://provider.example/verify",
+          instructions: "Approve in browser and enter OTP",
+          method: "code",
+          callback: async () => success(),
+        }),
+      },
+    ],
+  });
+  const started = await controller.startSignIn({ provider: "workbuddy" });
+  expect(started.url).toBe("https://provider.example/verify");
+  expect(state.launched?.url).toBe("https://provider.example/verify");
+  expect(controller.status().state).toBe("waiting-code");
+
+  await controller.whenSettled();
+  expect(controller.status().error.code).toBe("code_timeout");
+  expect(state.browserClosed).toBe(1);
+});
+
+test("SOCKS5 proxy exposes a credential-free egressWarning and write-back stores email", async () => {
+  const { env, controller } = await harness({
+    methods: [
+      browserMethod({
+        callback: async () => success({ email: "user@workbuddy.example" }),
+      }),
+    ],
+  });
+  await controller.startSignIn({
+    provider: "workbuddy",
+    proxy: { id: "p-s5", type: "socks5", host: "127.0.0.1", port: 1080, password: "secret" },
+  });
+  expect(controller.status().egressWarning?.code).toBe("proxy_not_supported_for_plugin");
+  expect(JSON.stringify(controller.status().egressWarning)).not.toContain("secret");
+  await controller.whenSettled();
+  const meta = await readAccountMeta(accountDir(env, "workbuddy", "workbuddy"));
+  expect(meta.email).toBe("user@workbuddy.example");
+});

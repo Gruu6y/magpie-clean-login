@@ -49,6 +49,8 @@ test("a proxy record becomes a URL Bun's fetch understands", () => {
   expect(signInProxyUrl(record({ host: "proxy.example", port: 3128 }))).toBe(
     "http://proxy.example:3128",
   );
+  expect(signInProxyUrl(record({ host: "::1", port: 18118 }))).toBe("http://[::1]:18118");
+  expect(signInProxyUrl(record({ host: "[::1]", port: 18118 }))).toBe("http://[::1]:18118");
 });
 
 test("credentials are carried, and escaped", () => {

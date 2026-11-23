@@ -251,3 +251,15 @@ test("a failed draw leaves the old pin AND the old profile untouched", async () 
   );
   expect(leftovers).toEqual([]);
 });
+
+test("rotateIdentity clears check-profile alongside profile", async () => {
+  const env = await tempEnv();
+  const dir = accountDir(env, "workbuddy", "workbuddy");
+  await ensureIdentity(dir, { generate: async () => ({ tag: "first" }) });
+  const checkProfile = join(dir, "check-profile");
+  await mkdir(checkProfile, { recursive: true });
+  await writeFile(join(checkProfile, "cookies.sqlite"), "stale-check");
+
+  await rotateIdentity(dir, { generate: async () => ({ tag: "second" }) });
+  expect(existsSync(checkProfile)).toBe(false);
+});

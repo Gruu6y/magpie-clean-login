@@ -321,6 +321,7 @@ test("importAccounts creates identity.json and account.json for each new account
     expect(meta.provider).toBe(providerOf(key));
     expect(meta.key).toBe(key);
     expect(meta.accountId).toBe(AUTH_FIXTURE[key].accountId);
+    expect(meta.email).toBe(AUTH_FIXTURE[key].email ?? null);
     expect(calls.meta.some((call) => call.dir === dir)).toBe(true);
   }
   // The existing account keeps its ledger untouched and gains no new pin;

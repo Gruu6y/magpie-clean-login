@@ -769,4 +769,112 @@ describe("account exit routes", () => {
       customUrl.slice(customUrl.indexOf("//") + 2, customUrl.lastIndexOf("@")),
     );
   });
+
+  test("GET /api/accounts projects email, methodLabel and expiresAt without secrets and DELETE clears hosting and proxy sync", async () => {
+    const isoRoot = mkdtempSync(join(tmpdir(), "clean-login-accounts-iso-"));
+    const isoConfig = join(isoRoot, "magpie-config");
+    const isoData = join(isoRoot, "data");
+    const removed = [];
+    const cleared = [];
+    let isoService;
+    try {
+      await mkdir(isoConfig, { recursive: true });
+      const expiresAt = Date.UTC(2026, 11, 1);
+      await writeFile(
+        join(isoConfig, "plugin-auth.json"),
+        JSON.stringify({
+          "workbuddy#rich": {
+            type: "oauth",
+            access: "TOK_SECRET_VALUE",
+            refresh: "REF_SECRET_VALUE",
+            accountId: "rich-acct",
+            expires: expiresAt,
+          },
+        }),
+      );
+      await writeAccountMeta(accountDir({ MAGPIE_CLEAN_LOGIN_DATA: isoData }, "workbuddy", "workbuddy#rich"), {
+        version: 1,
+        provider: "workbuddy",
+        key: "workbuddy#rich",
+        accountId: "rich-acct",
+        uid: "u-rich",
+        email: "rich@example.com",
+        methodLabel: "OAuth",
+        signedInAt: "2026-11-04T10:00:00.000Z",
+      });
+      await writeAccountMeta(accountDir({ MAGPIE_CLEAN_LOGIN_DATA: isoData }, "workbuddy", "workbuddy#retired"), {
+        version: 1,
+        provider: "workbuddy",
+        key: "workbuddy#retired",
+        accountId: "retired-acct",
+        uid: "u-retired",
+        signedInAt: "2026-11-01T10:00:00.000Z",
+      });
+      isoService = await startServer({
+        port: 0,
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          MAGPIE_CONFIG_DIR: isoConfig,
+          MAGPIE_CLEAN_LOGIN_DATA: isoData,
+        },
+        dataDir: isoData,
+        pluginScanner: {
+          get: () => ({ available: false, providers: [], scanned: false, stale: false, scanning: false, error: null }),
+          warm: () => {},
+        },
+        renewHosting: {
+          start: () => {},
+          stop: () => {},
+          cancel: async () => ({}),
+          viewOf: (p, k) => offView(p, k),
+          snapshot: async () => ({ accounts: [] }),
+          running: () => null,
+          removeAccount: async (provider, key) => {
+            removed.push({ provider, key });
+          },
+        },
+        accountProxySync: {
+          backfill: async () => ({ changed: [] }),
+          syncSignIn: async () => ({}),
+          syncProxyUpdate: async () => ({}),
+          clearAccountProxy: async (entry) => {
+            cleared.push(entry);
+          },
+        },
+      });
+      const html = await (await fetch(`http://127.0.0.1:${isoService.port}/`)).text();
+      const isoToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(html)?.[1];
+      const res = await fetch(`http://127.0.0.1:${isoService.port}/api/accounts`, {
+        headers: { [TOKEN_HEADER]: isoToken },
+      });
+      expect(res.status).toBe(200);
+      const bodyText = await res.text();
+      expect(bodyText).not.toContain("TOK_SECRET_VALUE");
+      expect(bodyText).not.toContain("REF_SECRET_VALUE");
+      const { accounts } = JSON.parse(bodyText);
+      const rich = accounts.find((a) => a.key === "workbuddy#rich");
+      expect(rich).toMatchObject({
+        email: "rich@example.com",
+        methodLabel: "OAuth",
+        expiresAt,
+      });
+      const retired = accounts.find((a) => a.key === "workbuddy#retired");
+      expect("email" in retired).toBe(false);
+      expect("methodLabel" in retired).toBe(false);
+      expect("expiresAt" in retired).toBe(false);
+
+      const del = await fetch(`http://127.0.0.1:${isoService.port}/api/accounts/workbuddy/workbuddy%23retired`, {
+        method: "DELETE",
+        headers: { [TOKEN_HEADER]: isoToken },
+      });
+      expect(del.status).toBe(200);
+      expect(await del.json()).toEqual({ ok: true });
+      expect(removed).toEqual([{ provider: "workbuddy", key: "workbuddy#retired" }]);
+      expect(cleared).toEqual([{ provider: "workbuddy", accountId: "retired-acct" }]);
+    } finally {
+      await isoService?.close();
+      rmSync(isoRoot, { recursive: true, force: true });
+    }
+  });
 });

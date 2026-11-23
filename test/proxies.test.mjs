@@ -643,3 +643,230 @@ test("a corrupt proxies.json is quarantined and the store recovers empty", async
   expect((await store.list()).some((item) => item.id === created.id)).toBe(true);
   rmSync(bad, { recursive: true, force: true });
 });
+
+test("PATCH clearPassword clears the stored password and resets connectionUpdatedAt", async () => {
+  const created = await createProxy({ name: "Clear pass proxy", password: "old-secret" });
+  expect(created.hasPassword).toBe(true);
+  const tested = await raw("POST", `/api/proxies/${created.id}/test`, auth());
+  expect(JSON.parse(tested.body).proxy.status).toBe("ok");
+
+  const cleared = await raw(
+    "PATCH",
+    `/api/proxies/${created.id}`,
+    jsonHeaders(),
+    JSON.stringify({ clearPassword: true }),
+  );
+  expect(cleared.status).toBe(200);
+  const proxy = JSON.parse(cleared.body).proxy;
+  expect(proxy.hasPassword).toBe(false);
+  expect(proxy.status).toBe("untested");
+  expect(proxy.connectionUpdatedAt).not.toBe(created.connectionUpdatedAt);
+  const stored = JSON.parse(readFileSync(join(dataDir, "proxies.json"), "utf8"));
+  expect(stored.proxies.find((item) => item.id === created.id).password).toBe("");
+});
+
+test("name-only rename keeps connectionUpdatedAt so in-flight results still apply and provider failures preserve exitStatus", async () => {
+  const created = await createProxy({ name: "Stable connection" });
+  const initialConnTs = created.connectionUpdatedAt;
+  const okExit = await service.store.applyTestResult(
+    created.id,
+    { ok: true, latency: 25, exitIp: "203.0.113.5", region: "SG" },
+    initialConnTs,
+  );
+  expect(okExit.exitStatus).toBe("ok");
+
+  const renamed = await service.store.update(created.id, { name: "Stable connection renamed" });
+  expect(renamed.connectionUpdatedAt).toBe(initialConnTs);
+
+  const failedProbe = await service.store.applyTestResult(
+    created.id,
+    {
+      ok: false,
+      exitOk: true,
+      exitLatency: 30,
+      exitIp: "203.0.113.5",
+      region: "SG",
+      errorCode: "proxy_tunnel",
+      error: "Provider unreachable.",
+      target: { kind: "provider", provider: "qoder-cn", host: "api.qoder.test" },
+    },
+    initialConnTs,
+  );
+  expect(failedProbe).not.toBeNull();
+  expect(failedProbe.status).toBe("error");
+  expect(failedProbe.exitStatus).toBe("ok");
+  expect(failedProbe.probeByProvider["qoder-cn"]).toMatchObject({
+    ok: false,
+    ms: null,
+    errorCode: "proxy_tunnel",
+  });
+
+  // Explicit connection change rejects old connectionUpdatedAt.
+  await service.store.update(created.id, { host: "127.0.0.2" });
+  const stale = await service.store.applyTestResult(
+    created.id,
+    { ok: true, latency: 10 },
+    initialConnTs,
+  );
+  expect(stale).toBeNull();
+});
+
+test("POST /api/proxies/bulk imports mixed lines, deduplicates connections, and validates limits and methods", async () => {
+  const wrongMethod = await raw("GET", "/api/proxies/bulk", auth());
+  expect(wrongMethod.status).toBe(405);
+  expect(wrongMethod.headers.get?.("allow") ?? wrongMethod.headers.allow).toBe("POST");
+
+  const missingText = await raw("POST", "/api/proxies/bulk", jsonHeaders(), JSON.stringify({}));
+  expect(missingText.status).toBe(400);
+  expect(JSON.parse(missingText.body).error).toBe("invalid_body");
+
+  const tooLarge = await raw(
+    "POST",
+    "/api/proxies/bulk",
+    jsonHeaders(),
+    JSON.stringify({ text: "a".repeat(100 * 1024 + 1) }),
+  );
+  expect(tooLarge.status).toBe(400);
+  expect(JSON.parse(tooLarge.body).error).toBe("bulk_too_large");
+
+  const dupSeed = await createProxy({
+    name: "Existing Seed",
+    type: "http",
+    host: "127.0.0.1",
+    port: okProxy.port,
+    username: "dupuser",
+    password: "secret",
+  });
+
+  const bulkPortA = okProxy.port + 2;
+  const bulkPortB = okProxy.port + 3;
+  const text = [
+    "# comment",
+    `http://dupuser:secret@127.0.0.1:${okProxy.port}#ShouldSkip`,
+    `BulkHome|http://user1:pass1@127.0.0.1:${bulkPortA}`,
+    `127.0.0.1:${bulkPortB}:alice:secret2`,
+    "not-a-valid-proxy",
+  ].join("\n");
+
+  const res = await raw(
+    "POST",
+    "/api/proxies/bulk",
+    jsonHeaders(),
+    JSON.stringify({ text, defaultType: "socks5", prefix: "Node" }),
+  );
+  expect(res.status).toBe(200);
+  expect(res.body).not.toContain("pass1");
+  expect(res.body).not.toContain("secret2");
+  const body = JSON.parse(res.body);
+  expect(body.created).toHaveLength(2);
+  expect(body.created[0]).toMatchObject({
+    name: "Node BulkHome",
+    type: "http",
+    host: "127.0.0.1",
+    port: bulkPortA,
+    hasPassword: true,
+  });
+  expect(body.created[1]).toMatchObject({
+    name: `Node-127.0.0.1:${bulkPortB}`,
+    type: "socks5",
+    host: "127.0.0.1",
+    port: bulkPortB,
+    hasPassword: true,
+  });
+  expect(body.skipped).toEqual([{ line: 2, reason: "duplicate" }]);
+  expect(body.errors).toEqual([{ line: 5, reason: "invalid_port" }]);
+  expect(body.truncated).toBe(false);
+
+  for (const id of [dupSeed.id, ...body.created.map((p) => p.id)]) {
+    await raw("DELETE", `/api/proxies/${id}`, auth());
+  }
+});
+
+test("name-only rename during /test still persists result via connectionUpdatedAt", async () => {
+  const created = await createProxy({ name: "Rename race", port: delayProxy.port });
+  const testing = raw("POST", `/api/proxies/${created.id}/test`, auth());
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  const renamed = await raw(
+    "PATCH",
+    `/api/proxies/${created.id}`,
+    jsonHeaders(),
+    JSON.stringify({ name: "Rename race finished" }),
+  );
+  expect(renamed.status).toBe(200);
+  const testBody = JSON.parse((await testing).body);
+  expect(testBody.persisted).toBe(true);
+  const list = await raw("GET", "/api/proxies", auth());
+  const stored = JSON.parse(list.body).proxies.find((item) => item.id === created.id);
+  expect(stored.name).toBe("Rename race finished");
+  expect(stored.status).not.toBe("untested");
+  await raw("DELETE", `/api/proxies/${created.id}`, auth());
+});
+
+test("PATCH /api/proxies/:id calls syncProxyUpdate only when connection or password changes", async () => {
+  const syncRoot = mkdtempSync(join(tmpdir(), "clean-login-proxy-sync-"));
+  const syncData = join(syncRoot, "data");
+  const updates = [];
+  let syncService;
+  try {
+    const { startServer } = await import("../lib/server.mjs");
+    syncService = await startServer({
+      port: 0,
+      dataDir: syncData,
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        MAGPIE_CONFIG_DIR: join(syncRoot, "magpie-config"),
+        MAGPIE_CLEAN_LOGIN_DATA: syncData,
+      },
+      pluginScanner: { get: () => ({ available: false, providers: [] }), warm: () => {} },
+      accountProxySync: {
+        backfill: async () => ({ changed: [] }),
+        syncSignIn: async () => ({}),
+        syncProxyUpdate: async (proxy) => {
+          updates.push({ id: proxy.id, name: proxy.name, port: proxy.port, hasPassword: Boolean(proxy.password) });
+          return { changed: [] };
+        },
+        clearAccountProxy: async () => ({}),
+      },
+    });
+    const base = `http://127.0.0.1:${syncService.port}`;
+    const pageHtml = await (await fetch(`${base}/`)).text();
+    const syncToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(pageHtml)?.[1];
+    const headers = { "x-clean-login-token": syncToken, "content-type": "application/json" };
+
+    const createdRes = await fetch(`${base}/api/proxies`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: "Sync proxy",
+        type: "http",
+        host: "127.0.0.1",
+        port: okProxy.port,
+        username: "u1",
+        password: "p1",
+      }),
+    });
+    expect(createdRes.status).toBe(201);
+    const { proxy } = await createdRes.json();
+
+    const renameRes = await fetch(`${base}/api/proxies/${proxy.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ name: "Sync proxy renamed" }),
+    });
+    expect(renameRes.status).toBe(200);
+    expect(updates).toEqual([]);
+
+    const pwRes = await fetch(`${base}/api/proxies/${proxy.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ clearPassword: true }),
+    });
+    expect(pwRes.status).toBe(200);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ id: proxy.id, hasPassword: false });
+  } finally {
+    await syncService?.close();
+    rmSync(syncRoot, { recursive: true, force: true });
+  }
+});

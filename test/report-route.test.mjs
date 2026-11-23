@@ -99,3 +99,53 @@ test("the report routes are token-gated, allowlisted and credential-free", async
     rmSync(root, { recursive: true, force: true });
   }
 }, 30000);
+
+test("POST /api/report merges cached /api/provider-sources magpie metadata without credentials", async () => {
+  const { startServer } = await import("../lib/server.mjs");
+  const root = mkdtempSync(join(tmpdir(), "clean-login-report-merged-"));
+  let service;
+  try {
+    service = await startServer({
+      port: 0,
+      env: {
+        ...process.env,
+        MAGPIE_CONFIG_DIR: root,
+        MAGPIE_CLEAN_LOGIN_DATA: join(root, "data"),
+      },
+      pluginScanner: scanner,
+    });
+    const base = `http://127.0.0.1:${service.port}`;
+    const html = await (await fetch(`${base}/`)).text();
+    const token = /name="clean-login-token"\s+content="([0-9a-f]+)"/.exec(html)?.[1] || "";
+    const post = (path, body) =>
+      fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { "x-clean-login-token": token, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const synced = await post("/api/provider-sources", {
+      magpie: {
+        ok: true,
+        value: [{ id: "custom-reported", name: "Custom Magpie Provider", secret: "SECRET_TOKEN" }],
+      },
+    });
+    expect(synced.status).toBe(200);
+
+    const built = await (
+      await post("/api/report", {
+        provider: "custom-reported",
+        note: "403 from endpoint",
+        language: "en",
+      })
+    ).json();
+
+    expect(built.report.body).toContain("custom-reported");
+    expect(built.report.body).toContain("Custom Magpie Provider");
+    expect(built.report.body).toContain("403 from endpoint");
+    expect(built.report.body).not.toContain("SECRET_TOKEN");
+  } finally {
+    await service?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 30000);

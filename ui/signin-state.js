@@ -58,7 +58,9 @@ export function orderSignInProxies(proxies = [], accounts = [], provider) {
       const rank = (proxy) => {
         const id = typeof proxy.id === "string" ? proxy.id.trim() : "";
         const name = proxyName(proxy).trim().toLowerCase();
-        if (used.ids.has(id) || (name && used.names.has(name))) return 3;
+        const isUsed = used.ids.has(id) || (name && used.names.has(name));
+        if (proxy.status === "error") return isUsed ? 5 : 4;
+        if (isUsed) return 3;
         if (hasKeyword(proxy, "静态")) return 0;
         if (hasKeyword(proxy, "家宽")) return 1;
         return 2;
@@ -80,15 +82,19 @@ export function formatSignInProxyOption(proxy = {}, labels = {}, testing = false
   const base = `${name} · ${formatAddress(proxy)}`;
   const view = statusView(proxy, labels, testing);
   if (view.state === "testing") return `${base} · ${view.label}`;
+  const scoreSuffix =
+    typeof proxy?.score === "number" && Number.isFinite(proxy.score)
+      ? ` · ${Math.round(proxy.score)}`
+      : "";
   if (view.state === "ok") {
     // When the row was decorated for a provider target, the number belongs to
     // that provider. Name it so a generic measurement can never be mistaken
     // for a provider-specific one. Undecorated rows keep the exact old text.
     const target = targetStatusSuffix(proxy);
-    return `${base} · ${view.detail || view.label}${target}`;
+    return `${base} · ${view.detail || view.label}${target}${scoreSuffix}`;
   }
-  if (view.state === "error") return `${base} · ${view.label}`;
-  return base;
+  if (view.state === "error") return `${base} · ${view.label}${scoreSuffix}`;
+  return `${base}${scoreSuffix}`;
 }
 
 // Probes the candidate exits in display order with a small worker pool. The

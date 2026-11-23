@@ -14,6 +14,7 @@ import {
   latencyBound,
   proxyName,
   regionKey,
+  sortProxies,
 } from "../ui/proxy-filter.js";
 
 const root = join(import.meta.dir, "..");
@@ -289,4 +290,25 @@ test("filter state is in memory, never localStorage", () => {
   expect(app).not.toContain("sessionStorage");
   expect(app).toContain('regions: new Set()');
   expect(app).toContain('keywords: new Set()');
+});
+
+test("filterProxies supports search, status, usage filtering and sortProxies preserves input", () => {
+  const rows = [
+    { id: "p1", name: "HK-1", type: "http", host: "10.0.0.1", port: 8080, region: "香港", exitIp: "1.1.1.1", status: "ok", latency: 120, score: 75 },
+    { id: "p2", name: "JP-2", type: "socks5", host: "10.0.0.2", port: 1080, region: "日本", exitIp: "2.2.2.2", status: "error", latency: null, score: 92 },
+    { id: "p3", name: "US-10", type: "https", host: "10.0.0.3", port: 443, region: "", exitIp: "", status: "untested", latency: 45, score: null },
+  ];
+  const usedIds = new Set(["p2"]);
+
+  expect(filterProxies(rows, { search: "10.0.0.2" }).map((p) => p.id)).toEqual(["p2"]);
+  expect(filterProxies(rows, { search: "香港 socks5" })).toEqual([]);
+  expect(filterProxies(rows, { status: "ok" }).map((p) => p.id)).toEqual(["p1"]);
+  expect(filterProxies(rows, { status: "error" }).map((p) => p.id)).toEqual(["p2"]);
+  expect(filterProxies(rows, { usage: "used", usedIds }).map((p) => p.id)).toEqual(["p2"]);
+  expect(filterProxies(rows, { usage: "unused", usedIds }).map((p) => p.id)).toEqual(["p1", "p3"]);
+
+  expect(sortProxies(rows, "latency").map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
+  expect(sortProxies(rows, "score").map((p) => p.id)).toEqual(["p2", "p1", "p3"]);
+  expect(sortProxies(rows, "usage", { usageCounts: { p3: 3, p1: 1 } }).map((p) => p.id)).toEqual(["p3", "p1", "p2"]);
+  expect(rows.map((p) => p.id)).toEqual(["p1", "p2", "p3"]);
 });

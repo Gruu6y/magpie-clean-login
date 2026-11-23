@@ -9,10 +9,12 @@ import { join } from "node:path";
 import {
   accountProxyKey,
   backfillAccountProxies,
+  clearAccountProxy,
   createAccountProxySync,
   providersFile,
   proxyUrlFor,
   readAccountExit,
+  syncProxyUpdate,
   syncSignInProxy,
   writeAccountExit,
   writeAccountProxies,
@@ -635,4 +637,104 @@ test("writeAccountExit round-trips: a written value reads back through readAccou
     key: "rounduser",
     providerProxy: "http://127.0.0.1:9",
   });
+});
+
+test("backfillAccountProxies prefers meta.exit and never collides concatenated provider/account keys", async () => {
+  const root = await tempDir();
+  const cfg = join(root, "config");
+  const data = join(root, "data");
+  await mkdir(cfg, { recursive: true });
+  await mkdir(data, { recursive: true });
+  await seedProvidersJson(cfg, [{ id: "ab" }, { id: "a" }]);
+  const store = createProxyStore({ dataDir: data });
+  const pOld = await store.create({ name: "Old", type: "http", host: "127.0.0.1", port: 18001 });
+  const pExit = await store.create({ name: "Exit", type: "http", host: "127.0.0.1", port: 18002 });
+  const pOther = await store.create({ name: "Other", type: "http", host: "127.0.0.1", port: 18003 });
+  const env = { MAGPIE_CONFIG_DIR: cfg, MAGPIE_CLEAN_LOGIN_DATA: data };
+
+  const report = await backfillAccountProxies({
+    env,
+    store,
+    listAccounts: async () => [
+      {
+        provider: "ab",
+        key: "ab",
+        meta: {
+          provider: "ab",
+          accountId: "c",
+          lastLogin: { proxyId: pOld.id },
+          exit: { proxyId: pExit.id },
+        },
+      },
+      {
+        provider: "a",
+        key: "a",
+        meta: {
+          provider: "a",
+          accountId: "bc",
+          lastLogin: { proxyId: pOther.id },
+        },
+      },
+    ],
+  });
+  expect(report.ok).toBe(true);
+  expect(report.changed).toHaveLength(2);
+  expect((await readAccountExit({ env, provider: "ab", accountId: "c" })).url).toBe(
+    "http://127.0.0.1:18002",
+  );
+  expect((await readAccountExit({ env, provider: "a", accountId: "bc" })).url).toBe(
+    "http://127.0.0.1:18003",
+  );
+});
+
+test("syncSignInProxy sets direct when an account previously had an exit, while syncProxyUpdate & clearAccountProxy stay in sync", async () => {
+  const root = await tempDir();
+  const cfg = join(root, "config");
+  const data = join(root, "data");
+  await mkdir(cfg, { recursive: true });
+  await mkdir(data, { recursive: true });
+  await seedProvidersJson(cfg, [{ id: "minimax-code" }]);
+  const store = createProxyStore({ dataDir: data });
+  const px = await store.create({ name: "Node", type: "http", host: "127.0.0.1", port: 18100 });
+  const env = { MAGPIE_CONFIG_DIR: cfg, MAGPIE_CLEAN_LOGIN_DATA: data };
+
+  await syncSignInProxy({ env, provider: "minimax-code", accountId: "UserA", proxy: px });
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "UserA" })).mode).toBe(
+    "custom",
+  );
+
+  // Updating the proxy pushes new host/port into providers.json via syncProxyUpdate.
+  await store.update(px.id, { port: 18101 });
+  const updatedSync = await syncProxyUpdate({
+    env,
+    store,
+    proxyId: px.id,
+    listAccounts: async () => [
+      { provider: "minimax-code", key: "k1", meta: { provider: "minimax-code", accountId: "UserA", exit: { proxyId: px.id } } },
+    ],
+  });
+  expect(updatedSync.ok).toBe(true);
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "UserA" })).url).toBe(
+    "http://127.0.0.1:18101",
+  );
+
+  // Re-signing in as direct switches the previously proxied account to literal "direct".
+  const clearedToDirect = await syncSignInProxy({
+    env,
+    provider: "minimax-code",
+    accountId: "UserA",
+    proxy: null,
+  });
+  expect(clearedToDirect.reason).toBe("cleared_to_direct");
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "UserA" })).mode).toBe(
+    "direct",
+  );
+
+  // Deleting the account clears its entry from magpie's map.
+  const removed = await clearAccountProxy({ env, provider: "minimax-code", accountId: "UserA" });
+  expect(removed.ok).toBe(true);
+  expect(removed.changed).toBe(true);
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "UserA" })).mode).toBe(
+    "inherit",
+  );
 });
