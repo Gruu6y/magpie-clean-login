@@ -105,6 +105,16 @@
                 spellcheck="false" placeholder="Name, id or plugin" aria-describedby="providers-search-status" />
               <span class="search-status" id="providers-search-status" role="status"></span>
             </div>
+            <label class="providers-category-field" for="providers-category">
+              <span class="search-label" id="providers-category-label">Category</span>
+              <select class="test-target-select" id="providers-category">
+                <option value="all" id="providers-cat-all">All</option>
+                <option value="signable" id="providers-cat-signable">Signable</option>
+                <option value="hasAccounts" id="providers-cat-has-accounts">Has accounts</option>
+                <option value="catalog" id="providers-cat-catalog">Catalog</option>
+              </select>
+            </label>
+            <button class="button" id="providers-refresh" type="button">Refresh</button>
           </div>
         </div>
         <div class="setup-card" id="environment-setup" hidden>
@@ -170,6 +180,9 @@
               <span class="test-target-label" id="test-target-label">Test target</span>
               <select class="test-target-select" id="proxy-test-target"></select>
             </label>
+            <button class="button" id="proxies-test-all" type="button">Test all</button>
+            <button class="button quiet" id="proxies-test-cancel" type="button" hidden>Cancel tests</button>
+            <button class="button" id="proxies-bulk-open" type="button">Bulk import</button>
             <button class="button primary" id="add-proxy" type="button">
               <span aria-hidden="true">+</span>
               <span id="add-proxy-label">Add Proxy</span>
@@ -200,6 +213,38 @@
               <input class="filter-input" id="filter-latency-max" type="number" min="0" step="1"
                 inputmode="numeric" placeholder="Max" aria-label="Maximum latency">
             </div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" id="filter-search-label" for="filter-search">Search</label>
+            <input class="filter-input filter-search-input" id="filter-search" type="search" autocomplete="off"
+              spellcheck="false" placeholder="Search proxies" aria-label="Search proxies">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" id="filter-status-label" for="filter-status">Status</label>
+            <select class="filter-select" id="filter-status">
+              <option value="all" id="filter-status-all">All</option>
+              <option value="ok" id="filter-status-ok">Available</option>
+              <option value="error" id="filter-status-error">Failed</option>
+              <option value="untested" id="filter-status-untested">Untested</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" id="filter-usage-label" for="filter-usage">Usage</label>
+            <select class="filter-select" id="filter-usage">
+              <option value="all" id="filter-usage-all">All</option>
+              <option value="used" id="filter-usage-used">In use</option>
+              <option value="unused" id="filter-usage-unused">Unused</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" id="proxy-sort-label" for="proxy-sort">Sort</label>
+            <select class="filter-select" id="proxy-sort">
+              <option value="default" id="proxy-sort-default">Default</option>
+              <option value="latency" id="proxy-sort-latency">Latency</option>
+              <option value="score" id="proxy-sort-score">Trust score</option>
+              <option value="usage" id="proxy-sort-usage">In use</option>
+              <option value="name" id="proxy-sort-name">Name</option>
+            </select>
           </div>
           <div class="filter-actions">
             <span class="filter-count" id="filter-count"></span>
@@ -301,6 +346,10 @@
                 data-account-filter="signedIn" aria-pressed="false"><span id="account-filter-signed-in-label">Signed in</span> <span class="filter-chip-count" id="account-filter-signed-in-count">0</span></button>
               <button class="filter-chip" id="account-filter-signed-out" type="button"
                 data-account-filter="signedOut" aria-pressed="false"><span id="account-filter-signed-out-label">Signed out</span> <span class="filter-chip-count" id="account-filter-signed-out-count">0</span></button>
+              <button class="filter-chip" id="account-filter-hosting-paused" type="button"
+                data-account-filter="hostingPaused" aria-pressed="false"><span id="account-filter-hosting-paused-label">Renewal paused</span> <span class="filter-chip-count" id="account-filter-hosting-paused-count">0</span></button>
+              <button class="filter-chip" id="account-filter-expiring-soon" type="button"
+                data-account-filter="expiringSoon" aria-pressed="false"><span id="account-filter-expiring-soon-label">Expiring soon</span> <span class="filter-chip-count" id="account-filter-expiring-soon-count">0</span></button>
             </div>
           </div>
           <div class="filter-actions">
@@ -463,6 +512,10 @@
               <input id="proxy-password" name="password" type="password"
                 autocomplete="new-password" spellcheck="false" maxlength="255">
               <p class="field-hint" id="proxy-password-hint" hidden></p>
+              <label class="checkbox-field" id="proxy-clear-password-field" for="proxy-clear-password" hidden>
+                <input id="proxy-clear-password" type="checkbox">
+                <span id="proxy-clear-password-label">Clear saved password</span>
+              </label>
             </div>
           </div>
         </div>
@@ -482,6 +535,43 @@
         <button class="button primary" id="save-proxy" type="button">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="proxy-bulk-dialog" class="dialog">
+    <div class="dialog-head">
+      <div>
+        <h3 id="proxy-bulk-title">Bulk import proxies</h3>
+        <p id="proxy-bulk-copy">Paste one proxy per line. Existing connections are skipped automatically.</p>
+      </div>
+      <button class="dialog-close" id="proxy-bulk-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="form-row">
+        <div class="field">
+          <label for="proxy-bulk-type" id="proxy-bulk-type-label">Default type</label>
+          <select id="proxy-bulk-type">
+            <option value="http">HTTP</option>
+            <option value="https">HTTPS</option>
+            <option value="socks5">SOCKS5</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="proxy-bulk-prefix" id="proxy-bulk-prefix-label">Name prefix</label>
+          <input id="proxy-bulk-prefix" type="text" autocomplete="off" maxlength="40" placeholder="SG">
+        </div>
+      </div>
+      <div class="field">
+        <label for="proxy-bulk-input" id="proxy-bulk-input-label">Proxy list</label>
+        <textarea id="proxy-bulk-input" rows="8" autocomplete="off" spellcheck="false"
+          placeholder="127.0.0.1:7890"></textarea>
+        <p class="field-hint" id="proxy-bulk-summary" role="status"></p>
+      </div>
+      <p class="form-error" id="proxy-bulk-error" role="alert" hidden></p>
+    </div>
+    <div class="dialog-footer">
+      <button class="button" id="proxy-bulk-cancel" type="button">Cancel</button>
+      <button class="button primary" id="proxy-bulk-submit" type="button">Import</button>
+    </div>
   </dialog>
 
   <dialog id="signin-dialog" class="dialog signin-dialog">

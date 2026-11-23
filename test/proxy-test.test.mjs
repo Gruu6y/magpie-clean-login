@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { createServer } from "node:http";
 import https from "node:https";
 import net from "node:net";
+import tls from "node:tls";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatExitRegion, proxyTestEndpoint, testProxy } from "../lib/proxy-test.mjs";
@@ -283,4 +284,40 @@ test("formatExitRegion formats location as 国家/地区", () => {
   expect(formatExitRegion({ country: "CN", region: "Guangdong", city: "Shenzhen" })).toBe("中国/广东");
   expect(formatExitRegion({ region: "Testland" })).toBe("Testland");
   expect(formatExitRegion({})).toBe("");
+});
+
+test("HTTPS proxy upgrades the proxy hop to TLS and validates its certificate by default", async () => {
+  const seen = [];
+  const httpsProxy = track(
+    tls.createServer({ key, cert }, (socket) => {
+      let buffer = "";
+      socket.on("data", (chunk) => {
+        buffer += chunk.toString();
+        if (!buffer.includes("\r\n\r\n")) return;
+        const firstLine = buffer.split("\r\n")[0];
+        seen.push(firstLine);
+        const body = JSON.stringify({ ip: "198.51.100.77", country: "JP", region: "Tokyo" });
+        socket.end(
+          `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+        );
+      });
+    }),
+  );
+  const proxyPort = await listen(httpsProxy);
+
+  const rejected = await testProxy(
+    { type: "https", host: "127.0.0.1", port: proxyPort },
+    { endpoint: "http://ip.example.test/json" },
+  );
+  expect(rejected.ok).toBe(false);
+  expect(rejected.errorCode).toBe("tls");
+
+  const accepted = await testProxy(
+    { type: "https", host: "127.0.0.1", port: proxyPort },
+    { endpoint: "http://ip.example.test/json", tlsRejectUnauthorized: false },
+  );
+  expect(accepted.ok).toBe(true);
+  expect(accepted.exitIp).toBe("198.51.100.77");
+  expect(accepted.region).toBe("日本/东京");
+  expect(seen).toHaveLength(1);
 });

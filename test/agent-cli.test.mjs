@@ -3,7 +3,7 @@
 // against a real service on a random port and reads its stdout.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startServer, TOKEN_HEADER as SERVER_TOKEN_HEADER } from "../lib/server.mjs";
@@ -618,6 +618,50 @@ test("score cancel, env cancel, report and market map to their routes", async ()
   ]);
   expect(fake.calls[2].body).toEqual({ provider: "antigravity", note: "403", language: "zh-Hans" });
   expect(fake.calls[5].body).toEqual({ package: "@magpie-community/opencode-qoder-auth" });
+});
+
+test("proxies import, proxies update --clear-password, proxy test --provider and zero ../lib imports", async () => {
+  const cliSource = readFileSync(join(root, "lib", "agent-cli.mjs"), "utf8");
+  expect(cliSource).not.toMatch(/\.\.\/lib\//);
+
+  const tmpDir = mkdtempSync(join(tmpdir(), "clean-login-cli-bulk-"));
+  try {
+    const bulkFile = join(tmpDir, "proxies.txt");
+    writeFileSync(bulkFile, "EdgeA|http://127.0.0.1:8080\n127.0.0.2:1080\n", "utf8");
+    const fake = fakeFetch({
+      "POST /api/proxies/bulk": { created: [], skipped: [], errors: [], truncated: false },
+    });
+    const r = runner(fake);
+    const args = ["--token", TOKEN];
+
+    await r.run(["proxies", "import", "http://127.0.0.1:8081", "--type", "socks5", "--prefix", "Batch", ...args]);
+    await r.run(["proxies", "import", "--file", bulkFile, "--type", "http", ...args]);
+    await r.run(["proxies", "update", "p-1", "--clear-password", ...args]);
+    await r.run(["proxy", "test", "p-1", "--provider", "qoder-cn", ...args]);
+
+    expect(fake.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /api/proxies/bulk",
+      "POST /api/proxies/bulk",
+      "PATCH /api/proxies/p-1",
+      "POST /api/proxies/p-1/test",
+    ]);
+    expect(fake.calls[0].body).toEqual({
+      text: "http://127.0.0.1:8081",
+      defaultType: "socks5",
+      prefix: "Batch",
+    });
+    expect(fake.calls[1].body).toEqual({
+      text: "EdgeA|http://127.0.0.1:8080\n127.0.0.2:1080\n",
+      defaultType: "http",
+    });
+    expect(fake.calls[2].body).toEqual({ clearPassword: true });
+    expect(fake.calls[3].body).toEqual({ provider: "qoder-cn" });
+    expect(usage()).toContain("proxies import");
+    expect(usage()).toContain("--clear-password");
+    expect(usage()).toContain("--provider");
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 // ---------- the real binary against a real service ----------

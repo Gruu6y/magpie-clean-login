@@ -3,17 +3,21 @@
 // There is no fake state: everything shown comes from /api/bootstrap.
 
 import {
+  PROXY_BULK_LIMIT,
   createConfirmController,
   createRequestGuard,
   formatAddress,
   normalizeProxyForm,
+  parseBulkProxies,
+  proxyConnectionKey,
   proxyFingerprint,
   statusView,
 } from "./proxy-state.js";
-import { distinctKeywords, distinctRegions, filterProxies } from "./proxy-filter.js";
+import { distinctKeywords, distinctRegions, filterProxies, sortProxies } from "./proxy-filter.js";
 import {
   EMPTY_TARGETS,
   findTarget,
+  genericProxyView,
   normalizeProxyTargets,
   proxyForTarget,
   resolveTargetId,
@@ -24,7 +28,9 @@ import { isScoreActive, isScoreSettled, scoreView } from "./proxy-score.js";
 import {
   PLUGIN_SCAN_POLL_INTERVAL_MS,
   PLUGIN_SCAN_POLL_MAX_ATTEMPTS,
+  countAccountsByProvider,
   filterProviders,
+  filterProvidersByCategory,
   localizedText,
   methodCategory,
   methodCategoryText,
@@ -53,12 +59,16 @@ import {
   retiredAccounts,
 } from "./account-state.js";
 import {
+  EXPIRING_SOON_MS,
   accountView,
+  countAccountsByProxy,
   filterAccounts,
   formatCheckSummary,
   formatExit,
+  formatExpiryBadge,
   hostingStateLabel,
   hostingTone,
+  isHostingPaused,
   normalizeHosting,
   sortAccounts,
 } from "./account-view.js";
@@ -624,6 +634,63 @@ const messages = {
     toastAssetSaved: "Asset saved.",
     toastAssetDeleted: "Asset deleted.",
     assetLoadFailed: "Could not load assets.",
+    providersCategoryLabel: "Category",
+    providersCatAll: "All",
+    providersCatSignable: "Signable",
+    providersCatHasAccounts: "Has accounts",
+    providersCatCatalog: "Catalog",
+    providersRefresh: "Refresh",
+    providersRefreshed: "Providers refreshed.",
+    providerAccountsCount: "{count} accounts",
+    providerViewAccounts: "View accounts ({count})",
+    proxiesTestAll: "Test all",
+    proxiesTestingAll: "Testing {done}/{total}…",
+    proxiesTestCancel: "Cancel tests",
+    proxiesTestAllDone: "Tested {total} proxies.",
+    proxiesBulkOpen: "Bulk import",
+    filterSearchLabel: "Search",
+    filterSearchPlaceholder: "Name, host or exit IP",
+    filterStatusLabel: "Status",
+    filterStatusAll: "All",
+    filterStatusOk: "Available",
+    filterStatusError: "Failed",
+    filterStatusUntested: "Untested",
+    filterUsageLabel: "Usage",
+    filterUsageAll: "All",
+    filterUsageUsed: "In use",
+    filterUsageUnused: "Unused",
+    proxySortLabel: "Sort",
+    proxySortDefault: "Default",
+    proxySortLatency: "Latency",
+    proxySortScore: "Trust score",
+    proxySortUsage: "In use",
+    proxySortName: "Name",
+    proxyUsageCount: "{count} used",
+    proxyUsageUnused: "Unused",
+    proxyClearPassword: "Clear saved password",
+    proxyBulkTitle: "Bulk import proxies",
+    proxyBulkCopy: "Paste one proxy per line (URL, host:port, host:port:user:pass, or Name|URL).",
+    proxyBulkTypeLabel: "Default type",
+    proxyBulkPrefixLabel: "Name prefix",
+    proxyBulkPrefixPlaceholder: "Optional prefix (e.g. SG)",
+    proxyBulkInputLabel: "Proxy list",
+    proxyBulkPlaceholder: "127.0.0.1:7890\\nSG|10.0.0.2:1080:user:pass",
+    proxyBulkSubmit: "Import",
+    proxyBulkSubmitting: "Importing…",
+    proxyBulkSummary: "Parsed: {ready} ready · {duplicates} duplicate · {invalid} invalid (limit {limit})",
+    proxyBulkSummaryTruncated: "Parsed: {ready} ready · {duplicates} duplicate · {invalid} invalid ({truncated} over limit {limit})",
+    proxyBulkEmpty: "Enter at least one valid proxy line.",
+    proxyBulkDone: "Imported {created} proxies ({skipped} duplicate, {errors} failed).",
+    proxyBulkErrorTooLarge: "Bulk input exceeds 100 KB.",
+    accountFilterHostingPaused: "Renewal paused",
+    accountFilterExpiringSoon: "Expiring soon",
+    accountExpiryExpired: "Expired",
+    accountExpirySoon: "{hours}h left",
+    accountExpiryDays: "{days}d left",
+    accountDetailEmail: "Email",
+    accountDetailMethod: "Sign-in method",
+    accountDetailExpiresAt: "Token expires",
+    signInEgressWarning: "Warning: {detail}",
   },
   "zh-Hans": {
     title: "干净登录",
@@ -1152,6 +1219,63 @@ const messages = {
     toastAssetSaved: "已保存资产。",
     toastAssetDeleted: "已删除资产。",
     assetLoadFailed: "无法加载资产列表。",
+    providersCategoryLabel: "分类",
+    providersCatAll: "全部",
+    providersCatSignable: "可登录",
+    providersCatHasAccounts: "已有账号",
+    providersCatCatalog: "市场目录",
+    providersRefresh: "刷新",
+    providersRefreshed: "供应商列表已刷新。",
+    providerAccountsCount: "{count} 个账号",
+    providerViewAccounts: "查看账号（{count}）",
+    proxiesTestAll: "全部测试",
+    proxiesTestingAll: "测试中 {done}/{total}…",
+    proxiesTestCancel: "取消测试",
+    proxiesTestAllDone: "已完成 {total} 个代理测试。",
+    proxiesBulkOpen: "批量导入",
+    filterSearchLabel: "搜索",
+    filterSearchPlaceholder: "名称、主机或出口 IP",
+    filterStatusLabel: "状态",
+    filterStatusAll: "全部",
+    filterStatusOk: "可用",
+    filterStatusError: "失败",
+    filterStatusUntested: "未测试",
+    filterUsageLabel: "使用中",
+    filterUsageAll: "全部",
+    filterUsageUsed: "已绑定",
+    filterUsageUnused: "空闲",
+    proxySortLabel: "排序",
+    proxySortDefault: "默认",
+    proxySortLatency: "延迟",
+    proxySortScore: "信任分",
+    proxySortUsage: "使用中",
+    proxySortName: "名称",
+    proxyUsageCount: "{count} 个账号在用",
+    proxyUsageUnused: "空闲",
+    proxyClearPassword: "清除已保存的密码",
+    proxyBulkTitle: "批量导入代理 IP",
+    proxyBulkCopy: "每行一个代理（支持 URL、host:port、host:port:user:pass 或 名称|URL）。",
+    proxyBulkTypeLabel: "默认类型",
+    proxyBulkPrefixLabel: "名称前缀",
+    proxyBulkPrefixPlaceholder: "可选前缀（如 SG）",
+    proxyBulkInputLabel: "代理列表",
+    proxyBulkPlaceholder: "127.0.0.1:7890\\nSG|10.0.0.2:1080:user:pass",
+    proxyBulkSubmit: "导入",
+    proxyBulkSubmitting: "导入中…",
+    proxyBulkSummary: "解析结果：{ready} 条可导入 · {duplicates} 条重复 · {invalid} 条无效（上限 {limit}）",
+    proxyBulkSummaryTruncated: "解析结果：{ready} 条可导入 · {duplicates} 条重复 · {invalid} 条无效（超出上限 {limit} 的 {truncated} 条将略过）",
+    proxyBulkEmpty: "请至少输入一条有效代理记录。",
+    proxyBulkDone: "已导入 {created} 个代理（{skipped} 条重复，{errors} 条失败）。",
+    proxyBulkErrorTooLarge: "批量导入文本不能超过 100 KB。",
+    accountFilterHostingPaused: "续期已暂停",
+    accountFilterExpiringSoon: "即将过期",
+    accountExpiryExpired: "已过期",
+    accountExpirySoon: "{hours} 小时后到期",
+    accountExpiryDays: "{days} 天后到期",
+    accountDetailEmail: "邮箱",
+    accountDetailMethod: "登录方式",
+    accountDetailExpiresAt: "凭证过期时间",
+    signInEgressWarning: "提示：{detail}",
   },
   "zh-Hant": {
     title: "乾淨登入",
@@ -1680,6 +1804,63 @@ const messages = {
     toastAssetSaved: "已儲存資產。",
     toastAssetDeleted: "已刪除資產。",
     assetLoadFailed: "無法載入資產列表。",
+    providersCategoryLabel: "分類",
+    providersCatAll: "全部",
+    providersCatSignable: "可登入",
+    providersCatHasAccounts: "已有帳號",
+    providersCatCatalog: "市場目錄",
+    providersRefresh: "重新整理",
+    providersRefreshed: "供應商列表已更新。",
+    providerAccountsCount: "{count} 個帳號",
+    providerViewAccounts: "查看帳號（{count}）",
+    proxiesTestAll: "全部測試",
+    proxiesTestingAll: "測試中 {done}/{total}…",
+    proxiesTestCancel: "取消測試",
+    proxiesTestAllDone: "已完成 {total} 個代理測試。",
+    proxiesBulkOpen: "批次匯入",
+    filterSearchLabel: "搜尋",
+    filterSearchPlaceholder: "名稱、主機或出口 IP",
+    filterStatusLabel: "狀態",
+    filterStatusAll: "全部",
+    filterStatusOk: "可用",
+    filterStatusError: "失敗",
+    filterStatusUntested: "未測試",
+    filterUsageLabel: "使用狀態",
+    filterUsageAll: "全部",
+    filterUsageUsed: "使用中",
+    filterUsageUnused: "閒置",
+    proxySortLabel: "排序",
+    proxySortDefault: "預設",
+    proxySortLatency: "延遲",
+    proxySortScore: "信任分",
+    proxySortUsage: "使用中",
+    proxySortName: "名稱",
+    proxyUsageCount: "{count} 個帳號在用",
+    proxyUsageUnused: "閒置",
+    proxyClearPassword: "清除已儲存的密碼",
+    proxyBulkTitle: "批次匯入代理 IP",
+    proxyBulkCopy: "每行一個代理（支援 URL、host:port、host:port:user:pass 或 名稱|URL）。",
+    proxyBulkTypeLabel: "預設類型",
+    proxyBulkPrefixLabel: "名稱前綴",
+    proxyBulkPrefixPlaceholder: "可選前綴（如 SG）",
+    proxyBulkInputLabel: "代理清單",
+    proxyBulkPlaceholder: "127.0.0.1:7890\\nSG|10.0.0.2:1080:user:pass",
+    proxyBulkSubmit: "匯入",
+    proxyBulkSubmitting: "匯入中…",
+    proxyBulkSummary: "解析結果：{ready} 筆可匯入 · {duplicates} 筆重複 · {invalid} 筆無效（上限 {limit}）",
+    proxyBulkSummaryTruncated: "解析結果：{ready} 筆可匯入 · {duplicates} 筆重複 · {invalid} 筆無效（超出上限 {limit} 的 {truncated} 筆將略過）",
+    proxyBulkEmpty: "請至少輸入一筆有效代理記錄。",
+    proxyBulkDone: "已匯入 {created} 個代理（{skipped} 筆重複，{errors} 筆失敗）。",
+    proxyBulkErrorTooLarge: "批次匯入內容不可超過 100 KB。",
+    accountFilterHostingPaused: "續期已暫停",
+    accountFilterExpiringSoon: "即將過期",
+    accountExpiryExpired: "已過期",
+    accountExpirySoon: "{hours} 小時後到期",
+    accountExpiryDays: "{days} 天後到期",
+    accountDetailEmail: "信箱",
+    accountDetailMethod: "登入方式",
+    accountDetailExpiresAt: "憑證過期時間",
+    signInEgressWarning: "提示：{detail}",
   },
   ja: {
     title: "クリーンログイン",
@@ -2208,6 +2389,63 @@ const messages = {
     toastAssetSaved: "資産を保存しました。",
     toastAssetDeleted: "資産を削除しました。",
     assetLoadFailed: "資産を読み込めませんでした。",
+    providersCategoryLabel: "分類",
+    providersCatAll: "すべて",
+    providersCatSignable: "ログイン可能",
+    providersCatHasAccounts: "アカウントあり",
+    providersCatCatalog: "カタログ",
+    providersRefresh: "更新",
+    providersRefreshed: "プロバイダー一覧を更新しました。",
+    providerAccountsCount: "{count} 件",
+    providerViewAccounts: "アカウントを見る ({count})",
+    proxiesTestAll: "すべてテスト",
+    proxiesTestingAll: "テスト中 {done}/{total}…",
+    proxiesTestCancel: "テストを中止",
+    proxiesTestAllDone: "{total} 件のプロキシをテストしました。",
+    proxiesBulkOpen: "一括インポート",
+    filterSearchLabel: "検索",
+    filterSearchPlaceholder: "名前・ホスト・出口 IP",
+    filterStatusLabel: "状態",
+    filterStatusAll: "すべて",
+    filterStatusOk: "利用可能",
+    filterStatusError: "失敗",
+    filterStatusUntested: "未テスト",
+    filterUsageLabel: "使用状況",
+    filterUsageAll: "すべて",
+    filterUsageUsed: "使用中",
+    filterUsageUnused: "未使用",
+    proxySortLabel: "並び替え",
+    proxySortDefault: "既定",
+    proxySortLatency: "遅延",
+    proxySortScore: "スコア",
+    proxySortUsage: "使用数",
+    proxySortName: "名前",
+    proxyUsageCount: "{count} 件で使用",
+    proxyUsageUnused: "未使用",
+    proxyClearPassword: "保存済みのパスワードを削除",
+    proxyBulkTitle: "プロキシの一括インポート",
+    proxyBulkCopy: "1 行に 1 件ずつ入力してください（URL、host:port、host:port:user:pass、名前|URL）。",
+    proxyBulkTypeLabel: "既定の種類",
+    proxyBulkPrefixLabel: "名前の接頭辞",
+    proxyBulkPrefixPlaceholder: "任意（例: SG）",
+    proxyBulkInputLabel: "プロキシ一覧",
+    proxyBulkPlaceholder: "127.0.0.1:7890\\nSG|10.0.0.2:1080:user:pass",
+    proxyBulkSubmit: "インポート",
+    proxyBulkSubmitting: "インポート中…",
+    proxyBulkSummary: "解析結果: 追加 {ready} 件 · 重複 {duplicates} 件 · 無効 {invalid} 件（上限 {limit}）",
+    proxyBulkSummaryTruncated: "解析結果: 追加 {ready} 件 · 重複 {duplicates} 件 · 無効 {invalid} 件（上限 {limit} 超過 {truncated} 件は省略）",
+    proxyBulkEmpty: "有効なプロキシ行を 1 件以上入力してください。",
+    proxyBulkDone: "{created} 件をインポートしました（重複 {skipped} 件・失敗 {errors} 件）。",
+    proxyBulkErrorTooLarge: "一括入力は 100 KB 以内にしてください。",
+    accountFilterHostingPaused: "更新停止中",
+    accountFilterExpiringSoon: "間もなく期限切れ",
+    accountExpiryExpired: "期限切れ",
+    accountExpirySoon: "残り {hours} 時間",
+    accountExpiryDays: "残り {days} 日",
+    accountDetailEmail: "メール",
+    accountDetailMethod: "ログイン方式",
+    accountDetailExpiresAt: "有効期限",
+    signInEgressWarning: "注意：{detail}",
   },
 };
 
@@ -2289,7 +2527,24 @@ const PROXY_TARGET_RETRY_MAX = 8;
 const PROXY_TARGET_RETRY_MS = 1500;
 // Filter state is per document and never persisted: magpie mounts the page in
 // an opaque-origin sandbox frame where web storage is not available.
-const proxyFilter = { regions: new Set(), keywords: new Set(), minLatency: "", maxLatency: "" };
+const proxyFilter = {
+  regions: new Set(),
+  keywords: new Set(),
+  minLatency: "",
+  maxLatency: "",
+  search: "",
+  status: "all",
+  usage: "all",
+};
+let proxySort = "default";
+let bulkTestController = null;
+let bulkTestActive = false;
+let bulkTestDone = 0;
+let bulkTestTotal = 0;
+let proxyBulkBusy = false;
+let providerCategory = "all";
+let providersRefreshing = false;
+let renderedProviderCounts = {};
 let scoreJob = null;
 let scoreStarting = false;
 let scoreStartingId = "";
@@ -2398,6 +2653,7 @@ const errorKeys = {
   not_found: "errorNotFound",
   invalid_json: "errorInvalidJson",
   payload_too_large: "errorTooLarge",
+  bulk_too_large: "proxyBulkErrorTooLarge",
   unauthorized: "errorUnauthorized",
   forbidden: "errorForbidden",
   internal: "errorInternal",
@@ -2743,6 +2999,47 @@ function applyText() {
   byId("asset-delete-confirm").textContent = text.assetDeleteConfirm;
   byId("asset-delete-cancel").textContent = text.assetCancel;
   byId("asset-delete-close").setAttribute("aria-label", text.close);
+  // --- wave 1 & wave 2 controls ---
+  byId("providers-category-label").textContent = text.providersCategoryLabel;
+  byId("providers-cat-all").textContent = text.providersCatAll;
+  byId("providers-cat-signable").textContent = text.providersCatSignable;
+  byId("providers-cat-has-accounts").textContent = text.providersCatHasAccounts;
+  byId("providers-cat-catalog").textContent = text.providersCatCatalog;
+  byId("providers-refresh").textContent = text.providersRefresh;
+  byId("proxies-test-all").textContent = text.proxiesTestAll;
+  byId("proxies-test-cancel").textContent = text.proxiesTestCancel;
+  byId("proxies-bulk-open").textContent = text.proxiesBulkOpen;
+  byId("filter-search-label").textContent = text.filterSearchLabel;
+  byId("filter-search").placeholder = text.filterSearchPlaceholder;
+  byId("filter-search").setAttribute("aria-label", text.filterSearchPlaceholder);
+  byId("filter-status-label").textContent = text.filterStatusLabel;
+  byId("filter-status-all").textContent = text.filterStatusAll;
+  byId("filter-status-ok").textContent = text.filterStatusOk;
+  byId("filter-status-error").textContent = text.filterStatusError;
+  byId("filter-status-untested").textContent = text.filterStatusUntested;
+  byId("filter-usage-label").textContent = text.filterUsageLabel;
+  byId("filter-usage-all").textContent = text.filterUsageAll;
+  byId("filter-usage-used").textContent = text.filterUsageUsed;
+  byId("filter-usage-unused").textContent = text.filterUsageUnused;
+  byId("proxy-sort-label").textContent = text.proxySortLabel;
+  byId("proxy-sort-default").textContent = text.proxySortDefault;
+  byId("proxy-sort-latency").textContent = text.proxySortLatency;
+  byId("proxy-sort-score").textContent = text.proxySortScore;
+  byId("proxy-sort-usage").textContent = text.proxySortUsage;
+  byId("proxy-sort-name").textContent = text.proxySortName;
+  byId("proxy-clear-password-label").textContent = text.proxyClearPassword;
+  byId("proxy-bulk-title").textContent = text.proxyBulkTitle;
+  byId("proxy-bulk-copy").textContent = text.proxyBulkCopy;
+  byId("proxy-bulk-type-label").textContent = text.proxyBulkTypeLabel;
+  byId("proxy-bulk-prefix-label").textContent = text.proxyBulkPrefixLabel;
+  byId("proxy-bulk-prefix").placeholder = text.proxyBulkPrefixPlaceholder;
+  byId("proxy-bulk-input-label").textContent = text.proxyBulkInputLabel;
+  byId("proxy-bulk-input").placeholder = text.proxyBulkPlaceholder;
+  byId("proxy-bulk-cancel").textContent = text.cancel;
+  byId("proxy-bulk-submit").textContent = text.proxyBulkSubmit;
+  byId("proxy-bulk-close").setAttribute("aria-label", text.close);
+  byId("account-filter-hosting-paused-label").textContent = text.accountFilterHostingPaused;
+  byId("account-filter-expiring-soon-label").textContent = text.accountFilterExpiringSoon;
 }
 
 function selectTab(name) {
@@ -3031,7 +3328,7 @@ function proxyScoreCell(proxy) {
   return cell;
 }
 
-function proxyRow(proxy) {
+function proxyRow(proxy, usageCount = 0) {
   const row = document.createElement("div");
   row.className = "proxy-row tbl-row";
   row.dataset.proxyId = proxy.id;
@@ -3042,14 +3339,22 @@ function proxyRow(proxy) {
   title.textContent = proxy.name || proxy.id;
   const type = document.createElement("small");
   type.textContent = String(proxy.type || "").toUpperCase();
+  const usageBadge = document.createElement("span");
+  usageBadge.className = `proxy-usage-badge${usageCount > 0 ? " is-used" : ""}`;
+  usageBadge.textContent = usageCount > 0
+    ? text.proxyUsageCount.replace("{count}", String(usageCount))
+    : text.proxyUsageUnused;
+  type.append(document.createTextNode(" "), usageBadge);
   name.append(title, type);
 
   const address = document.createElement("div");
   address.className = "proxy-address";
+  address.setAttribute("data-label", text.colAddress);
   address.textContent = formatAddress(proxy);
 
   const region = document.createElement("div");
   region.className = "proxy-region";
+  region.setAttribute("data-label", text.colRegion);
   region.textContent = proxy.region || text.unknown;
   if (proxy.exitIp) {
     // The exit IP must stay readable: an ellipsized `111.24…` is useless for
@@ -3071,6 +3376,7 @@ function proxyRow(proxy) {
 
   const statusCell = document.createElement("div");
   statusCell.className = "proxy-status-cell";
+  statusCell.setAttribute("data-label", text.colStatus);
   const view = statusView(proxy, text, rowTests.has(proxy.id));
   const status = document.createElement("span");
   status.className = `proxy-status ${view.state}`;
@@ -3105,9 +3411,11 @@ function proxyRow(proxy) {
 
   const checked = document.createElement("div");
   checked.className = "proxy-checked";
+  checked.setAttribute("data-label", text.colChecked);
   checked.textContent = formatTime(proxy.lastCheckedAt);
 
   const scoreCell = proxyScoreCell(proxy);
+  scoreCell.setAttribute("data-label", text.colScore);
 
   const actions = document.createElement("div");
   actions.className = "proxy-actions";
@@ -3209,6 +3517,19 @@ function renderTargetNote() {
   note.hidden = false;
 }
 
+function renderBulkTestButton() {
+  const testAll = byId("proxies-test-all");
+  const cancelBtn = byId("proxies-test-cancel");
+  if (!testAll || !cancelBtn) return;
+  testAll.disabled = proxies.length === 0 || bulkTestActive;
+  testAll.textContent = bulkTestActive
+    ? text.proxiesTestingAll
+      .replace("{done}", String(bulkTestDone))
+      .replace("{total}", String(bulkTestTotal))
+    : text.proxiesTestAll;
+  cancelBtn.hidden = !bulkTestActive;
+}
+
 function renderProxies() {
   const list = byId("proxies-list");
   const empty = byId("proxies-empty");
@@ -3220,30 +3541,41 @@ function renderProxies() {
   table.hidden = !hasProxies;
   filters.hidden = !hasProxies;
   list.textContent = "";
+  renderBulkTestButton();
   if (!hasProxies) {
     renderScoreBar();
     return;
   }
   renderFilterChips();
   const target = currentTestTarget();
+  const usageCounts = countAccountsByProxy(accountIdentities);
+  const usedIds = new Set(Object.keys(usageCounts));
   // With a provider selected, the latency filter and the status number use
   // that provider's own measurement. The generic default leaves both the
   // records and the original filter call untouched.
   proxyFilter.latencyOf = target
     ? (proxy) => proxyForTarget(proxy, target, proxyTargets).latency
     : null;
+  proxyFilter.usedIds = usedIds;
+  proxyFilter.statusOf = (proxy) =>
+    (target ? proxyForTarget(proxy, target, proxyTargets) : genericProxyView(proxy)).status;
   const visible = filterProxies(proxies, proxyFilter);
+  const sorted = sortProxies(visible, proxySort, {
+    latencyOf: proxyFilter.latencyOf || ((proxy) => genericProxyView(proxy).latency),
+    usageCounts,
+  });
   byId("filter-count").textContent = text.filterCount
-    .replace("{shown}", String(visible.length))
+    .replace("{shown}", String(sorted.length))
     .replace("{total}", String(proxies.length));
-  if (visible.length === 0) {
+  if (sorted.length === 0) {
     const note = document.createElement("p");
     note.className = "proxy-filter-empty";
     note.textContent = text.filterNoMatch;
     list.append(note);
   } else {
-    for (const proxy of visible) {
-      list.append(proxyRow(proxyForTarget(proxy, target, proxyTargets)));
+    for (const proxy of sorted) {
+      const displayProxy = target ? proxyForTarget(proxy, target, proxyTargets) : genericProxyView(proxy);
+      list.append(proxyRow(displayProxy, usageCounts[proxy.id] || 0));
     }
   }
   renderScoreBar();
@@ -3346,9 +3678,75 @@ function resetProxyFilters() {
   proxyFilter.keywords.clear();
   proxyFilter.minLatency = "";
   proxyFilter.maxLatency = "";
+  proxyFilter.search = "";
+  proxyFilter.status = "all";
+  proxyFilter.usage = "all";
+  proxySort = "default";
   byId("filter-latency-min").value = "";
   byId("filter-latency-max").value = "";
+  byId("filter-search").value = "";
+  byId("filter-status").value = "all";
+  byId("filter-usage").value = "all";
+  byId("proxy-sort").value = "default";
   renderProxies();
+}
+
+function cancelBulkTests() {
+  if (!bulkTestActive && !bulkTestController) return;
+  bulkTestController?.abort();
+  bulkTestController = null;
+  bulkTestActive = false;
+  for (const id of [...rowTests.keys()]) cancelRowTest(id);
+  renderBulkTestButton();
+  renderProxies();
+}
+
+async function testAllVisibleProxies() {
+  if (bulkTestActive || proxies.length === 0) return;
+  const target = currentTestTarget();
+  const usageCounts = countAccountsByProxy(accountIdentities);
+  proxyFilter.latencyOf = target
+    ? (proxy) => proxyForTarget(proxy, target, proxyTargets).latency
+    : null;
+  proxyFilter.usedIds = new Set(Object.keys(usageCounts));
+  proxyFilter.statusOf = (proxy) =>
+    (target ? proxyForTarget(proxy, target, proxyTargets) : genericProxyView(proxy)).status;
+  const visible = filterProxies(proxies, proxyFilter);
+  const ids = visible.map((proxy) => proxy.id).filter((id) => id && !rowTests.has(id));
+  if (ids.length === 0) return;
+  bulkTestActive = true;
+  bulkTestDone = 0;
+  bulkTestTotal = ids.length;
+  const controller = new AbortController();
+  bulkTestController = controller;
+  renderBulkTestButton();
+  let cursor = 0;
+  const worker = async () => {
+    while (!controller.signal.aborted && cursor < ids.length) {
+      const id = ids[cursor];
+      cursor += 1;
+      try {
+        await testRowProxy(id);
+      } finally {
+        if (!controller.signal.aborted) {
+          bulkTestDone += 1;
+          renderBulkTestButton();
+        }
+      }
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker));
+    if (!controller.signal.aborted) {
+      toast(text.proxiesTestAllDone.replace("{total}", String(ids.length)));
+    }
+  } finally {
+    if (bulkTestController === controller) {
+      bulkTestActive = false;
+      bulkTestController = null;
+      renderBulkTestButton();
+    }
+  }
 }
 
 // --- Trust Score -----------------------------------------------------------
@@ -3532,6 +3930,13 @@ async function loadScoreStatus() {
 }
 
 function providerCard(provider) {
+  const counts = renderedProviderCounts;
+  const countKey = counts[provider.id]
+    ? provider.id
+    : provider.signInProvider && counts[provider.signInProvider]
+      ? provider.signInProvider
+      : provider.id;
+  const acctCount = Number(counts[countKey]) || 0;
   const card = document.createElement("article");
   card.className = "provider-card";
   card.dataset.providerId = provider.id;
@@ -3592,6 +3997,12 @@ function providerCard(provider) {
         : origin === "catalog" ? text.providerOriginCatalog
           : text.providerOriginMagpie;
     head.append(originTag);
+  }
+  if (acctCount > 0) {
+    const acctBadge = document.createElement("span");
+    acctBadge.className = "provider-accounts-badge";
+    acctBadge.textContent = text.providerAccountsCount.replace("{count}", String(acctCount));
+    head.append(acctBadge);
   }
 
   const description = document.createElement("p");
@@ -3710,6 +4121,19 @@ function providerCard(provider) {
       runMarketInstall(installPackage);
     });
     actions.append(install);
+  }
+  if (acctCount > 0) {
+    const viewAccounts = document.createElement("button");
+    viewAccounts.type = "button";
+    viewAccounts.className = "button provider-view-accounts";
+    viewAccounts.dataset.providerId = countKey;
+    viewAccounts.textContent = text.providerViewAccounts.replace("{count}", String(acctCount));
+    viewAccounts.addEventListener("click", () => {
+      selectTab("accounts");
+      setAccountProvider(countKey);
+      loadAccountIdentities();
+    });
+    actions.append(viewAccounts);
   }
   // Reporting is offered on every card, including the ones that offer no way in
   // at all: a card with nothing to click is exactly the one worth reporting.
@@ -4074,6 +4498,7 @@ async function loadAccountIdentities() {
     // identities arrive. The split does not depend on them: no card moves
     // between the main list and the collapsed catalog.
     renderProviders(providerCatalog);
+    renderProxies();
   }
 }
 
@@ -4447,6 +4872,9 @@ function renderSignIn() {
   const inputs = byId("signin-inputs");
   for (const input of inputs.querySelectorAll("[data-input-key]")) {
     input.disabled = active || context.busy;
+  }
+  if (flow?.egressWarning) {
+    setSignInNotice(text.signInEgressWarning.replace("{detail}", String(flow.egressWarning)));
   }
 }
 
@@ -4919,7 +5347,12 @@ async function startSignIn() {
     // the code and is waiting for the user to type it back. Asking the service
     // for the real state keeps this honest instead of assuming a browser.
     const state = typeof result?.flow?.state === "string" ? result.flow.state : "waiting-login";
-    context.flow = { state, accountKey: null, instructions: result?.instructions || "" };
+    context.flow = {
+      state,
+      accountKey: null,
+      instructions: result?.instructions || "",
+      egressWarning: typeof result?.flow?.egressWarning === "string" ? result.flow.egressWarning : "",
+    };
     setSignInNotice(state === "waiting-code" ? text.signInCodePrompt : text.signInOpened);
     renderSignIn();
     startSignInPolling();
@@ -5231,14 +5664,25 @@ function renderProviders(items) {
   const moreList = byId("providers-more-list");
   const empty = byId("providers-empty");
   byId("provider-count").textContent = String(providerCatalog.length);
-  const { primary, other } = partitionProviders(providerCatalog, accountCounts());
+  const counts = countAccountsByProvider(accountIdentities);
+  renderedProviderCounts = counts;
+  const { primary, other } = partitionProviders(providerCatalog, counts);
   // The query narrows both grids, the collapsed one included: a provider the
   // user cannot find is the same to them as a provider that is not there.
   const searching = providerQuery.trim().length > 0;
-  const shownPrimary = filterProviders(primary, providerQuery, langKey);
-  const shownOther = filterProviders(other, providerQuery, langKey);
+  const categoryActive = providerCategory !== "all";
+  const shownPrimary = filterProvidersByCategory(
+    filterProviders(primary, providerQuery, langKey),
+    providerCategory,
+    counts,
+  );
+  const shownOther = filterProvidersByCategory(
+    filterProviders(other, providerQuery, langKey),
+    providerCategory,
+    counts,
+  );
   const shown = shownPrimary.length + shownOther.length;
-  byId("providers-search-status").textContent = searching
+  byId("providers-search-status").textContent = (searching || categoryActive)
     ? text.providersSearchCount
       .replace("{shown}", String(shown))
       .replace("{total}", String(providerCatalog.length))
@@ -5248,6 +5692,10 @@ function renderProviders(items) {
   const noMatch = searching && providerCatalog.length > 0;
   byId("providers-empty-title").textContent = noMatch ? text.providersNoMatchTitle : text.providersEmptyTitle;
   byId("providers-empty-copy").textContent = noMatch ? text.providersNoMatchCopy : text.providersEmptyCopy;
+  if (!noMatch && categoryActive && providerCatalog.length > 0) {
+    byId("providers-empty-title").textContent = text.providersNoMatchTitle;
+    byId("providers-empty-copy").textContent = text.providersNoMatchCopy;
+  }
   empty.hidden = shown > 0;
   list.hidden = shownPrimary.length === 0;
   list.textContent = "";
@@ -5266,6 +5714,29 @@ function revealProviderMatches() {
   const more = byId("providers-more");
   if (!more || more.hidden) return;
   if (byId("providers-more-list").children.length > 0) more.open = true;
+}
+
+async function refreshProviders() {
+  if (providersRefreshing) return;
+  providersRefreshing = true;
+  byId("providers-refresh").disabled = true;
+  try {
+    const merged = await api("api/provider-sources", {
+      method: "POST",
+      body: { magpie: magpiePayloadFromHash(), refresh: true },
+    });
+    if (merged?.providerSources) {
+      applyProviderSources(merged.providerSources);
+      startPluginScanPolling();
+    }
+    await Promise.all([loadProxyTargets(), loadAccountIdentities()]);
+    toast(text.providersRefreshed);
+  } catch (error) {
+    toast(apiErrorText(error));
+  } finally {
+    providersRefreshing = false;
+    byId("providers-refresh").disabled = false;
+  }
 }
 
 function render(data) {
@@ -5670,6 +6141,9 @@ function cleanupProxyDialog() {
     context.testGuard.cancel();
     context.testAbort?.abort();
   }
+  byId("proxy-clear-password").checked = false;
+  byId("proxy-clear-password-field").hidden = true;
+  byId("proxy-password").disabled = false;
   setFormError("");
   clearTestResult();
   setDialogBusy(false);
@@ -5697,6 +6171,9 @@ function openProxyDialog(proxy = null) {
   byId("proxy-port").value = proxy?.port != null ? String(proxy.port) : "";
   byId("proxy-username").value = proxy?.username || "";
   byId("proxy-password").value = "";
+  byId("proxy-password").disabled = false;
+  byId("proxy-clear-password").checked = false;
+  byId("proxy-clear-password-field").hidden = !proxy?.hasPassword;
   const hint = byId("proxy-password-hint");
   if (proxy?.hasPassword) {
     hint.textContent = text.passwordKeepHint;
@@ -5803,6 +6280,9 @@ async function saveProxy() {
   setDialogBusy(true);
   try {
     const payload = payloadFor(values);
+    if (context.mode === "edit" && !values.password && byId("proxy-clear-password").checked) {
+      payload.clearPassword = true;
+    }
     const data = context.mode === "edit"
       ? await api(`api/proxies/${encodeURIComponent(context.id)}`, { method: "PATCH", body: payload })
       : await api("api/proxies", { method: "POST", body: payload });
@@ -5827,6 +6307,107 @@ async function saveProxy() {
       context.saving = false;
       setDialogBusy(false);
     }
+  }
+}
+
+function setProxyBulkError(message) {
+  const node = byId("proxy-bulk-error");
+  node.textContent = message || "";
+  node.hidden = !message;
+}
+
+function parseProxyBulkInput() {
+  const raw = byId("proxy-bulk-input").value;
+  const defaultType = byId("proxy-bulk-type").value || "http";
+  const prefix = byId("proxy-bulk-prefix").value || "";
+  const parsed = parseBulkProxies(raw, {
+    defaultType,
+    prefix,
+    existingNames: proxies.map((item) => item.name),
+    existingKeys: proxies.map(proxyConnectionKey).filter(Boolean),
+    limit: PROXY_BULK_LIMIT,
+  });
+  return { raw, defaultType, prefix, parsed };
+}
+
+function updateProxyBulkSummary() {
+  const summary = byId("proxy-bulk-summary");
+  const { raw, parsed } = parseProxyBulkInput();
+  if (!raw.trim()) {
+    summary.textContent = "";
+    return;
+  }
+  const template = parsed.truncated > 0
+    ? text.proxyBulkSummaryTruncated
+    : text.proxyBulkSummary;
+  summary.textContent = template
+    .replace("{ready}", String(parsed.items.length))
+    .replace("{duplicates}", String(parsed.duplicates.length))
+    .replace("{invalid}", String(parsed.invalid.length))
+    .replace("{limit}", String(PROXY_BULK_LIMIT))
+    .replace("{truncated}", String(parsed.truncated));
+}
+
+function openProxyBulkDialog() {
+  const dialog = byId("proxy-bulk-dialog");
+  if (dialog.open || proxyBulkBusy) return;
+  byId("proxy-bulk-type").value = "http";
+  byId("proxy-bulk-prefix").value = "";
+  byId("proxy-bulk-input").value = "";
+  byId("proxy-bulk-summary").textContent = "";
+  byId("proxy-bulk-submit").disabled = false;
+  byId("proxy-bulk-cancel").disabled = false;
+  byId("proxy-bulk-submit").textContent = text.proxyBulkSubmit;
+  setProxyBulkError("");
+  dialog.showModal();
+  byId("proxy-bulk-input").focus();
+}
+
+function closeProxyBulkDialog() {
+  if (proxyBulkBusy) return;
+  const dialog = byId("proxy-bulk-dialog");
+  if (dialog.open) dialog.close();
+  setProxyBulkError("");
+}
+
+async function submitProxyBulk() {
+  if (proxyBulkBusy) return;
+  const { raw, defaultType, prefix, parsed } = parseProxyBulkInput();
+  if (parsed.items.length === 0) {
+    setProxyBulkError(text.proxyBulkEmpty);
+    byId("proxy-bulk-input").focus();
+    return;
+  }
+  proxyBulkBusy = true;
+  byId("proxy-bulk-submit").disabled = true;
+  byId("proxy-bulk-cancel").disabled = true;
+  byId("proxy-bulk-submit").textContent = text.proxyBulkSubmitting;
+  setProxyBulkError("");
+  try {
+    const data = await api("api/proxies/bulk", {
+      method: "POST",
+      body: { text: raw, defaultType, prefix },
+    });
+    const created = Array.isArray(data?.created) ? data.created : [];
+    const skipped = Array.isArray(data?.skipped) ? data.skipped : [];
+    const errors = Array.isArray(data?.errors) ? data.errors : [];
+    for (const item of created) replaceProxy(item);
+    proxyBulkBusy = false;
+    closeProxyBulkDialog();
+    renderProxies();
+    toast(
+      text.proxyBulkDone
+        .replace("{created}", String(created.length))
+        .replace("{skipped}", String(skipped.length))
+        .replace("{errors}", String(errors.length)),
+    );
+  } catch (error) {
+    setProxyBulkError(apiErrorText(error));
+  } finally {
+    proxyBulkBusy = false;
+    byId("proxy-bulk-submit").disabled = false;
+    byId("proxy-bulk-cancel").disabled = false;
+    byId("proxy-bulk-submit").textContent = text.proxyBulkSubmit;
   }
 }
 
@@ -5976,6 +6557,16 @@ function accountRow(account) {
   const small = document.createElement("small");
   small.textContent = `${view.providerLabel} · ${view.key}`;
   name.append(line, small);
+  const metaParts = [
+    view.methodLabel,
+    view.email && view.email !== view.name ? view.email : "",
+  ].filter(Boolean);
+  if (metaParts.length) {
+    const metaLine = document.createElement("small");
+    metaLine.className = "account-meta-line";
+    metaLine.textContent = metaParts.join(" · ");
+    name.append(metaLine);
+  }
 
   const fingerprint = accountCell(
     "proxy-address account-fingerprint account-cell-fingerprint",
@@ -6032,6 +6623,17 @@ function accountRow(account) {
     paused: text.accountHostingPaused,
   });
   statusCell.append(hostingLine);
+  const expiry = formatExpiryBadge(view.expiresAt, Date.now(), {
+    expired: text.accountExpiryExpired,
+    soon: text.accountExpirySoon,
+    ok: text.accountExpiryDays,
+  });
+  if (expiry.state !== "none") {
+    const expiryNode = document.createElement("small");
+    expiryNode.className = `account-expiry-badge${expiry.state === "expired" ? " is-expired" : expiry.state === "soon" ? " is-soon" : ""}`;
+    expiryNode.textContent = expiry.label;
+    statusCell.append(expiryNode);
+  }
 
   const actions = accountCell("proxy-actions account-cell-actions", text.accountColActions);
   const busy = Boolean(accountCheckContext?.active);
@@ -6235,6 +6837,8 @@ function renderAccountFilterSummary() {
     statusLabels: {
       signedIn: text.accountFilterSignedIn,
       signedOut: text.accountFilterSignedOut,
+      hostingPaused: text.accountFilterHostingPaused,
+      expiringSoon: text.accountFilterExpiringSoon,
     },
   });
   const summary = byId("account-active-filters");
@@ -6268,16 +6872,26 @@ function renderAccounts() {
   const empty = byId("accounts-empty");
   const notice = byId("accounts-notice");
   renderHostingAlert();
+  const nowMs = Date.now();
   const total = accountIdentities.length;
   const signedIn = accountIdentities.filter((item) => item?.signedIn === true).length;
+  const hostingPaused = accountIdentities.filter((item) => isHostingPaused(item)).length;
+  const expiringSoon = accountIdentities.filter((item) => {
+    const state = formatExpiryBadge(accountView(item).expiresAt, nowMs).state;
+    return state === "soon" || state === "expired";
+  }).length;
   byId("account-count").textContent = String(total);
   byId("account-filter-all-count").textContent = String(total);
   byId("account-filter-signed-in-count").textContent = String(signedIn);
   byId("account-filter-signed-out-count").textContent = String(total - signedIn);
+  byId("account-filter-hosting-paused-count").textContent = String(hostingPaused);
+  byId("account-filter-expiring-soon-count").textContent = String(expiringSoon);
   for (const [id, value] of [
     ["account-filter-all", "all"],
     ["account-filter-signed-in", "signedIn"],
     ["account-filter-signed-out", "signedOut"],
+    ["account-filter-hosting-paused", "hostingPaused"],
+    ["account-filter-expiring-soon", "expiringSoon"],
   ]) {
     const chip = byId(id);
     const active = accountFilter === value;
@@ -6296,6 +6910,7 @@ function renderAccounts() {
       query: accountQuery,
       filter: accountFilter,
       provider: accountProvider,
+      nowMs,
     }),
     accountSort,
   );
@@ -6470,14 +7085,20 @@ function setDetailStatus(message) {
 function renderDetailFacts(view) {
   const facts = byId("account-detail-facts");
   facts.textContent = "";
-  for (const [label, value] of [
+  const entries = [
     [text.accountDetailProvider, view.providerLabel],
     [text.accountDetailKey, view.key],
+  ];
+  if (view.email) entries.push([text.accountDetailEmail, view.email]);
+  if (view.methodLabel) entries.push([text.accountDetailMethod, view.methodLabel]);
+  entries.push(
     [text.accountDetailFingerprint, view.fingerprint.id || text.accountFingerprintNone],
     [text.accountDetailPinnedAt, formatTime(view.fingerprint.pinnedAt)],
     [text.accountDetailLastLoginExit, formatExit(view.lastLogin, text.accountExitDirect)],
     [text.accountDetailStatus, view.signedIn ? text.accountSignedIn : text.accountSignedOut],
-  ]) {
+  );
+  if (view.expiresAt) entries.push([text.accountDetailExpiresAt, formatTime(view.expiresAt)]);
+  for (const [label, value] of entries) {
     const wrap = document.createElement("div");
     const dt = document.createElement("dt");
     dt.textContent = label;
@@ -7477,9 +8098,33 @@ for (const event of ["input", "search"]) {
     revealProviderMatches();
   });
 }
+byId("providers-category").addEventListener("change", () => {
+  providerCategory = byId("providers-category").value || "all";
+  renderProviders(providerCatalog);
+  revealProviderMatches();
+});
+byId("providers-refresh").addEventListener("click", refreshProviders);
 byId("retry").addEventListener("click", () => location.reload());
 byId("add-proxy").addEventListener("click", () => openProxyDialog());
 byId("add-proxy-empty").addEventListener("click", () => openProxyDialog());
+byId("proxies-test-all").addEventListener("click", testAllVisibleProxies);
+byId("proxies-test-cancel").addEventListener("click", cancelBulkTests);
+byId("proxies-bulk-open").addEventListener("click", openProxyBulkDialog);
+byId("proxy-bulk-close").addEventListener("click", closeProxyBulkDialog);
+byId("proxy-bulk-cancel").addEventListener("click", closeProxyBulkDialog);
+byId("proxy-bulk-submit").addEventListener("click", submitProxyBulk);
+byId("proxy-bulk-input").addEventListener("input", () => {
+  setProxyBulkError("");
+  updateProxyBulkSummary();
+});
+byId("proxy-bulk-type").addEventListener("change", updateProxyBulkSummary);
+byId("proxy-bulk-prefix").addEventListener("input", updateProxyBulkSummary);
+byId("proxy-bulk-dialog").addEventListener("close", () => {
+  setProxyBulkError("");
+});
+byId("proxy-bulk-dialog").addEventListener("cancel", (event) => {
+  if (proxyBulkBusy) event.preventDefault();
+});
 // Save is wired to a plain click, not to form submission. magpie hosts page
 // plugins in <iframe sandbox="allow-scripts"> with no allow-forms, so the
 // browser blocks form submission before a submit event can fire and a
@@ -7519,6 +8164,25 @@ byId("proxy-form").addEventListener("input", () => {
   // field reads as if the new value were already wrong.
   setFormError("");
 });
+byId("proxy-clear-password").addEventListener("change", () => {
+  const clear = byId("proxy-clear-password").checked;
+  byId("proxy-password").disabled = clear;
+  if (clear) byId("proxy-password").value = "";
+  if (dialogContext) {
+    dialogContext.lastTest = null;
+    if (dialogContext.testing) {
+      cancelDialogTest();
+      setDialogBusy(false);
+    }
+  }
+  clearTestResult();
+});
+byId("proxy-password").addEventListener("input", () => {
+  if (byId("proxy-password").value) {
+    byId("proxy-clear-password").checked = false;
+    byId("proxy-password").disabled = false;
+  }
+});
 byId("confirm-cancel").addEventListener("click", () => {
   confirmController.cancel();
   closeConfirmDialog();
@@ -7533,6 +8197,9 @@ byId("confirm-dialog").addEventListener("cancel", (event) => {
   if (deleting) event.preventDefault();
 });
 window.addEventListener("pagehide", () => {
+  bulkTestController?.abort();
+  bulkTestController = null;
+  bulkTestActive = false;
   for (const id of [...rowTests.keys()]) cancelRowTest(id);
   cancelDialogTest();
   cancelSignInProxyTests();
@@ -7553,6 +8220,24 @@ byId("filter-reset").addEventListener("click", resetProxyFilters);
 byId("proxy-test-target").addEventListener("change", () => {
   selectedTestTarget = byId("proxy-test-target").value || "";
   renderTargetNote();
+  renderProxies();
+});
+for (const event of ["input", "search"]) {
+  byId("filter-search").addEventListener(event, (nativeEvent) => {
+    proxyFilter.search = nativeEvent.target.value;
+    renderProxies();
+  });
+}
+byId("filter-status").addEventListener("change", () => {
+  proxyFilter.status = byId("filter-status").value || "all";
+  renderProxies();
+});
+byId("filter-usage").addEventListener("change", () => {
+  proxyFilter.usage = byId("filter-usage").value || "all";
+  renderProxies();
+});
+byId("proxy-sort").addEventListener("change", () => {
+  proxySort = byId("proxy-sort").value || "default";
   renderProxies();
 });
 byId("filter-latency-min").addEventListener("input", () => {
@@ -7612,6 +8297,8 @@ byId("account-sort").addEventListener("change", () => {
 byId("account-filter-all").addEventListener("click", () => setAccountFilter("all"));
 byId("account-filter-signed-in").addEventListener("click", () => setAccountFilter("signedIn"));
 byId("account-filter-signed-out").addEventListener("click", () => setAccountFilter("signedOut"));
+byId("account-filter-hosting-paused").addEventListener("click", () => setAccountFilter("hostingPaused"));
+byId("account-filter-expiring-soon").addEventListener("click", () => setAccountFilter("expiringSoon"));
 byId("account-provider-more-toggle").addEventListener("click", () => {
   setAccountProviderPanel(!accountProviderPanelOpen);
 });

@@ -88,6 +88,15 @@ const proxyTester = async (_proxy, options) => {
       checkedAt: "2026-11-08T01:00:00.000Z",
     };
   }
+  if (probeOutcome === "fatal-exit") {
+    return {
+      ok: false,
+      error: "Proxy authentication failed.",
+      errorCode: "proxy_auth",
+      latency: null,
+      checkedAt: "2026-11-08T01:00:00.000Z",
+    };
+  }
   if (probeOutcome === "exit-fail") {
     return {
       ok: false,
@@ -393,5 +402,37 @@ test("a fresh proxy keeps the exit IP when only the provider leg fails", async (
   // still worth keeping, even though the provider leg is the one that failed.
   expect(response.data.proxy.exitIp).toBe("203.0.113.20");
   expect(response.data.proxy.region).toBe("Proxyland");
+  probeOutcome = "ok";
+});
+
+test("a fatal exit-leg error short-circuits the provider probe", async () => {
+  calls = [];
+  probeOutcome = "fatal-exit";
+  const created = await newProxy();
+  const response = await post(`/api/proxies/${encodeURIComponent(created.id)}/test`, {
+    provider: "qoder-cn",
+  });
+  expect(response.status).toBe(200);
+  expect(response.data.ok).toBe(false);
+  expect(response.data.result.errorCode).toBe("proxy_auth");
+  expect(calls.map((call) => call.endpoint)).toEqual(["https://ipinfo.io/json"]);
+  probeOutcome = "ok";
+});
+
+test("a failed provider leg keeps exitStatus ok and records failure in probeByProvider", async () => {
+  calls = [];
+  probeOutcome = "fail";
+  const created = await newProxy();
+  const response = await post(`/api/proxies/${encodeURIComponent(created.id)}/test`, {
+    provider: "qoder-cn",
+  });
+  expect(response.status).toBe(200);
+  expect(response.data.ok).toBe(false);
+  expect(response.data.proxy.exitStatus).toBe("ok");
+  expect(response.data.proxy.probeByProvider["qoder-cn"]).toMatchObject({
+    ok: false,
+    ms: null,
+    errorCode: "proxy_tunnel",
+  });
   probeOutcome = "ok";
 });

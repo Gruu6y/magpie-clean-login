@@ -220,3 +220,17 @@ test("the sign-in dialog probes each candidate proxy and cancels probes on clean
   expect(app).toContain("api(`api/proxies/${encodeURIComponent(proxy.id)}/test`");
   expect(app).toContain("cancelSignInProxyTests();");
 });
+
+test("orderSignInProxies demotes error proxies below used nodes and formatSignInProxyOption appends score when finite", () => {
+  const candidates = [
+    { id: "bad-static", name: "R1-1|静态", status: "error", host: "127.0.0.1", port: 1 },
+    { id: "used-ok", name: "R2-1|标准", status: "ok", host: "127.0.0.1", port: 2 },
+    { id: "good-home", name: "R3-1|家宽", status: "ok", host: "127.0.0.1", port: 3 },
+  ];
+  const ordered = orderSignInProxies(candidates, [account("zcode", login("used-ok", "R2-1|标准"))], "zcode");
+  expect(ordered.map((item) => item.id)).toEqual(["good-home", "used-ok", "bad-static"]);
+
+  expect(
+    formatSignInProxyOption({ id: "p1", name: "HK", host: "127.0.0.1", port: 7890, status: "ok", latency: 41, score: 88.4 }, { statusOk: "Available" }),
+  ).toBe("HK · 127.0.0.1:7890 · 41 ms · 88");
+});

@@ -87,13 +87,42 @@ export function distinctKeywords(proxies = [], keywords = KEYWORD_TAGS) {
 
 export function filterProxies(
   proxies = [],
-  { regions = [], keywords = [], minLatency = null, maxLatency = null, latencyOf = null } = {},
+  {
+    regions = [],
+    keywords = [],
+    minLatency = null,
+    maxLatency = null,
+    latencyOf = null,
+    search = "",
+    status = "all",
+    usage = "all",
+    usedIds = null,
+    statusOf = null,
+  } = {},
 ) {
   const selected = selectionOf(regions);
   const chosen = selectionOf(keywords);
   const min = latencyBound(minLatency);
   const max = latencyBound(maxLatency);
   const latencyFilter = min !== null || max !== null;
+  const searchWords =
+    typeof search === "string"
+      ? search
+          .trim()
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean)
+      : [];
+  const wantedStatus =
+    status === "ok" || status === "error" || status === "untested" ? status : "all";
+  const wantedUsage = usage === "used" || usage === "unused" ? usage : "all";
+  const usedSet =
+    usedIds instanceof Set
+      ? usedIds
+      : Array.isArray(usedIds)
+        ? new Set(usedIds)
+        : EMPTY_SELECTION;
+
   return (Array.isArray(proxies) ? proxies : []).filter((proxy) => {
     if (!proxy) return false;
     if (selected.size > 0 && !selected.has(regionKey(proxy))) return false;
@@ -101,6 +130,30 @@ export function filterProxies(
     // other filters, mirroring the regions.
     if (chosen.size > 0 && ![...chosen].some((keyword) => hasKeyword(proxy, keyword))) {
       return false;
+    }
+    if (wantedStatus !== "all") {
+      const actualStatus =
+        typeof statusOf === "function" ? statusOf(proxy) : proxy.status || "untested";
+      if (actualStatus !== wantedStatus) return false;
+    }
+    if (wantedUsage !== "all") {
+      const isUsed = Boolean(proxy.id && usedSet.has(proxy.id));
+      if (wantedUsage === "used" && !isUsed) return false;
+      if (wantedUsage === "unused" && isUsed) return false;
+    }
+    if (searchWords.length > 0) {
+      const haystack = [
+        proxy.name,
+        proxy.host,
+        proxy.port != null ? String(proxy.port) : "",
+        proxy.region,
+        proxy.exitIp,
+        proxy.type,
+      ]
+        .filter((part) => typeof part === "string" && part)
+        .join(" ")
+        .toLowerCase();
+      if (!searchWords.every((word) => haystack.includes(word))) return false;
     }
     if (latencyFilter) {
       // A selected probe target can supply its own latency. Without one this is
@@ -113,5 +166,61 @@ export function filterProxies(
       if (max !== null && latency > max) return false;
     }
     return true;
+  });
+}
+
+const proxySortCollator = new Intl.Collator("zh-Hans", {
+  numeric: true,
+  sensitivity: "base",
+});
+
+function usageCountFor(proxy, usageCounts) {
+  if (!usageCounts || !proxy?.id) return 0;
+  const raw =
+    typeof usageCounts.get === "function" ? usageCounts.get(proxy.id) : usageCounts[proxy.id];
+  return typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+export function sortProxies(
+  proxies = [],
+  sort = "default",
+  { latencyOf = null, usageCounts = null } = {},
+) {
+  const list = Array.isArray(proxies) ? [...proxies] : [];
+  if (!sort || sort === "default") return list;
+
+  return list.sort((a, b) => {
+    const aName = proxyName(a) || String(a?.id ?? "");
+    const bName = proxyName(b) || String(b?.id ?? "");
+
+    if (sort === "name") {
+      return proxySortCollator.compare(aName, bName);
+    }
+
+    if (sort === "latency") {
+      const aLat = typeof latencyOf === "function" ? latencyOf(a) : a?.latency;
+      const bLat = typeof latencyOf === "function" ? latencyOf(b) : b?.latency;
+      const aValid = typeof aLat === "number" && Number.isFinite(aLat);
+      const bValid = typeof bLat === "number" && Number.isFinite(bLat);
+      if (aValid && bValid && aLat !== bLat) return aLat - bLat;
+      if (aValid !== bValid) return aValid ? -1 : 1;
+      return proxySortCollator.compare(aName, bName);
+    }
+
+    if (sort === "score") {
+      const aScore = typeof a?.score === "number" && Number.isFinite(a.score) ? a.score : null;
+      const bScore = typeof b?.score === "number" && Number.isFinite(b.score) ? b.score : null;
+      if (aScore !== null && bScore !== null && aScore !== bScore) return bScore - aScore;
+      if ((aScore !== null) !== (bScore !== null)) return aScore !== null ? -1 : 1;
+      return proxySortCollator.compare(aName, bName);
+    }
+
+    if (sort === "usage") {
+      const diff = usageCountFor(b, usageCounts) - usageCountFor(a, usageCounts);
+      if (diff !== 0) return diff;
+      return proxySortCollator.compare(aName, bName);
+    }
+
+    return 0;
   });
 }

@@ -320,3 +320,14 @@ test("agentDigest assembles counts, job states and the command catalog", () => {
   expect(digest.state.accounts).toHaveLength(2);
   expect(Object.isFrozen(AGENT_COMMANDS)).toBe(true);
 });
+
+test("AGENT_COMMANDS advertises proxies import and proxy test --provider", () => {
+  const bulkCmd = AGENT_COMMANDS.find((entry) => entry.command === "proxies import");
+  expect(bulkCmd).toMatchObject({
+    command: "proxies import",
+    http: "POST /api/proxies/bulk",
+  });
+  expect(bulkCmd.args).toContain("--file");
+  const testCmd = AGENT_COMMANDS.find((entry) => entry.command === "proxy test");
+  expect(testCmd.args).toContain("--provider");
+});

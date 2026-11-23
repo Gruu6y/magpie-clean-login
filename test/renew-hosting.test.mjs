@@ -856,3 +856,97 @@ test("a successful renewal learns the lifetime for the next schedule", async () 
     cleanup(ctx);
   }
 });
+
+test("eligibility refuses built-in native accounts with not_hostable", async () => {
+  const ctx = await setup({
+    signedIn: false,
+    readNativeKeys: () => new Set([KEY]),
+  });
+  try {
+    await expect(ctx.hosting.enable(PROVIDER, KEY)).rejects.toMatchObject({
+      code: "not_hostable",
+      status: 409,
+    });
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("concurrent runNow calls only start one renewal and reject the second with busy", async () => {
+  let state = "idle";
+  let resolveSignIn;
+  let markStarted;
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const ctx = await setup({
+    signIn: {
+      calls: [],
+      status: () => ({ state }),
+      startSignIn(input) {
+        this.calls.push(input);
+        state = "waiting-login";
+        markStarted();
+        return new Promise((resolve) => {
+          resolveSignIn = () => {
+            state = "done";
+            resolve();
+          };
+        });
+      },
+      whenSettled: () => Promise.resolve(),
+      cancel: async () => {
+        state = "cancelled";
+      },
+    },
+  });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    const first = ctx.hosting.runNow(PROVIDER, KEY);
+    const second = ctx.hosting.runNow(PROVIDER, KEY);
+    const settled = Promise.allSettled([first, second]);
+    await started;
+    resolveSignIn?.();
+    const [r1, r2] = await settled;
+    expect(r1.status).toBe("fulfilled");
+    expect(r2.status).toBe("rejected");
+    expect(r2.reason).toMatchObject({ code: "busy", status: 409 });
+    expect(ctx.signIn.calls).toHaveLength(1);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("tick automatically pauses enabled hosting when the account is no longer signed in", async () => {
+  let signedIn = true;
+  const ctx = await setup({
+    expiresAt: BASE - 1000,
+    readKeys: () => new Set(signedIn ? [KEY] : []),
+    readExpiries: () => (signedIn ? { [KEY]: BASE - 1000 } : {}),
+  });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    signedIn = false;
+    const result = await ctx.hosting.tick();
+    expect(result).toEqual({ ran: false });
+    const view = await ctx.hosting.viewOf(PROVIDER, KEY);
+    expect(view.enabled).toBe(false);
+    expect(view.state).toBe("paused");
+    expect(view.pausedReason).toBe("signed_out");
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("removeAccount deletes the persisted hosting policy cleanly", async () => {
+  const ctx = await setup();
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    expect((await ctx.hosting.viewOf(PROVIDER, KEY)).enabled).toBe(true);
+    const removed = await ctx.hosting.removeAccount(PROVIDER, KEY);
+    expect(removed).toEqual({ removed: true });
+    expect((await ctx.hosting.viewOf(PROVIDER, KEY)).enabled).toBe(false);
+  } finally {
+    cleanup(ctx);
+  }
+});

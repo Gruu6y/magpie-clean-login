@@ -34,8 +34,19 @@ export function accountView(account) {
     ? value.lastCheck
     : checks[0] || null;
   const note = typeof value.note === "string" ? value.note : "";
+  const email = typeof value.email === "string" ? value.email.trim() : "";
+  const methodLabel = typeof value.methodLabel === "string" ? value.methodLabel.trim() : "";
   const unverified = Boolean(value.unverified);
   const hosting = normalizeHosting(value.hosting);
+  const rawExpiry = value.expiresAt ?? hosting.expiresAt;
+  const expiresAt = (() => {
+    if (typeof rawExpiry === "string" && rawExpiry.trim()) return rawExpiry.trim();
+    if (typeof rawExpiry === "number" && Number.isFinite(rawExpiry) && rawExpiry > 0) {
+      const date = new Date(rawExpiry);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+    return null;
+  })();
 
   return {
     name,
@@ -43,9 +54,12 @@ export function accountView(account) {
     providerLabel,
     key,
     uid,
+    email,
+    methodLabel,
     fingerprint,
     signedIn,
     signedInAt,
+    expiresAt,
     lastLogin,
     exit,
     lastCheck,
@@ -173,7 +187,68 @@ export function formatCheckSummary(check, labels = {}) {
   return lines;
 }
 
-export function filterAccounts(accounts, { query = "", filter = "all", provider = ALL_PROVIDERS } = {}) {
+export const EXPIRING_SOON_MS = 24 * 60 * 60 * 1000;
+
+export function isHostingPaused(account) {
+  return accountView(account).hosting.state === "paused";
+}
+
+export function formatExpiryBadge(expiresAt, nowMs = Date.now(), labels = {}) {
+  const expiryMs =
+    typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > 0
+      ? expiresAt
+      : typeof expiresAt === "string" && expiresAt.trim()
+        ? Date.parse(expiresAt.trim())
+        : NaN;
+  if (!Number.isFinite(expiryMs) || expiryMs <= 0) {
+    return { state: "none", label: "", tone: "none" };
+  }
+  const diff = expiryMs - nowMs;
+  if (diff <= 0) {
+    return {
+      state: "expired",
+      label: labels.expired || "已过期",
+      tone: "bad",
+    };
+  }
+  if (diff <= EXPIRING_SOON_MS) {
+    const hours = Math.max(1, Math.ceil(diff / 3_600_000));
+    const template = labels.soon || "{hours} 小时后到期";
+    return {
+      state: "soon",
+      label: template.replace("{hours}", String(hours)),
+      tone: "warn",
+    };
+  }
+  const days = Math.max(1, Math.floor(diff / 86_400_000));
+  const template = labels.ok || "{days} 天后到期";
+  return {
+    state: "ok",
+    label: template.replace("{days}", String(days)),
+    tone: "good",
+  };
+}
+
+export function countAccountsByProxy(accounts = []) {
+  const counts = {};
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    if (!account || typeof account !== "object") continue;
+    const current = account.exit && typeof account.exit === "object"
+      ? account.exit
+      : account.lastLogin && typeof account.lastLogin === "object"
+        ? account.lastLogin
+        : null;
+    const proxyId = typeof current?.proxyId === "string" ? current.proxyId.trim() : "";
+    if (!proxyId) continue;
+    counts[proxyId] = (counts[proxyId] || 0) + 1;
+  }
+  return counts;
+}
+
+export function filterAccounts(
+  accounts,
+  { query = "", filter = "all", provider = ALL_PROVIDERS, nowMs = Date.now() } = {},
+) {
   const list = Array.isArray(accounts) ? accounts : [];
   const normalizedQuery = typeof query === "string" ? query.trim().toLowerCase() : "";
 
@@ -181,6 +256,12 @@ export function filterAccounts(accounts, { query = "", filter = "all", provider 
     const view = accountView(account);
     if (filter === "signedIn" && !view.signedIn) return false;
     if (filter === "signedOut" && view.signedIn) return false;
+    if (filter === "hostingPaused" && view.hosting.state !== "paused") return false;
+    if (filter === "hostingActive" && !view.hosting.enabled) return false;
+    if (filter === "expiringSoon") {
+      const expiry = formatExpiryBadge(view.expiresAt, nowMs);
+      if (expiry.state !== "soon" && expiry.state !== "expired") return false;
+    }
     if (provider !== ALL_PROVIDERS) {
       const accountProvider = typeof view.provider === "string" ? view.provider.trim() : "";
       if (provider === UNKNOWN_PROVIDER) {
@@ -196,11 +277,12 @@ export function filterAccounts(accounts, { query = "", filter = "all", provider 
       view.name,
       view.key,
       view.uid,
+      view.email,
       view.provider,
       view.providerLabel,
       view.note,
       view.fingerprint.id,
-      formatExit(view.lastLogin, ""),
+      formatExit(view.exit ?? view.lastLogin, ""),
     ]
       .filter(Boolean)
       .join(" ")

@@ -89,6 +89,14 @@ export function providerLatency(proxy, provider) {
   return measured;
 }
 
+export function genericProxyView(proxy) {
+  if (!proxy || typeof proxy !== "object") return proxy;
+  if (proxy.exitStatus === "ok" && proxy.status === "error") {
+    return { ...proxy, status: "ok", error: "", errorCode: "" };
+  }
+  return proxy;
+}
+
 // The row and the sign-in dropdown render through statusView(), which reads
 // `proxy.latency`. Decorating a shallow copy means the stored record keeps its
 // generic measurement while the chosen target sees its own number. With a
@@ -99,17 +107,49 @@ export function proxyForTarget(proxy, provider, catalogue) {
   const target = findTarget(catalogue, provider);
   if (!target) return proxy;
   const measured = providerLatency(proxy, provider);
-  return {
+  const probe =
+    proxy.probeByProvider &&
+    typeof proxy.probeByProvider === "object" &&
+    !Array.isArray(proxy.probeByProvider)
+      ? (proxy.probeByProvider[provider] ?? null)
+      : null;
+
+  const decorated = {
     ...proxy,
     latency: measured ? measured.ms : null,
     latencyTarget: {
       id: target.id,
       name: target.name,
-      host: measured?.host || target.host,
-      at: measured?.at || "",
-      ...(measured?.handshake ? { handshake: true } : {}),
+      host: measured?.host || probe?.host || target.host,
+      at: measured?.at || probe?.at || "",
+      ...(measured?.handshake || probe?.handshake ? { handshake: true } : {}),
     },
   };
+
+  if (probe && probe.ok === false) {
+    decorated.status = "error";
+    decorated.error = short(probe.error, 240);
+    decorated.errorCode = short(probe.errorCode, 48);
+    decorated.latency = null;
+    decorated.targetProbe = probe;
+  } else if (probe && probe.ok === true) {
+    decorated.status = "ok";
+    decorated.error = "";
+    decorated.errorCode = "";
+    decorated.latency = measured
+      ? measured.ms
+      : typeof probe.ms === "number" && Number.isFinite(probe.ms)
+        ? Math.round(probe.ms)
+        : null;
+    decorated.targetProbe = probe;
+  } else if (!probe && !measured && proxy.exitStatus === "ok" && proxy.status === "error") {
+    decorated.status = "untested";
+    decorated.error = "";
+    decorated.errorCode = "";
+    decorated.latency = null;
+  }
+
+  return decorated;
 }
 
 export function targetStatusSuffix(proxy) {

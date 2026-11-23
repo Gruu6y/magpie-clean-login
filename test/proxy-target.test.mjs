@@ -17,6 +17,7 @@ import {
   EMPTY_TARGETS,
   GENERIC_TARGET_ID,
   findTarget,
+  genericProxyView,
   latencyMarker,
   normalizeProxyTargets,
   providerLatency,
@@ -326,4 +327,41 @@ test("the stored latency map is bounded and survives a public projection", () =>
   expect(publicRow.latency).toBe(41);
   expect(publicRow.latencyByProvider).toEqual(entries);
   expect(JSON.stringify(publicRow)).not.toContain("password");
+});
+
+test("genericProxyView and proxyForTarget isolate per-provider probe failures from healthy exit status", () => {
+  const mixed = {
+    id: "p1",
+    status: "error",
+    exitStatus: "ok",
+    latency: 40,
+    error: "Provider blocked",
+    errorCode: "proxy_tunnel",
+    probeByProvider: {
+      "qoder-cn": { ok: false, ms: null, host: "gateway.qoder.com.cn", error: "Provider blocked", errorCode: "proxy_tunnel" },
+      qoder: { ok: true, ms: 95, host: "api3.qoder.sh" },
+    },
+  };
+
+  const generic = genericProxyView(mixed);
+  expect(generic.status).toBe("ok");
+  expect(generic.error).toBe("");
+  expect(generic.latency).toBe(40);
+
+  const failedProvider = proxyForTarget(mixed, "qoder-cn", CATALOGUE);
+  expect(failedProvider.status).toBe("error");
+  expect(failedProvider.errorCode).toBe("proxy_tunnel");
+  expect(failedProvider.targetProbe?.ok).toBe(false);
+
+  const okProvider = proxyForTarget(mixed, "qoder", CATALOGUE);
+  expect(okProvider.status).toBe("ok");
+  expect(okProvider.latency).toBe(95);
+  expect(okProvider.error).toBe("");
+
+  const untestedCatalogue = normalizeProxyTargets({
+    targets: [{ id: "codex", name: "Codex", host: "api.openai.com", url: "https://api.openai.com/" }],
+  });
+  const untestedProvider = proxyForTarget(mixed, "codex", untestedCatalogue);
+  expect(untestedProvider.status).toBe("untested");
+  expect(untestedProvider.error).toBe("");
 });

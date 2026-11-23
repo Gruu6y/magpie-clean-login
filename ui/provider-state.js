@@ -258,3 +258,25 @@ export function filterProviders(items, query, lang = "en") {
   if (words.length === 0) return list;
   return list.filter((provider) => providerMatchesQuery(provider, query, lang));
 }
+
+export function countAccountsByProvider(accounts = []) {
+  const counts = {};
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    if (!account || typeof account !== "object") continue;
+    const provider = typeof account.provider === "string" ? account.provider.trim() : "";
+    if (!provider) continue;
+    counts[provider] = (counts[provider] || 0) + 1;
+  }
+  return counts;
+}
+
+export function filterProvidersByCategory(items = [], category = "all", accountCounts = {}) {
+  const list = Array.isArray(items) ? items : [];
+  if (!category || category === "all") return list;
+  if (category === "signable") return list.filter((item) => providerCanSignIn(item));
+  if (category === "hasAccounts") {
+    return list.filter((item) => item && accountCountOf(accountCounts, item.id) > 0);
+  }
+  if (category === "catalog") return list.filter((item) => item?.presence === "catalog");
+  return list;
+}
