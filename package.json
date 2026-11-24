@@ -47,7 +47,7 @@
     "playwright-core": "1.62.0"
   },
   "magpie": {
-    "icon": "https://raw.githubusercontent.com/Gruu6y/magpie-clean-login/main/assets/icon.svg",
+    "icon": "https://raw.githubusercontent.com/Gruu6y/magpie-clean-login/main/assets/icon.svg?v=eb8489f5",
     "page": {
       "title": "Clean Login",
       "titles": {
