@@ -1154,3 +1154,30 @@ test("SOCKS5 proxy exposes a credential-free egressWarning and write-back stores
   const meta = await readAccountMeta(accountDir(env, "workbuddy", "workbuddy"));
   expect(meta.email).toBe("user@workbuddy.example");
 });
+
+test("a silent hosted renewal skips syncAccountProxy so inherit exits in providers.json are not pinned", async () => {
+  let syncCalls = 0;
+  const { controller } = await harness({
+    methods: [browserMethod({ callback: async () => success({ uid: "u-silent", accountId: "me" }) })],
+    syncAccountProxy: async () => {
+      syncCalls += 1;
+      return { ok: true, changed: ["me"] };
+    },
+  });
+  await controller.startSignIn({
+    provider: "workbuddy",
+    silent: true,
+    proxy: { type: "http", host: "198.51.100.30", port: 3128 },
+    proxyMeta: { id: null, name: "", region: "", type: "http" },
+  });
+  await controller.whenSettled();
+  const flow = controller.status();
+  expect(flow.state).toBe("done");
+  expect(syncCalls).toBe(0);
+  expect(flow.proxySync).toEqual({
+    ok: true,
+    reason: "skipped_silent",
+    changed: 0,
+    registration: null,
+  });
+});

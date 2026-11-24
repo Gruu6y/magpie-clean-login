@@ -724,7 +724,188 @@ describe("account exit routes", () => {
     const afterInherit = (await (await api("GET", "/api/accounts")).json()).accounts.find(
       (a) => a.key === "workbuddy#alpha",
     );
-    expect(afterInherit.exit).toBeNull();
+    // providers.json is SSOT: inherit projects the provider-level proxy
+    // (redacted) so the list does not fall back to stale historicLogin and
+    // never leaks credentials from workbuddy.proxy.
+    expect(afterInherit.exit).toEqual({
+      at: null,
+      proxyId: null,
+      proxyName: "",
+      region: "",
+      type: "http",
+      mode: "inherit",
+      custom: true,
+      displayUrl: providerProxyDisplay,
+    });
+    expect(JSON.stringify(afterInherit)).not.toContain("puser");
+    expect(JSON.stringify(afterInherit)).not.toContain("ppass");
+  });
+
+  test("magpie-side edits to providers.json override stale ledger meta.exit across accounts, exit, and agent routes without leaking credentials", async () => {
+    // Create a second stored proxy so we can switch between two stored nodes.
+    const secondRes = await fetch(`http://127.0.0.1:${service.port}/api/proxies`, {
+      method: "POST",
+      headers: { [TOKEN_HEADER]: token, "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Exit B",
+        region: "SG",
+        type: "http",
+        host: "198.51.100.8",
+        port: 8081,
+        username: "userB",
+        password: "secretBPassword",
+      }),
+    });
+    expect(secondRes.status).toBe(201);
+    const proxyBId = (await secondRes.json()).proxy.id;
+    const proxyBUrl = "http://userB:secretBPassword@198.51.100.8:8081";
+
+    // First populate ledger meta.exit via clean-login PATCH /exit (pointing at Exit A).
+    const initial = await patchExit(alphaPath, { mode: "custom", proxyId });
+    expect(initial.status).toBe(200);
+    expect((await readAccountMeta(alphaDir)).exit?.proxyId).toBe(proxyId);
+
+    const mutateProviders = async (mutator) => {
+      const doc = await readProviders();
+      mutator(workbuddyEntry(doc));
+      await writeFile(providersPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+    };
+
+    try {
+      // 1. User switches account in magpie to Exit B -> stale meta.exit (Exit A) must NOT mask it.
+      await mutateProviders((wb) => {
+        wb.accountProxies = { ...(wb.accountProxies ?? {}), "alpha@example.com": proxyBUrl };
+      });
+      const accountsB = await (await api("GET", "/api/accounts")).json();
+      const rowB = accountsB.accounts.find((a) => a.key === "workbuddy#alpha");
+      expect(rowB.exit).toEqual({
+        at: null,
+        proxyId: proxyBId,
+        proxyName: "Exit B",
+        region: "",
+        type: "http",
+      });
+      const exitB = await (await api("GET", alphaPath)).json();
+      expect(exitB.exit.mode).toBe("custom");
+      expect(exitB.exit.proxyId).toBe(proxyBId);
+      const agentB = await (await api("GET", "/api/agent")).json();
+      const agentRowB = agentB.state.accounts.find((a) => a.key === "workbuddy#alpha");
+      expect(agentRowB.exit).toEqual({
+        mode: "custom",
+        proxyId: proxyBId,
+        proxyName: "Exit B",
+        region: "",
+        type: "http",
+      });
+      for (const payload of [accountsB, exitB, agentB]) {
+        const serialized = JSON.stringify(payload);
+        expect(serialized).not.toContain("userB");
+        expect(serialized).not.toContain("secretBPassword");
+        expect(serialized).not.toContain(proxyBUrl);
+      }
+
+      // 2. User switches account in magpie to an external URL not in proxies.json ->
+      //    MUST project as custom exit + redacted displayUrl, NEVER as Direct, and NEVER leak credentials.
+      const extUrl = "socks5://extUserName:extSuperSecret@203.0.113.44:1080";
+      await mutateProviders((wb) => {
+        wb.accountProxies["alpha@example.com"] = extUrl;
+      });
+      const accountsExt = await (await api("GET", "/api/accounts")).json();
+      const rowExt = accountsExt.accounts.find((a) => a.key === "workbuddy#alpha");
+      expect(rowExt.exit).toEqual({
+        at: null,
+        proxyId: null,
+        proxyName: "",
+        region: "",
+        type: "socks5",
+        custom: true,
+        displayUrl: "socks5://203.0.113.44:1080",
+      });
+      const exitExt = await (await api("GET", alphaPath)).json();
+      expect(exitExt.exit).toMatchObject({
+        ok: true,
+        mode: "custom",
+        proxyId: null,
+        displayUrl: "socks5://203.0.113.44:1080",
+      });
+      const agentExt = await (await api("GET", "/api/agent")).json();
+      const agentRowExt = agentExt.state.accounts.find((a) => a.key === "workbuddy#alpha");
+      expect(agentRowExt.exit).toEqual({
+        mode: "custom",
+        proxyId: null,
+        proxyName: "",
+        region: "",
+        type: "socks5",
+        custom: true,
+        displayUrl: "socks5://203.0.113.44:1080",
+      });
+      for (const payload of [accountsExt, exitExt, agentExt]) {
+        const serialized = JSON.stringify(payload);
+        expect(serialized).not.toContain("extUserName");
+        expect(serialized).not.toContain("extSuperSecret");
+        expect(serialized).not.toContain(extUrl);
+      }
+
+      // 3. User switches account in magpie to "direct" -> immediately releases stored proxy.
+      await mutateProviders((wb) => {
+        wb.accountProxies["alpha@example.com"] = "direct";
+      });
+      const rowDirect = (await (await api("GET", "/api/accounts")).json()).accounts.find(
+        (a) => a.key === "workbuddy#alpha",
+      );
+      expect(rowDirect.exit).toEqual({
+        at: null,
+        proxyId: null,
+        proxyName: "",
+        region: "",
+        type: null,
+      });
+
+      // 4. User switches account in magpie to inherit (deletes key) with provider.proxy ->
+      //    projects inherit with redacted providerProxyDisplay, zero credentials.
+      await mutateProviders((wb) => {
+        delete wb.accountProxies["alpha@example.com"];
+      });
+      const accountsInherit = await (await api("GET", "/api/accounts")).json();
+      const rowInherit = accountsInherit.accounts.find((a) => a.key === "workbuddy#alpha");
+      expect(rowInherit.exit).toEqual({
+        at: null,
+        proxyId: null,
+        proxyName: "",
+        region: "",
+        type: "http",
+        mode: "inherit",
+        custom: true,
+        displayUrl: providerProxyDisplay,
+      });
+      expect(JSON.stringify(accountsInherit)).not.toContain("puser");
+      expect(JSON.stringify(accountsInherit)).not.toContain("ppass");
+
+      // 5. Provider proxy cleared -> inherit resolves to direct (proxyId: null) and still overrides stale meta.exit.
+      await mutateProviders((wb) => {
+        wb.proxy = "";
+      });
+      const rowInheritDirect = (await (await api("GET", "/api/accounts")).json()).accounts.find(
+        (a) => a.key === "workbuddy#alpha",
+      );
+      expect(rowInheritDirect.exit).toEqual({
+        at: null,
+        proxyId: null,
+        proxyName: "",
+        region: "",
+        type: null,
+        mode: "inherit",
+      });
+    } finally {
+      await mutateProviders((wb) => {
+        wb.proxy = providerProxy;
+        delete wb.accountProxies?.["alpha@example.com"];
+      });
+      await fetch(`http://127.0.0.1:${service.port}/api/proxies/${proxyBId}`, {
+        method: "DELETE",
+        headers: { [TOKEN_HEADER]: token },
+      });
+    }
   });
 
   test("GET /api/accounts projects a providers.json custom exit when the ledger has no exit", async () => {

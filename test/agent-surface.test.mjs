@@ -276,6 +276,69 @@ test("compactAccount drops paths, fingerprints and history arrays", () => {
   expect(JSON.stringify(compact)).not.toContain("secret");
 });
 
+test("compactAccount projects live exit without leaking credentials", () => {
+  const external = compactAccount({
+    provider: "workbuddy",
+    key: "wb-1",
+    signedIn: true,
+    exit: {
+      at: null,
+      proxyId: null,
+      proxyName: "",
+      region: "",
+      type: "socks5",
+      custom: true,
+      // Even if a raw credential URL were ever passed in, compactExit redacts it.
+      displayUrl: "socks5://leakedUser:leakedPass@203.0.113.5:1080",
+    },
+  });
+  expect(external.exit).toEqual({
+    mode: "custom",
+    proxyId: null,
+    proxyName: "",
+    region: "",
+    type: "socks5",
+    custom: true,
+    displayUrl: "socks5://203.0.113.5:1080",
+  });
+  expect(JSON.stringify(external)).not.toContain("leakedUser");
+  expect(JSON.stringify(external)).not.toContain("leakedPass");
+
+  const inherited = compactAccount({
+    provider: "workbuddy",
+    key: "wb-2",
+    exit: {
+      mode: "inherit",
+      proxyId: "px-1",
+      proxyName: "HK-1",
+      region: "HK",
+      type: "http",
+      displayUrl: "http://127.0.0.1:7890",
+    },
+  });
+  expect(inherited.exit).toEqual({
+    mode: "inherit",
+    proxyId: "px-1",
+    proxyName: "HK-1",
+    region: "HK",
+    type: "http",
+    displayUrl: "http://127.0.0.1:7890",
+  });
+
+  const direct = compactAccount({
+    provider: "workbuddy",
+    key: "wb-3",
+    exit: { proxyId: null, proxyName: "", region: "", type: null },
+  });
+  expect(direct.exit).toEqual({
+    mode: "direct",
+    proxyId: null,
+    proxyName: "",
+    region: "",
+    type: null,
+  });
+});
+
 test("agentDigest assembles counts, job states and the command catalog", () => {
   const digest = agentDigest({
     version: "0.1.40",

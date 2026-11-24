@@ -11,6 +11,8 @@ import {
   backfillAccountProxies,
   clearAccountProxy,
   createAccountProxySync,
+  exitDisplayUrl,
+  parseProxyUrl,
   providersFile,
   proxyUrlFor,
   readAccountExit,
@@ -19,6 +21,15 @@ import {
   writeAccountExit,
   writeAccountProxies,
 } from "../lib/account-proxies.mjs";
+import {
+  accountExitProjection,
+  buildProxyUrlMap,
+  publicAccountExit,
+  resolveAccountProxyName,
+  resolveEffectiveAccountExit,
+} from "../lib/account-exit.mjs";
+import { toPlaywrightProxy } from "../lib/browser-launcher.mjs";
+import { signInProxyUrl } from "../lib/signin-egress.mjs";
 import { writeAccountMeta } from "../lib/account-identity.mjs";
 import { createProxyStore } from "../lib/proxies.mjs";
 
@@ -737,4 +748,475 @@ test("syncSignInProxy sets direct when an account previously had an exit, while 
   expect((await readAccountExit({ env, provider: "minimax-code", accountId: "UserA" })).mode).toBe(
     "inherit",
   );
+});
+
+test("parseProxyUrl handles http/https/socks5/socks4, encoded credentials, IPv6, defaults and rejects invalid input", () => {
+  const httpsProxy = parseProxyUrl("https://u%20ser:p%40ss%3Aword@exit.proxy.test:8443");
+  expect(httpsProxy).toEqual({
+    type: "https",
+    host: "exit.proxy.test",
+    port: 8443,
+    username: "u ser",
+    password: "p@ss:word",
+    server: "https://exit.proxy.test:8443",
+  });
+  // `server` must never include credentials; Playwright receives username/password separately.
+  expect(httpsProxy.server).not.toContain("u ser");
+  expect(httpsProxy.server).not.toContain("p@ss");
+  expect(toPlaywrightProxy(httpsProxy)).toEqual({
+    server: "https://exit.proxy.test:8443",
+    username: "u ser",
+    password: "p@ss:word",
+  });
+  expect(signInProxyUrl(httpsProxy)).toBe("https://u%20ser:p%40ss%3Aword@exit.proxy.test:8443");
+
+  const ipv6Socks5 = parseProxyUrl("socks5://[::1]:1080");
+  expect(ipv6Socks5).toEqual({
+    type: "socks5",
+    host: "::1",
+    port: 1080,
+    username: "",
+    password: "",
+    server: "socks5://[::1]:1080",
+  });
+  expect(toPlaywrightProxy(ipv6Socks5)).toEqual({ server: "socks5://[::1]:1080" });
+
+  expect(parseProxyUrl("socks4://127.0.0.1:1081")).toEqual({
+    type: "socks4",
+    host: "127.0.0.1",
+    port: 1081,
+    username: "",
+    password: "",
+    server: "socks4://127.0.0.1:1081",
+  });
+  // Default ports for http/https are preserved even when URL drops :80 / :443.
+  expect(parseProxyUrl("http://proxy.example:80")?.port).toBe(80);
+  expect(parseProxyUrl("https://proxy.example")?.port).toBe(443);
+
+  // Invalid inputs return null rather than throwing or guessing.
+  for (const bad of [
+    null,
+    undefined,
+    "",
+    "   ",
+    "direct",
+    "not-a-url",
+    "ftp://127.0.0.1:21",
+    "socks5://127.0.0.1",
+    "http://127.0.0.1:0",
+    "http://127.0.0.1:99999",
+    "http://127.0.0.1:8080/path",
+    "http://127.0.0.1:8080?q=1",
+  ]) {
+    expect(parseProxyUrl(bad)).toBeNull();
+  }
+  expect(exitDisplayUrl("http://user:s3cr3t@198.51.100.7:8080")).toBe("http://198.51.100.7:8080");
+  expect(exitDisplayUrl("direct")).toBeNull();
+});
+
+test("backfillAccountProxies does not rebound after user switches account back to inherit in magpie", async () => {
+  const root = await tempDir();
+  const cfg = join(root, "config");
+  const data = join(root, "data");
+  await mkdir(cfg, { recursive: true });
+  await mkdir(data, { recursive: true });
+  await seedProvidersJson(cfg);
+  const env = { MAGPIE_CONFIG_DIR: cfg, MAGPIE_CLEAN_LOGIN_DATA: data };
+
+  const store = createProxyStore({ dataDir: data });
+  const p1 = await store.create({ name: "Node1", type: "http", host: "127.0.0.1", port: 19101 });
+
+  const dir1 = join(data, "accounts", "minimax-code", "slot1");
+  await mkdir(dir1, { recursive: true });
+  await writeAccountMeta(dir1, {
+    version: 1,
+    provider: "minimax-code",
+    key: "slot1",
+    accountId: "BackfillUser",
+    lastLogin: { proxyId: p1.id, proxyName: "Node1", type: "http" },
+  });
+
+  // First startup backfill populates providers.json.
+  const first = await backfillAccountProxies({ env, store, dataDir: data });
+  expect(first.ok).toBe(true);
+  expect(first.changed).toHaveLength(1);
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "BackfillUser" })).mode).toBe(
+    "custom",
+  );
+
+  // User switches the account back to inherit inside magpie (deletes accountProxies key).
+  const doc = readProviders(cfg);
+  delete doc.providers.find((p) => p.id === "minimax-code").accountProxies.backfilluser;
+  await writeFile(join(cfg, "providers.json"), `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+
+  // Next startup backfill MUST NOT re-write historical lastLogin back into providers.json.
+  const restart = await backfillAccountProxies({ env, store, dataDir: data });
+  expect(restart.ok).toBe(true);
+  expect(restart.changed).toHaveLength(0);
+  expect(restart.reason).toBe("up_to_date");
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "BackfillUser" })).mode).toBe(
+    "inherit",
+  );
+
+  // Same guarantee for a freshly signed-in account (via syncSignInProxy) later switched to inherit.
+  const dir2 = join(data, "accounts", "minimax-code", "slot2");
+  await mkdir(dir2, { recursive: true });
+  await writeAccountMeta(dir2, {
+    version: 1,
+    provider: "minimax-code",
+    key: "slot2",
+    accountId: "SignedInUser",
+    lastLogin: { proxyId: p1.id, proxyName: "Node1", type: "http" },
+  });
+  await syncSignInProxy({ env, provider: "minimax-code", accountId: "SignedInUser", proxy: p1, dataDir: data });
+  const doc2 = readProviders(cfg);
+  delete doc2.providers.find((p) => p.id === "minimax-code").accountProxies.signedinuser;
+  await writeFile(join(cfg, "providers.json"), `${JSON.stringify(doc2, null, 2)}\n`, "utf8");
+
+  const restart2 = await backfillAccountProxies({ env, store, dataDir: data });
+  expect(restart2.ok).toBe(true);
+  expect(restart2.changed).toHaveLength(0);
+  expect((await readAccountExit({ env, provider: "minimax-code", accountId: "SignedInUser" })).mode).toBe(
+    "inherit",
+  );
+
+  // Same guarantee after explicit writeAccountExit(mode: "inherit") on an account with historical lastLogin.
+  const dir3 = join(data, "accounts", "minimax-code", "slot3");
+  await mkdir(dir3, { recursive: true });
+  await writeAccountMeta(dir3, {
+    version: 1,
+    provider: "minimax-code",
+    key: "slot3",
+    accountId: "ExplicitInheritUser",
+    lastLogin: { proxyId: p1.id, proxyName: "Node1", type: "http" },
+  });
+  await writeAccountExit({
+    env,
+    provider: "minimax-code",
+    accountId: "ExplicitInheritUser",
+    mode: "inherit",
+    dataDir: data,
+  });
+  const restart3 = await backfillAccountProxies({ env, store, dataDir: data });
+  expect(restart3.ok).toBe(true);
+  expect(restart3.changed).toHaveLength(0);
+  expect(
+    (await readAccountExit({ env, provider: "minimax-code", accountId: "ExplicitInheritUser" })).mode,
+  ).toBe("inherit");
+});
+
+test("syncProxyUpdate with previousUrl updates magpie-bound and canonical entries without clobbering direct/inherit/other", async () => {
+  const root = await tempDir();
+  const cfg = join(root, "config");
+  const data = join(root, "data");
+  await mkdir(cfg, { recursive: true });
+  await mkdir(data, { recursive: true });
+  const env = { MAGPIE_CONFIG_DIR: cfg, MAGPIE_CLEAN_LOGIN_DATA: data };
+  const store = createProxyStore({ dataDir: data });
+  const px = await store.create({
+    name: "Primary",
+    type: "http",
+    host: "198.51.100.10",
+    port: 80,
+    username: "olduser",
+    password: "oldpassword",
+  });
+  const previousUrl = proxyUrlFor(px);
+
+  await seedProvidersJson(cfg, [
+    {
+      id: "alpha",
+      proxy: "http://127.0.0.1:9000",
+      accountProxies: {
+        exactbound: previousUrl,
+        // Canonical equivalent (default :80 omitted in magpie)
+        canonicalbound: "http://olduser:oldpassword@198.51.100.10",
+        directuser: "direct",
+        otherproxy: "socks5://203.0.113.99:1080",
+      },
+    },
+  ]);
+
+  await store.update(px.id, { port: 8081, password: "new:pass@word" });
+  const newUrl = proxyUrlFor(await store.get(px.id));
+
+  const res = await syncProxyUpdate({
+    env,
+    store,
+    proxyId: px.id,
+    previousUrl,
+  });
+  expect(res.ok).toBe(true);
+  expect(res.reason).toBe("written");
+  expect(res.changed).toHaveLength(2);
+
+  const alpha = readProviders(cfg).providers.find((p) => p.id === "alpha");
+  expect(alpha.accountProxies).toEqual({
+    exactbound: newUrl,
+    canonicalbound: newUrl,
+    directuser: "direct",
+    otherproxy: "socks5://203.0.113.99:1080",
+  });
+  // Provider-level proxy and unrelated providers stay untouched.
+  expect(alpha.proxy).toBe("http://127.0.0.1:9000");
+  expect(readProviders(cfg).providers.find((p) => p.id === "workbuddy").accountProxies["user-hand"]).toBe(
+    "http://127.0.0.1:9999",
+  );
+});
+
+test("resolveEffectiveAccountExit resolves all providers.json states, fallbacks, errors and redacts public output", async () => {
+  const root = await tempDir();
+  const cfg = join(root, "config");
+  const data = join(root, "data");
+  await mkdir(cfg, { recursive: true });
+  await mkdir(data, { recursive: true });
+  const env = { MAGPIE_CONFIG_DIR: cfg, MAGPIE_CLEAN_LOGIN_DATA: data };
+  const store = createProxyStore({ dataDir: data });
+  const nodeA = await store.create({
+    name: "Node A",
+    region: "HK",
+    type: "http",
+    host: "198.51.100.11",
+    port: 8080,
+    username: "userA",
+    password: "secretA!",
+  });
+  const nodeB = await store.create({
+    name: "Node B",
+    region: "SG",
+    type: "socks5",
+    host: "198.51.100.12",
+    port: 1080,
+    username: "userB",
+    password: "secretB!",
+  });
+
+  const extUrl = "socks5://extUser:extSecret@203.0.113.55:1080";
+  const provUrl = "http://provUser:provSecret@198.51.100.20:3128";
+  await seedProvidersJson(cfg, [
+    {
+      id: "p-store",
+      proxy: proxyUrlFor(nodeB),
+      accountProxies: {
+        stored: proxyUrlFor(nodeA),
+        external: extUrl,
+        forcedirect: "direct",
+        badurl: "not-a-valid-proxy-url",
+      },
+    },
+    {
+      id: "p-ext-prov",
+      proxy: provUrl,
+      accountProxies: {},
+    },
+    {
+      id: "p-empty-prov",
+      proxy: "",
+      accountProxies: {},
+    },
+  ]);
+
+  const proxyByUrl = await buildProxyUrlMap(store);
+
+  // 1. custom matching stored node
+  const rStored = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-store",
+    meta: { accountId: "Stored" },
+    store,
+    proxyByUrl,
+  });
+  expect(rStored.ok).toBe(true);
+  expect(rStored.mode).toBe("custom");
+  expect(rStored.effectiveMode).toBe("proxy");
+  expect(rStored.source).toBe("providers_account");
+  expect(rStored.matchedStore).toBe(true);
+  expect(rStored.proxyId).toBe(nodeA.id);
+  expect(rStored.proxy.password).toBe("secretA!");
+  expect(JSON.stringify(rStored.public)).not.toContain("secretA!");
+  expect(JSON.stringify(rStored.public)).not.toContain("userA");
+  expect(rStored.public.displayUrl).toBe("http://198.51.100.11:8080");
+
+  // 2. custom external URL not in store -> never degrades to direct, credentials stripped in public/proxyMeta
+  const rExt = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-store",
+    meta: { accountId: "External" },
+    store,
+    proxyByUrl,
+  });
+  expect(rExt.ok).toBe(true);
+  expect(rExt.mode).toBe("custom");
+  expect(rExt.effectiveMode).toBe("proxy");
+  expect(rExt.matchedStore).toBe(false);
+  expect(rExt.proxy).toEqual({
+    type: "socks5",
+    host: "203.0.113.55",
+    port: 1080,
+    username: "extUser",
+    password: "extSecret",
+    server: "socks5://203.0.113.55:1080",
+  });
+  expect(rExt.proxyMeta).toEqual({ id: null, name: "", region: "", type: "socks5" });
+  expect(JSON.stringify(publicAccountExit(rExt))).not.toContain("extUser");
+  expect(JSON.stringify(publicAccountExit(rExt))).not.toContain("extSecret");
+  expect(accountExitProjection(rExt)).toEqual({
+    at: null,
+    proxyId: null,
+    proxyName: "",
+    region: "",
+    type: "socks5",
+    custom: true,
+    displayUrl: "socks5://203.0.113.55:1080",
+  });
+
+  // 3. direct
+  const rDirect = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-store",
+    meta: { accountId: "ForceDirect" },
+    store,
+    proxyByUrl,
+  });
+  expect(rDirect.ok).toBe(true);
+  expect(rDirect.mode).toBe("direct");
+  expect(rDirect.effectiveMode).toBe("direct");
+  expect(rDirect.proxy).toBeNull();
+
+  // 4. inherit -> provider proxy hitting stored node
+  const rInheritStore = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-store",
+    meta: { accountId: "InheritUser" },
+    store,
+    proxyByUrl,
+  });
+  expect(rInheritStore.ok).toBe(true);
+  expect(rInheritStore.mode).toBe("inherit");
+  expect(rInheritStore.effectiveMode).toBe("proxy");
+  expect(rInheritStore.source).toBe("providers_provider");
+  expect(rInheritStore.matchedStore).toBe(true);
+  expect(rInheritStore.proxyId).toBe(nodeB.id);
+  expect(JSON.stringify(rInheritStore.public)).not.toContain("secretB!");
+
+  // 5. inherit -> provider proxy external URL
+  const rInheritExt = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-ext-prov",
+    meta: { accountId: "InheritExtUser" },
+    store,
+    proxyByUrl,
+  });
+  expect(rInheritExt.ok).toBe(true);
+  expect(rInheritExt.mode).toBe("inherit");
+  expect(rInheritExt.effectiveMode).toBe("proxy");
+  expect(rInheritExt.matchedStore).toBe(false);
+  expect(rInheritExt.proxy.host).toBe("198.51.100.20");
+  expect(rInheritExt.proxy.password).toBe("provSecret");
+  expect(JSON.stringify(rInheritExt.public)).not.toContain("provUser");
+  expect(JSON.stringify(rInheritExt.public)).not.toContain("provSecret");
+  expect(accountExitProjection(rInheritExt)).toEqual({
+    at: null,
+    proxyId: null,
+    proxyName: "",
+    region: "",
+    type: "http",
+    mode: "inherit",
+    custom: true,
+    displayUrl: "http://198.51.100.20:3128",
+  });
+
+  // 6. inherit -> empty provider proxy -> direct
+  const rInheritEmpty = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-empty-prov",
+    meta: { accountId: "InheritEmptyUser" },
+    store,
+    proxyByUrl,
+  });
+  expect(rInheritEmpty.ok).toBe(true);
+  expect(rInheritEmpty.mode).toBe("inherit");
+  expect(rInheritEmpty.effectiveMode).toBe("direct");
+  expect(rInheritEmpty.proxy).toBeNull();
+
+  // 7. invalid URL in providers.json -> fails explicitly, never degrades to direct
+  const rBadUrl = await resolveEffectiveAccountExit({
+    env,
+    provider: "p-store",
+    meta: { accountId: "BadUrl" },
+    store,
+    proxyByUrl,
+  });
+  expect(rBadUrl.ok).toBe(false);
+  expect(rBadUrl.reason).toBe("invalid_exit_url");
+  expect(accountExitProjection(rBadUrl)).toMatchObject({ custom: true, displayUrl: null });
+
+  // 8. providers.json missing -> ledger fallback (direct, stored, missing proxyId -> exit_missing, empty -> exit_unknown)
+  const missingEnv = { MAGPIE_CONFIG_DIR: join(root, "no-config"), MAGPIE_CLEAN_LOGIN_DATA: data };
+  const rFallbackNode = await resolveEffectiveAccountExit({
+    env: missingEnv,
+    provider: "p-store",
+    meta: { accountId: "Stored", lastLogin: { proxyId: nodeA.id } },
+    store,
+  });
+  expect(rFallbackNode.ok).toBe(true);
+  expect(rFallbackNode.source).toBe("ledger_last_login");
+  expect(rFallbackNode.proxyId).toBe(nodeA.id);
+
+  const rFallbackMissing = await resolveEffectiveAccountExit({
+    env: missingEnv,
+    provider: "p-store",
+    meta: { accountId: "Stored", exit: { proxyId: "deleted-node-id" } },
+    store,
+  });
+  expect(rFallbackMissing.ok).toBe(false);
+  expect(rFallbackMissing.reason).toBe("exit_missing");
+
+  const rFallbackUnknown = await resolveEffectiveAccountExit({
+    env: missingEnv,
+    provider: "p-store",
+    meta: { accountId: "Stored" },
+    store,
+  });
+  expect(rFallbackUnknown.ok).toBe(false);
+  expect(rFallbackUnknown.reason).toBe("exit_unknown");
+
+  // 9. corrupt providers.json -> fails explicitly with providers_invalid, never degrades to direct
+  const corruptDir = join(root, "corrupt-config");
+  await mkdir(corruptDir, { recursive: true });
+  await writeFile(join(corruptDir, "providers.json"), "{ not valid json", "utf8");
+  const rCorrupt = await resolveEffectiveAccountExit({
+    env: { MAGPIE_CONFIG_DIR: corruptDir, MAGPIE_CLEAN_LOGIN_DATA: data },
+    provider: "p-store",
+    meta: { accountId: "Stored", lastLogin: { proxyId: null } },
+    store,
+  });
+  expect(rCorrupt.ok).toBe(false);
+  expect(rCorrupt.reason).toBe("providers_invalid");
+
+  // 10. resolveAccountProxyName precedence
+  expect(
+    resolveAccountProxyName({
+      meta: { accountId: "  FromMeta  " },
+      key: "k1",
+      authEntries: { k1: { accountId: "FromAuth", email: "auth@test" } },
+      nativeEntries: [{ key: "k1", email: "native@test" }],
+    }),
+  ).toBe("FromMeta");
+  expect(
+    resolveAccountProxyName({
+      meta: {},
+      key: "k1",
+      authEntries: { k1: { email: "auth@test" } },
+      nativeEntries: [{ key: "k1", email: "native@test" }],
+    }),
+  ).toBe("auth@test");
+  expect(
+    resolveAccountProxyName({
+      meta: {},
+      key: "k1",
+      authEntries: {},
+      nativeEntries: [{ key: "k1", email: "native@test" }],
+    }),
+  ).toBe("native@test");
 });

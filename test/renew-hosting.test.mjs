@@ -950,3 +950,132 @@ test("removeAccount deletes the persisted hosting policy cleanly", async () => {
     cleanup(ctx);
   }
 });
+
+test("hosted renewal follows live providers.json exit changes (stored node, external custom URL, direct, inherit, corrupt) without leaking credentials", async () => {
+  const nodeA = {
+    id: "px-a",
+    name: "Node A",
+    region: "HK",
+    type: "http",
+    host: "198.51.100.1",
+    port: 8080,
+    username: "userA",
+    password: "passASecret",
+  };
+  const nodeB = {
+    id: "px-b",
+    name: "Node B",
+    region: "SG",
+    type: "http",
+    host: "198.51.100.2",
+    port: 8081,
+    username: "userB",
+    password: "passBSecret",
+  };
+  const store = {
+    async list() {
+      return [nodeA, nodeB];
+    },
+    async get(id) {
+      return id === nodeA.id ? nodeA : id === nodeB.id ? nodeB : null;
+    },
+  };
+  const ctx = await setup({
+    currentExit: { at: "2026-11-08T10:00:00.000Z", proxyId: nodeA.id, proxyName: "Node A", region: "HK", type: "http" },
+    lastLogin: { at: "2026-11-08T10:00:00.000Z", proxyId: nodeA.id, proxyName: "Node A", region: "HK", type: "http" },
+    store,
+  });
+  const providersPath = join(ctx.env.MAGPIE_CONFIG_DIR, "providers.json");
+  const writeProviders = (wb) => {
+    mkdirSync(ctx.env.MAGPIE_CONFIG_DIR, { recursive: true });
+    writeFileSync(providersPath, `${JSON.stringify({ providers: [{ id: PROVIDER, ...wb }] }, null, 2)}\n`, "utf8");
+  };
+  const runAndWait = async () => {
+    await ctx.hosting.runNow(PROVIDER, KEY);
+    for (let i = 0; i < 50; i += 1) {
+      if (!(await ctx.hosting.snapshot()).running) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error("renew-hosting did not settle");
+  };
+
+  try {
+    // 1. magpie switches account from Node A to Node B -> runNow uses Node B (ignoring stale ledger exit).
+    writeProviders({
+      proxy: "",
+      accountProxies: { "acct-1": "http://userB:passBSecret@198.51.100.2:8081" },
+    });
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await runAndWait();
+    expect(ctx.signIn.calls.at(-1).proxy).toBe(nodeB);
+    expect(ctx.signIn.calls.at(-1).proxyMeta).toEqual({
+      id: "px-b",
+      name: "Node B",
+      region: "SG",
+      type: "http",
+    });
+
+    // 2. magpie switches account to an external custom URL with credentials ->
+    //    runNow passes parsed full proxy object, but sanitized proxyMeta has zero credentials/URL.
+    writeProviders({
+      proxy: "",
+      accountProxies: { "acct-1": "http://extUser:extSuperPass@203.0.113.77:8888" },
+    });
+    await runAndWait();
+    const extCall = ctx.signIn.calls.at(-1);
+    expect(extCall.proxy).toEqual({
+      type: "http",
+      host: "203.0.113.77",
+      port: 8888,
+      username: "extUser",
+      password: "extSuperPass",
+      server: "http://203.0.113.77:8888",
+    });
+    expect(extCall.proxyMeta).toEqual({ id: null, name: "", region: "", type: "http" });
+    const hostingDisk = readFileSync(ctx.file, "utf8");
+    const accountDisk = readFileSync(join(ctx.dir, "account.json"), "utf8");
+    expect(hostingDisk).not.toContain("extUser");
+    expect(hostingDisk).not.toContain("extSuperPass");
+    expect(accountDisk).not.toContain("extUser");
+    expect(accountDisk).not.toContain("extSuperPass");
+
+    // 3. magpie switches account to "direct" -> runNow runs direct (proxy: null).
+    writeProviders({
+      proxy: "http://provUser:provPass@198.51.100.30:3128",
+      accountProxies: { "acct-1": "direct" },
+    });
+    await runAndWait();
+    expect(ctx.signIn.calls.at(-1).proxy).toBeNull();
+    expect(ctx.signIn.calls.at(-1).proxyMeta).toBeNull();
+
+    // 4. magpie switches account to inherit -> follows provider.proxy (external URL with creds).
+    writeProviders({
+      proxy: "http://provUser:provPass@198.51.100.30:3128",
+      accountProxies: {},
+    });
+    await runAndWait();
+    const inheritCall = ctx.signIn.calls.at(-1);
+    expect(inheritCall.proxy).toEqual({
+      type: "http",
+      host: "198.51.100.30",
+      port: 3128,
+      username: "provUser",
+      password: "provPass",
+      server: "http://198.51.100.30:3128",
+    });
+    expect(inheritCall.proxyMeta).toEqual({ id: null, name: "", region: "", type: "http" });
+    expect(readFileSync(ctx.file, "utf8")).not.toContain("provPass");
+
+    // 5. Corrupt providers.json -> refuses explicitly with providers_invalid, NEVER degrades to direct.
+    writeFileSync(providersPath, "{ broken json", "utf8");
+    const inspected = await ctx.hosting.inspect(PROVIDER, KEY);
+    expect(inspected.eligible).toBe(false);
+    expect(inspected.reason?.code).toBe("providers_invalid");
+    await expect(ctx.hosting.runNow(PROVIDER, KEY)).rejects.toMatchObject({
+      code: "providers_invalid",
+      status: 409,
+    });
+  } finally {
+    cleanup(ctx);
+  }
+});

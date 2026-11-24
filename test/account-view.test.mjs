@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   accountView,
+  countAccountsByProxy,
   filterAccounts,
   formatCheckSummary,
   formatExit,
@@ -101,6 +102,84 @@ describe("formatExit", () => {
     expect(formatExit({ proxyName: "US East" })).toBe("US East");
     expect(formatExit({ region: "Tokyo" })).toBe("Tokyo");
     expect(formatExit({ proxyName: "直连" })).toBe("直连");
+  });
+
+  test("never renders custom external exits as direct and formats inherit exits", () => {
+    expect(
+      formatExit({
+        proxyId: null,
+        proxyName: "",
+        custom: true,
+        displayUrl: "http://198.51.100.9:8080",
+      }),
+    ).toBe("自定义出口 · http://198.51.100.9:8080");
+    expect(
+      formatExit(
+        { proxyId: null, custom: true, displayUrl: "socks5://203.0.113.5:1080" },
+        "Direct",
+        { custom: "Custom exit" },
+      ),
+    ).toBe("Custom exit · socks5://203.0.113.5:1080");
+    // Even an unparseable external exit without displayUrl must not fall back to direct.
+    expect(
+      formatExit({ proxyId: null, custom: true, displayUrl: null }, "Direct", { custom: "Custom exit" }),
+    ).toBe("Custom exit");
+
+    const labels = { custom: "Custom exit", inherit: "Follow provider ({exit})" };
+    expect(
+      formatExit(
+        { mode: "inherit", proxyId: "px1", proxyName: "01", region: "HK", displayUrl: "http://127.0.0.1:7890" },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Follow provider (HK · 01)");
+    expect(
+      formatExit(
+        { mode: "inherit", proxyId: null, custom: true, displayUrl: "http://198.51.100.1:8080" },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Follow provider (http://198.51.100.1:8080)");
+    expect(formatExit({ mode: "inherit", proxyId: null }, "Direct", labels)).toBe(
+      "Follow provider (Direct)",
+    );
+  });
+
+  test("countAccountsByProxy releases old nodes when live exit switches to external custom, direct, or inherit", () => {
+    const oldLogin = { at: null, proxyId: "px-old", proxyName: "Old Node", region: "HK", type: "http" };
+    const accounts = [
+      // Switched in magpie to an external URL not in proxies.json
+      {
+        provider: "workbuddy",
+        key: "a1",
+        exit: { at: null, proxyId: null, proxyName: "", region: "", type: "socks5", custom: true, displayUrl: "socks5://203.0.113.5:1080" },
+        lastLogin: oldLogin,
+      },
+      // Switched in magpie to direct
+      {
+        provider: "workbuddy",
+        key: "a2",
+        exit: { at: null, proxyId: null, proxyName: "", region: "", type: null },
+        lastLogin: oldLogin,
+      },
+      // Switched in magpie to inherit with empty provider proxy
+      {
+        provider: "workbuddy",
+        key: "a3",
+        exit: { at: null, proxyId: null, proxyName: "", region: "", type: null, mode: "inherit" },
+        lastLogin: oldLogin,
+      },
+      // Switched in magpie to a different stored node
+      {
+        provider: "workbuddy",
+        key: "a4",
+        exit: { at: null, proxyId: "px-new", proxyName: "New Node", region: "SG", type: "http" },
+        lastLogin: oldLogin,
+      },
+    ];
+    const counts = countAccountsByProxy(accounts);
+    expect(counts["px-old"]).toBeUndefined();
+    expect(counts["px-new"]).toBe(1);
   });
 });
 

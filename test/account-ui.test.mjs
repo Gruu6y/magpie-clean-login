@@ -253,7 +253,9 @@ test("the accounts tab and its dialogs are wired to real requests", () => {
 test("the list shows the account's current exit and the detail picker reuses the sign-in node list", () => {
   // The list's last-login cell shows the account's current exit, falling back
   // to the exit of the last login only when no current one is set.
-  expect(app).toContain("formatExit(view.exit ?? view.lastLogin, text.accountExitDirect)");
+  expect(app).toContain(
+    "formatExit(view.exit ?? view.lastLogin, text.accountExitDirect, accountExitLabels())",
+  );
   // The detail dropdown orders its nodes like the sign-in dialog and formats
   // each option through the same live latency helper.
   expect(app).toContain("orderSignInProxies(");
