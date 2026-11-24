@@ -1545,3 +1545,225 @@ test("launchSignInBrowser and launchIdentityCheckBrowser forward platform and ex
   expect(winCaptured.env.FONTCONFIG_FILE).toBeUndefined();
   await winHandle.close();
 });
+
+// ---------- account browser purpose ("account") ----------
+
+test("openSignInBrowser with purpose='account' allows empty or about:blank URL and skips page.goto", async () => {
+  const dir = await tempDir();
+  const profileDir = join(dir, "profile");
+  const identity = { tag: "account-pin" };
+
+  for (const rawUrl of [undefined, "", "   ", "about:blank", "  ABOUT:BLANK  "]) {
+    const calls = { gotoCalled: false };
+    const context = {
+      pages: () => [
+        {
+          goto: async () => {
+            calls.gotoCalled = true;
+          },
+        },
+      ],
+      on: () => {},
+      close: async () => {},
+    };
+    const camoufox = {
+      async launchOptions(options) {
+        calls.launchOptions = options;
+        return { executablePath: options.executable_path };
+      },
+      async NewBrowser(_playwright, options) {
+        calls.newBrowser = options;
+        return context;
+      },
+    };
+    const handle = await openSignInBrowser({
+      executablePath: join(dir, "camoufox.exe"),
+      url: rawUrl,
+      profileDir,
+      identity,
+      proxy: { type: "socks5", host: "127.0.0.1", port: 1080, username: "u", password: "p" },
+      purpose: "account",
+      deps: {
+        checkExecutable: async () => true,
+        loadCamoufox: async () => camoufox,
+        loadPlaywright: async () => ({ firefox: {} }),
+      },
+    });
+    expect(calls.gotoCalled).toBe(false);
+    expect(handle.navigationError).toBeNull();
+    expect(calls.launchOptions.fingerprint).toBe(identity);
+    expect(calls.launchOptions.canvas_noise).toBe(false);
+    expect(calls.launchOptions.enable_cache).toBe(true);
+    expect(calls.launchOptions.humanize).toBe(true);
+    expect(calls.launchOptions.proxy).toEqual({
+      server: "socks5://127.0.0.1:1080",
+      username: "u",
+      password: "p",
+    });
+    expect(calls.launchOptions.geoip).toBe(true);
+    expect(calls.newBrowser.persistent_context).toBe(true);
+    expect(calls.newBrowser.from_options.user_data_dir).toBe(profileDir);
+  }
+});
+
+test("openSignInBrowser with purpose='account' navigates http/https URLs and uses neutral wording on errors", async () => {
+  const dir = await tempDir();
+  const profileDir = join(dir, "profile");
+  const calls = { goto: null };
+  const page = {
+    goto: async (url, options) => {
+      calls.goto = { url, options };
+      throw new Error("Timeout exceeded");
+    },
+  };
+  const camoufox = {
+    async launchOptions() {
+      return {};
+    },
+    async NewBrowser() {
+      return { pages: () => [page], on: () => {}, close: async () => {} };
+    },
+  };
+  const handle = await openSignInBrowser({
+    executablePath: join(dir, "camoufox.exe"),
+    url: "https://example.com/dashboard",
+    profileDir,
+    identity: { tag: "pin" },
+    navTimeoutMs: 15_000,
+    purpose: "account",
+    deps: {
+      checkExecutable: async () => true,
+      loadCamoufox: async () => camoufox,
+      loadPlaywright: async () => ({ firefox: {} }),
+    },
+  });
+  expect(calls.goto).toEqual({
+    url: "https://example.com/dashboard",
+    options: { waitUntil: "domcontentloaded", timeout: 15_000 },
+  });
+  expect(handle.navigationError).toBeInstanceOf(SignInBrowserError);
+  expect(handle.navigationError.code).toBe("navigation_failed");
+  expect(handle.navigationError.status).toBe(504);
+  expect(handle.navigationError.message).toContain("account browser");
+  expect(handle.navigationError.message.toLowerCase()).not.toContain("sign-in");
+  expect(handle.navigationError.message.toLowerCase()).not.toContain("login browser");
+
+  // Launch failure also uses neutral account-browser wording.
+  let launchErr;
+  try {
+    await openSignInBrowser({
+      executablePath: join(dir, "camoufox.exe"),
+      url: "about:blank",
+      profileDir,
+      identity: {},
+      purpose: "account",
+      deps: {
+        checkExecutable: async () => true,
+        loadCamoufox: async () => ({
+          async launchOptions() {
+            return {};
+          },
+          async NewBrowser() {
+            throw new Error("boom");
+          },
+        }),
+        loadPlaywright: async () => ({ firefox: {} }),
+      },
+    });
+  } catch (caught) {
+    launchErr = caught;
+  }
+  expect(launchErr).toBeInstanceOf(SignInBrowserError);
+  expect(launchErr.code).toBe("launch_failed");
+  expect(launchErr.message).toContain("account browser");
+  expect(launchErr.message.toLowerCase()).not.toContain("sign-in");
+  expect(launchErr.message.toLowerCase()).not.toContain("login browser");
+});
+
+test("openSignInBrowser and launchSignInBrowser with purpose='account' reject invalid URL schemes and embedded credentials", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+
+  for (const bad of [
+    "javascript:alert(1)",
+    "file:///etc/passwd",
+    "data:text/html,hi",
+    "https://user:pass@example.com/",
+    123,
+  ]) {
+    await expect(
+      openSignInBrowser({
+        executablePath: exe,
+        url: bad,
+        profileDir: join(dir, "profile"),
+        purpose: "account",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_url", status: 400 });
+    await expect(
+      launchSignInBrowser({
+        executablePath: exe,
+        url: bad,
+        profileDir: join(dir, "profile"),
+        purpose: "account",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_url", status: 400 });
+  }
+});
+
+test("launchSignInBrowser forwards purpose='account' and normalized about:blank over stdin", async () => {
+  const dir = await tempDir();
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const captured = {};
+  const handle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "",
+    profileDir: join(dir, "profile"),
+    identity: { tag: "pin" },
+    purpose: "account",
+    deps: { fork: captureFork(captured) },
+  });
+  expect(captured.payload.purpose).toBe("account");
+  expect(captured.payload.url).toBe("about:blank");
+  await handle.close();
+
+  // Default signin launch keeps purpose="signin".
+  const signInCaptured = {};
+  const signInHandle = await launchSignInBrowser({
+    executablePath: exe,
+    url: "https://x/signin",
+    profileDir: join(dir, "signin-profile"),
+    identity: { tag: "pin" },
+    deps: { fork: captureFork(signInCaptured) },
+  });
+  expect(signInCaptured.payload.purpose).toBe("signin");
+  await signInHandle.close();
+
+  // Host launch timeout in account mode uses neutral wording.
+  const silentChild = new EventEmitter();
+  silentChild.pid = 77;
+  silentChild.kill = () => {};
+  silentChild.send = () => {};
+  silentChild.unref = () => {};
+  silentChild.channel = { unref: () => {} };
+  let timeoutErr;
+  try {
+    await launchSignInBrowser({
+      executablePath: exe,
+      url: "about:blank",
+      profileDir: join(dir, "timeout-profile"),
+      purpose: "account",
+      timeoutMs: 25,
+      deps: { fork: () => silentChild },
+    });
+  } catch (caught) {
+    timeoutErr = caught;
+  }
+  expect(timeoutErr).toBeInstanceOf(SignInBrowserError);
+  expect(timeoutErr.code).toBe("launch_timeout");
+  expect(timeoutErr.status).toBe(504);
+  expect(timeoutErr.message).toContain("account browser");
+  expect(timeoutErr.message.toLowerCase()).not.toContain("sign-in");
+  expect(timeoutErr.message.toLowerCase()).not.toContain("login browser");
+});
