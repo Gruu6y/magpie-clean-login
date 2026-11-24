@@ -488,15 +488,21 @@ test("supports multiple concurrent accounts, blocks same-account double-open and
   await seedAccount(env, { provider: "claude", key: "claude#a", accountId: "a@example.com" });
   await seedAccount(env, { provider: "claude", key: "claude#b", accountId: "b@example.com" });
 
+  const profileDirA = accountProfileDir(accountDir(env, "claude", "claude#a"));
+  let markFirstLaunchEntered;
+  const firstLaunchEntered = new Promise((resolve) => {
+    markFirstLaunchEntered = resolve;
+  });
   let releaseFirstLaunch;
   const firstLaunchGate = new Promise((resolve) => {
     releaseFirstLaunch = resolve;
   });
-  let launchIndex = 0;
   const { launcher } = makeFakeLauncher({
-    async onLaunch(_args, handle) {
-      launchIndex += 1;
-      if (launchIndex === 1) await firstLaunchGate;
+    async onLaunch(args, handle) {
+      if (args.profileDir === profileDirA) {
+        markFirstLaunchEntered();
+        await firstLaunchGate;
+      }
       return handle;
     },
   });
@@ -516,7 +522,8 @@ test("supports multiple concurrent accounts, blocks same-account double-open and
     code: "browser_already_open",
     status: 409,
   });
-  // Meanwhile, opening a DIFFERENT account succeeds concurrently!
+  // Wait until claude#a is paused inside launchBrowser, then verify a DIFFERENT account succeeds concurrently!
+  await firstLaunchEntered;
   const bRes = await ctrl.open({ provider: "claude", key: "claude#b" });
   expect(bRes.open).toBe(true);
 
