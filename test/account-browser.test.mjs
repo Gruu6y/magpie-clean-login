@@ -989,7 +989,16 @@ test("cleans up starting lock on launch failure, handles closeAll race, external
     launchBrowser: launcher,
   });
 
-  await expect(ctrl.open({ provider: "claude", key: "claude#ext" })).rejects.toThrow("boom on launch");
+  let launchErr;
+  try {
+    await ctrl.open({ provider: "claude", key: "claude#ext" });
+  } catch (caught) {
+    launchErr = caught;
+  }
+  expect(launchErr).toBeInstanceOf(AccountBrowserError);
+  expect(launchErr.code).toBe("launch_failed");
+  expect(launchErr.status).toBe(502);
+  expect(launchErr.message).not.toContain("boom on launch");
   expect(ctrl.isOpen("claude", "claude#ext")).toBe(false);
 
   // 2. closeAll() racing with an in-flight launch closes the late handle and rejects cleanly.
@@ -1039,4 +1048,110 @@ test("cleans up starting lock on launch failure, handles closeAll race, external
   expect(degraded.exitChanged).toBe(true);
   await flakyCtrl.closeAll();
 });
+
+test("open translates launchBrowser errors into safe path-free and credential-free AccountBrowserError messages", async () => {
+  const { root, env, configDir } = await makeWorkspace();
+  await writeProviders(configDir, {
+    providers: [
+      {
+        id: "claude",
+        proxy: "direct",
+        accountProxies: {
+          "alice@example.com": "http://proxyuser:super-secret-pw@192.0.2.90:8080",
+        },
+      },
+    ],
+  });
+  const dir = await seedAccount(env, {
+    provider: "claude",
+    key: "claude#a1",
+    accountId: "alice@example.com",
+  });
+  const missingExe = join(root, "private-dir", "missing-camoufox.exe");
+  const profileDir = accountProfileDir(dir);
+
+  // 1. Real default launchSignInBrowser with a non-existent executablePath must never leak missingExe.
+  const realMissingExeCtrl = createAccountBrowserController({
+    env,
+    resolveExecutable: async () => missingExe,
+  });
+  let missingExeErr;
+  try {
+    await realMissingExeCtrl.open({ provider: "claude", key: "claude#a1" });
+  } catch (caught) {
+    missingExeErr = caught;
+  }
+  expect(missingExeErr).toBeInstanceOf(AccountBrowserError);
+  expect(missingExeErr.code).toBe("executable_missing");
+  expect(missingExeErr.status).toBe(503);
+  expect(missingExeErr.message).not.toContain(missingExe);
+  expect(missingExeErr.message).not.toContain(root);
+  expect(missingExeErr.message).not.toContain("private-dir");
+
+  // 2. Every launcher failure code is translated to a fixed safe message without raw paths or credentials.
+  const cases = [
+    { rawCode: "executable_missing", expectedCode: "executable_missing", expectedStatus: 503 },
+    { rawCode: "runtime_missing", expectedCode: "runtime_missing", expectedStatus: 503 },
+    { rawCode: "launch_timeout", expectedCode: "launch_timeout", expectedStatus: 504 },
+    { rawCode: "invalid_url", expectedCode: "invalid_url", expectedStatus: 400 },
+    { rawCode: "launch_failed", expectedCode: "launch_failed", expectedStatus: 502 },
+    { rawCode: "unexpected_internal_code", expectedCode: "launch_failed", expectedStatus: 502 },
+  ];
+
+  for (const item of cases) {
+    const ctrl = createAccountBrowserController({
+      env,
+      resolveExecutable: async () => missingExe,
+      launchBrowser: async () => {
+        const err = new Error(
+          `raw failure exe=${missingExe} profile=${profileDir} proxy=http://proxyuser:super-secret-pw@192.0.2.90:8080`,
+        );
+        err.code = item.rawCode;
+        err.status = 500;
+        throw err;
+      },
+    });
+    let caught;
+    try {
+      await ctrl.open({ provider: "claude", key: "claude#a1" });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(AccountBrowserError);
+    expect(caught.code).toBe(item.expectedCode);
+    expect(caught.status).toBe(item.expectedStatus);
+    for (const sensitive of [
+      missingExe,
+      profileDir,
+      root,
+      "proxyuser",
+      "super-secret-pw",
+      "raw failure",
+    ]) {
+      expect(caught.message).not.toContain(sensitive);
+    }
+    expect(ctrl.isOpen("claude", "claude#a1")).toBe(false);
+  }
+
+  // 3. A throwing resolveExecutable also maps cleanly to 503 executable_missing without leaking paths.
+  const throwingExeCtrl = createAccountBrowserController({
+    env,
+    resolveExecutable: async () => {
+      throw new Error(`stat failed for ${missingExe}`);
+    },
+    launchBrowser: makeFakeLauncher().launcher,
+  });
+  let throwingExeErr;
+  try {
+    await throwingExeCtrl.open({ provider: "claude", key: "claude#a1" });
+  } catch (caught) {
+    throwingExeErr = caught;
+  }
+  expect(throwingExeErr).toBeInstanceOf(AccountBrowserError);
+  expect(throwingExeErr.code).toBe("executable_missing");
+  expect(throwingExeErr.status).toBe(503);
+  expect(throwingExeErr.message).not.toContain(missingExe);
+  expect(throwingExeErr.message).not.toContain(root);
+});
+
 
