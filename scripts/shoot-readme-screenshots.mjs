@@ -1,6 +1,10 @@
 // Regenerate the README screenshots from the SHIPPED plugin, not from a mock.
 //
-//   bun scripts/shoot-readme-screenshots.mjs [--lang zh-Hans] [--theme light]
+//   bun scripts/shoot-readme-screenshots.mjs [--lang zh-Hans|en] [--theme light] [--suffix ""]
+//
+// Default `--lang zh-Hans` writes `assets/screenshot-<name>.png`; `--lang en`
+// defaults to `--suffix -en` and writes `assets/screenshot-<name>-en.png` with
+// English demo proxy names and regions so README.en.md shows an English UI.
 //
 // What is real: lib/server.mjs started in-process, the shipped ui/*.js and
 // ui/style.css served over HTTP, the shipped provider registry and its logos,
@@ -37,6 +41,8 @@ const option = (name, fallback) => {
 };
 const lang = option("lang", "zh-Hans");
 const theme = option("theme", "light");
+const suffix = option("suffix", lang === "en" ? "-en" : "");
+const isEnglish = lang === "en";
 
 const chrome = [
   process.env.CLEAN_LOGIN_CHROME,
@@ -113,13 +119,21 @@ const scanner = {
   warm: () => {},
 };
 
-const exits = [
-  { name: "HK 家宽 01", type: "http", host: "203.0.113.11", port: 8080, ip: "203.0.113.20", region: "中国/香港", generic: 41, provider: 233 },
-  { name: "HK 家宽 02", type: "http", host: "203.0.113.12", port: 8080, ip: "203.0.113.21", region: "中国/香港", generic: 44, provider: 268 },
-  { name: "JP 静态 01", type: "http", host: "198.51.100.7", port: 3128, ip: "198.51.100.30", region: "日本/东京", generic: 78, provider: 512, handshake: true },
-  { name: "SG 静态 01", type: "socks5", host: "192.0.2.9", port: 1080, ip: "192.0.2.40", region: "新加坡", generic: 96, provider: 301 },
-  { name: "US 家宽 01", type: "http", host: "192.0.2.15", port: 8888, ip: "192.0.2.50", region: "美国/洛杉矶", generic: 152, provider: 640 },
-];
+const exits = isEnglish
+  ? [
+      { slot: "hk1", name: "HK Home 01", type: "http", host: "203.0.113.11", port: 8080, ip: "203.0.113.20", region: "Hong Kong", generic: 41, provider: 233 },
+      { slot: "hk2", name: "HK Home 02", type: "http", host: "203.0.113.12", port: 8080, ip: "203.0.113.21", region: "Hong Kong", generic: 44, provider: 268 },
+      { slot: "jp1", name: "JP Static 01", type: "http", host: "198.51.100.7", port: 3128, ip: "198.51.100.30", region: "Japan/Tokyo", generic: 78, provider: 512, handshake: true },
+      { slot: "sg1", name: "SG Static 01", type: "socks5", host: "192.0.2.9", port: 1080, ip: "192.0.2.40", region: "Singapore", generic: 96, provider: 301 },
+      { slot: "us1", name: "US Home 01", type: "http", host: "192.0.2.15", port: 8888, ip: "192.0.2.50", region: "US/Los Angeles", generic: 152, provider: 640 },
+    ]
+  : [
+      { slot: "hk1", name: "HK 家宽 01", type: "http", host: "203.0.113.11", port: 8080, ip: "203.0.113.20", region: "中国/香港", generic: 41, provider: 233 },
+      { slot: "hk2", name: "HK 家宽 02", type: "http", host: "203.0.113.12", port: 8080, ip: "203.0.113.21", region: "中国/香港", generic: 44, provider: 268 },
+      { slot: "jp1", name: "JP 静态 01", type: "http", host: "198.51.100.7", port: 3128, ip: "198.51.100.30", region: "日本/东京", generic: 78, provider: 512, handshake: true },
+      { slot: "sg1", name: "SG 静态 01", type: "socks5", host: "192.0.2.9", port: 1080, ip: "192.0.2.40", region: "新加坡", generic: 96, provider: 301 },
+      { slot: "us1", name: "US 家宽 01", type: "http", host: "192.0.2.15", port: 8888, ip: "192.0.2.50", region: "美国/洛杉矶", generic: 152, provider: 640 },
+    ];
 
 const proxyTester = async (proxy, options) => {
   const row = exits.find((entry) => entry.port === proxy.port && entry.host === proxy.host) || exits[0];
@@ -179,20 +193,23 @@ try {
       username: "demo",
       password: "not-a-real-password",
     });
-    proxyIds[row.name] = proxy.id;
+    proxyIds[row.slot] = proxy.id;
     await api(`/api/proxies/${encodeURIComponent(proxy.id)}/test`, "POST");
     await api(`/api/proxies/${encodeURIComponent(proxy.id)}/test`, "POST", { provider: "qoder-cn" });
   }
 
   // Account ledgers, written after start-up so the orphan sweep has already
   // run, and paired with auth keys so each row reads as signed in.
+  const nowMs = Date.now();
+  const hourMs = 3_600_000;
+  const dayMs = 24 * hourMs;
   const accounts = [
-    { provider: "qoder-cn", key: "qoder-cn#demo01", accountId: "demo-qoder-01", at: "2026-11-08T02:08:00.000Z", proxy: "HK 家宽 01", grade: "A" },
-    { provider: "qoder-cn", key: "qoder-cn#demo02", accountId: "demo-qoder-02", at: "2026-11-08T02:07:00.000Z", proxy: "HK 家宽 02", grade: "B" },
-    { provider: "workbuddy", key: "workbuddy#demo01", accountId: "demo-workbuddy-01", at: "2026-11-07T14:25:00.000Z", proxy: "SG 静态 01", grade: "A" },
-    { provider: "workbuddy-ai", key: "workbuddy-ai#demo01", accountId: "demo-workbuddy-ai-01", at: "2026-11-07T09:41:00.000Z", proxy: "US 家宽 01", grade: "C" },
-    { provider: "minimax-code", key: "minimax-code#demo01", accountId: "demo-minimax-01", at: "2026-11-06T07:45:00.000Z", proxy: "JP 静态 01", grade: "A" },
-    { provider: "qwenwork", key: "qwenwork#demo01", accountId: "demo-qwen-01", at: "2026-11-06T21:37:00.000Z", proxy: "HK 家宽 01", grade: null },
+    { provider: "qoder-cn", key: "qoder-cn#demo01", accountId: "demo-qoder-01", at: "2026-11-08T02:08:00.000Z", slot: "hk1", grade: "A", expires: nowMs + 7 * dayMs },
+    { provider: "qoder-cn", key: "qoder-cn#demo02", accountId: "demo-qoder-02", at: "2026-11-08T02:07:00.000Z", slot: "hk2", grade: "B", expires: nowMs + 6 * hourMs },
+    { provider: "workbuddy", key: "workbuddy#demo01", accountId: "demo-workbuddy-01", at: "2026-11-07T14:25:00.000Z", slot: "sg1", grade: "A", expires: nowMs + 14 * dayMs },
+    { provider: "workbuddy-ai", key: "workbuddy-ai#demo01", accountId: "demo-workbuddy-ai-01", at: "2026-11-07T09:41:00.000Z", slot: "us1", grade: "C", expires: nowMs + 5 * dayMs },
+    { provider: "minimax-code", key: "minimax-code#demo01", accountId: "demo-minimax-01", at: "2026-11-06T07:45:00.000Z", slot: "hk1", grade: "A", expires: nowMs + 12 * dayMs },
+    { provider: "qwenwork", key: "qwenwork#demo01", accountId: "demo-qwen-01", at: "2026-11-06T21:37:00.000Z", slot: "hk1", grade: null, expires: nowMs + 10 * dayMs },
   ];
   const authKeys = {};
   for (const account of accounts) {
@@ -200,14 +217,16 @@ try {
     // the raw key (it contains '#') would make decodeSegment reject the row.
     const dir = join(dataDir, "accounts", safeSegment(account.provider), safeSegment(account.key));
     mkdirSync(dir, { recursive: true });
-    const exit = exits.find((entry) => entry.name === account.proxy);
+    const exit = exits.find((entry) => entry.slot === account.slot);
     await writeAccountMeta(dir, {
+      provider: account.provider,
+      key: account.key,
       accountId: account.accountId,
       signedInAt: account.at,
       lastLogin: {
         at: account.at,
-        proxyId: proxyIds[account.proxy],
-        proxyName: account.proxy,
+        proxyId: proxyIds[account.slot],
+        proxyName: exit.name,
         region: exit.region,
         exitIp: exit.ip,
       },
@@ -216,8 +235,8 @@ try {
         ? [{
             at: account.at,
             grade: account.grade,
-            proxyId: proxyIds[account.proxy],
-            proxyName: account.proxy,
+            proxyId: proxyIds[account.slot],
+            proxyName: exit.name,
             region: exit.region,
             exposure: account.grade === "A" ? "low" : account.grade === "B" ? "medium" : "high",
             summary: [],
@@ -231,9 +250,56 @@ try {
       join(dir, IDENTITY_FILE),
       `${JSON.stringify({ demo: true, account: account.accountId, seed: account.key }, null, 2)}\n`,
     );
-    authKeys[account.key] = { access_token: "demo-not-a-real-token", refresh_token: "demo-not-a-real-token" };
+    authKeys[account.key] = {
+      type: "oauth",
+      access: "demo-not-a-real-token",
+      refresh: "demo-not-a-real-token",
+      expires: account.expires,
+    };
   }
   writeFileSync(join(configDir, "plugin-auth.json"), `${JSON.stringify(authKeys, null, 2)}\n`);
+
+  // One demo hosted-renewal policy so the hosting dialog screenshot is rendered
+  // from the shipped dialog in both Chinese and English, never hand-assembled.
+  const hostingLastAt = nowMs - 6 * hourMs;
+  const hostingEnabledAt = nowMs - 3 * dayMs;
+  writeFileSync(
+    join(dataDir, "renew-hosting.json"),
+    `${JSON.stringify(
+      {
+        version: 1,
+        updatedAt: new Date(hostingLastAt).toISOString(),
+        accounts: [
+          {
+            provider: "minimax-code",
+            key: "minimax-code#demo01",
+            enabled: true,
+            enabledAt: hostingEnabledAt,
+            updatedAt: hostingLastAt,
+            methodLabel: "MiniMax (browser)",
+            nextDueAt: nowMs + 7 * dayMs,
+            lifetimeMs: 12 * dayMs,
+            lastAt: hostingLastAt,
+            lastOutcome: "ok",
+            lastCode: null,
+            lastMessage: "",
+            failStreak: 0,
+            pausedReason: null,
+            history: [
+              {
+                at: hostingLastAt,
+                outcome: "ok",
+                code: null,
+                message: "",
+              },
+            ],
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   browser = await chromium.launch({
     executablePath: chrome,
@@ -281,7 +347,9 @@ try {
   await app.waitForSelector(".shell", { state: "visible", timeout: 15000 });
 
   const shots = [];
-  const shoot = async (name, tab, prepare) => {
+  const fileFor = (stem) => `screenshot-${stem}${suffix}.png`;
+  const shoot = async (stem, tab, prepare) => {
+    const name = fileFor(stem);
     await app.click(`#tab-${tab}`);
     await app.waitForTimeout(350);
     if (prepare) await prepare();
@@ -289,14 +357,28 @@ try {
     shots.push(name);
   };
 
-  await shoot("screenshot-providers.png", "providers");
-  await shoot("screenshot-proxies.png", "proxies", async () => {
+  await shoot("providers", "providers");
+  await shoot("proxies", "proxies", async () => {
     await app.waitForSelector("#proxy-test-target option[value='qoder-cn']", { state: "attached", timeout: 10000 });
     await app.selectOption("#proxy-test-target", "qoder-cn");
     await app.waitForTimeout(250);
   });
-  await shoot("screenshot-accounts.png", "accounts");
-  await shoot("screenshot-guide.png", "guide");
+  await shoot("accounts", "accounts");
+
+  // Hosted-renewal dialog on the demo enabled account (minimax-code#demo01).
+  const hostingLabel = isEnglish ? "Renew hosting" : "托管续期";
+  const hostingRow = app.locator("#accounts-list .tbl-row", { hasText: "demo-minimax-01" }).first();
+  await hostingRow.locator("button", { hasText: hostingLabel }).click();
+  await app.waitForSelector("#account-hosting-dialog[open]", { state: "visible", timeout: 10000 });
+  await app.waitForSelector("#account-hosting-facts dt", { state: "visible", timeout: 10000 });
+  await app.waitForTimeout(300);
+  const hostingName = fileFor("hosting");
+  await app.locator("#account-hosting-dialog").screenshot({ path: join(root, "assets", hostingName) });
+  shots.push(hostingName);
+  await app.click("#account-hosting-dismiss");
+  await app.waitForTimeout(200);
+
+  await shoot("guide", "guide");
 
   const counts = await app.evaluate(() => ({
     tabs: document.querySelectorAll(".tab").length,
