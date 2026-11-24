@@ -2,7 +2,7 @@
 // and formatting check summaries and exits. Keeping these helpers free of DOM
 // dependencies allows comprehensive headless testing.
 
-import { accountLabel } from "./account-state.js";
+import { accountIdentityPath, accountLabel } from "./account-state.js";
 import { ALL_PROVIDERS, UNKNOWN_PROVIDER } from "./account-provider-filter.js";
 
 export function accountView(account) {
@@ -38,6 +38,7 @@ export function accountView(account) {
   const methodLabel = typeof value.methodLabel === "string" ? value.methodLabel.trim() : "";
   const unverified = Boolean(value.unverified);
   const hosting = normalizeHosting(value.hosting);
+  const browser = normalizeAccountBrowser(value.browser);
   const rawExpiry = value.expiresAt ?? hosting.expiresAt;
   const expiresAt = (() => {
     if (typeof rawExpiry === "string" && rawExpiry.trim()) return rawExpiry.trim();
@@ -67,6 +68,7 @@ export function accountView(account) {
     note,
     unverified,
     hosting,
+    browser,
   };
 }
 
@@ -143,6 +145,143 @@ export function hostingTone(hosting) {
   if (state === "paused") return "warn";
   if (state === "watching") return "good";
   return "none";
+}
+
+// Per-account fingerprint browser endpoint. URL-encodes both segments via
+// accountIdentityPath so `#` and `/` in keys stay safe.
+export function accountBrowserPath(provider, key) {
+  return `${accountIdentityPath(provider, key)}/browser`;
+}
+
+// Credential-free normalization of the account browser state returned by
+// GET /api/accounts, GET/POST/DELETE /api/accounts/:provider/:key/browser,
+// and PATCH account/exit responses. Unknown fields (like raw URLs or auth)
+// are never forwarded.
+export function normalizeAccountBrowser(value) {
+  const raw = value && typeof value === "object" ? value : {};
+  const open = raw.open === true;
+  if (!open) {
+    return {
+      open: false,
+      openedAt: null,
+      exit: null,
+      exitChanged: false,
+      warning: null,
+    };
+  }
+  const openedAt = (() => {
+    if (typeof raw.openedAt === "string" && raw.openedAt.trim()) return raw.openedAt.trim();
+    if (typeof raw.openedAt === "number" && Number.isFinite(raw.openedAt) && raw.openedAt > 0) {
+      const date = new Date(raw.openedAt);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+    return null;
+  })();
+  const rawExit = raw.exit && typeof raw.exit === "object" ? raw.exit : null;
+  const exit = rawExit
+    ? {
+        ok: rawExit.ok !== false,
+        mode: typeof rawExit.mode === "string" ? rawExit.mode : null,
+        effectiveMode: typeof rawExit.effectiveMode === "string" ? rawExit.effectiveMode : null,
+        proxyId: typeof rawExit.proxyId === "string" && rawExit.proxyId ? rawExit.proxyId : null,
+        proxyName: typeof rawExit.proxyName === "string" ? rawExit.proxyName : "",
+        region: typeof rawExit.region === "string" ? rawExit.region : "",
+        type: typeof rawExit.type === "string" && rawExit.type ? rawExit.type : null,
+        displayUrl: typeof rawExit.displayUrl === "string" && rawExit.displayUrl.trim()
+          ? rawExit.displayUrl.trim()
+          : null,
+        providerProxy: typeof rawExit.providerProxy === "string" && rawExit.providerProxy.trim()
+          ? rawExit.providerProxy.trim()
+          : null,
+        matchedStore: Boolean(rawExit.matchedStore),
+      }
+    : null;
+  const rawWarning = raw.warning && typeof raw.warning === "object" ? raw.warning : null;
+  const warning = rawWarning && typeof rawWarning.code === "string" && rawWarning.code.trim()
+    ? {
+        code: rawWarning.code.trim(),
+        status: Number.isFinite(rawWarning.status) ? rawWarning.status : 0,
+        message: typeof rawWarning.message === "string" ? rawWarning.message : "",
+      }
+    : null;
+  return {
+    open: true,
+    openedAt,
+    exit,
+    exitChanged: raw.exitChanged === true,
+    warning,
+  };
+}
+
+// Formats the publicAccountExit projection attached to an open browser.
+// External custom URLs (effectiveMode === "proxy" without a stored proxyId)
+// never fall back to "Direct".
+export function formatBrowserExit(exit, directText = "直连", labels = {}) {
+  if (!exit || typeof exit !== "object") return directText;
+  if (exit.effectiveMode === "direct") {
+    if (exit.mode === "inherit") {
+      return formatExit({ mode: "inherit", proxyId: null, displayUrl: null, custom: false }, directText, labels);
+    }
+    return directText;
+  }
+  const displayUrl =
+    (typeof exit.displayUrl === "string" && exit.displayUrl.trim()) ||
+    (exit.mode === "inherit" && typeof exit.providerProxy === "string" && exit.providerProxy.trim()) ||
+    null;
+  const isExternalCustom =
+    (exit.effectiveMode === "proxy" && !exit.proxyId) ||
+    (exit.mode === "custom" && !exit.proxyId && exit.matchedStore !== true);
+  return formatExit(
+    {
+      ...exit,
+      displayUrl,
+      custom: Boolean(exit.custom || isExternalCustom),
+    },
+    directText,
+    labels,
+  );
+}
+
+// Pure display summary for an account's fingerprint browser state. Used by
+// both the table row and the account detail dialog so status wording, opening
+// exit label, exit-changed warning, and visual tone stay identical.
+export function browserStateSummary(browser, labels = {}) {
+  const state = normalizeAccountBrowser(browser);
+  if (!state.open) {
+    return {
+      open: false,
+      exitChanged: false,
+      exitLabel: "",
+      statusText: typeof labels?.closed === "string" ? labels.closed : "",
+      noticeText: "",
+      tone: "none",
+    };
+  }
+  const directText = typeof labels?.direct === "string" && labels.direct ? labels.direct : "直连";
+  const exitLabel = formatBrowserExit(state.exit, directText, {
+    custom: labels?.custom,
+    inherit: labels?.inherit,
+  });
+  const openTemplate =
+    typeof labels?.openWithExit === "string" && labels.openWithExit.trim()
+      ? labels.openWithExit.trim()
+      : "浏览器已打开 · {exit}";
+  const statusText = openTemplate.includes("{exit}")
+    ? openTemplate.replace("{exit}", exitLabel)
+    : `${openTemplate} · ${exitLabel}`;
+  const noticeText = state.exitChanged
+    ? (typeof labels?.exitChanged === "string" && labels.exitChanged.trim()
+        ? labels.exitChanged.trim()
+        : "出口已变更，关闭并重新打开浏览器后生效。")
+    : "";
+  return {
+    open: true,
+    exitChanged: state.exitChanged,
+    exitLabel,
+    statusText,
+    noticeText,
+    tone: state.exitChanged ? "warn" : "good",
+  };
 }
 
 function formatNamedExit(login, directText) {

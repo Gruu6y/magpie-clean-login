@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
+  accountBrowserPath,
   accountView,
+  browserStateSummary,
   countAccountsByProxy,
   filterAccounts,
+  formatBrowserExit,
   formatCheckSummary,
   formatExit,
   hostingStateLabel,
   hostingTone,
+  normalizeAccountBrowser,
   normalizeHosting,
   sortAccounts,
 } from "../ui/account-view.js";
@@ -363,5 +367,215 @@ describe("hostingTone and hostingStateLabel", () => {
     expect(hostingStateLabel({ enabled: true, state: "watching" }, labels)).toBe("监控中");
     expect(hostingStateLabel({ enabled: true, state: "running" }, labels)).toBe("续期中…");
     expect(hostingStateLabel({ enabled: false, pausedReason: "error" }, labels)).toBe("已暂停");
+  });
+});
+
+describe("account browser helpers", () => {
+  test("accountBrowserPath URL-encodes both segments", () => {
+    expect(accountBrowserPath("workbuddy", "workbuddy#ab12")).toBe(
+      "api/accounts/workbuddy/workbuddy%23ab12/browser",
+    );
+    expect(accountBrowserPath("a/b", "c d")).toBe("api/accounts/a%2Fb/c%20d/browser");
+  });
+
+  test("normalizeAccountBrowser defaults closed/missing states and strips unexpected fields", () => {
+    expect(normalizeAccountBrowser(null)).toEqual({
+      open: false,
+      openedAt: null,
+      exit: null,
+      exitChanged: false,
+      warning: null,
+    });
+    // Closed state never leaks stale exit or exitChanged flags.
+    expect(
+      normalizeAccountBrowser({
+        open: false,
+        openedAt: "2026-11-24T06:00:00.000Z",
+        exit: { mode: "direct", effectiveMode: "direct" },
+        exitChanged: true,
+      }),
+    ).toEqual({
+      open: false,
+      openedAt: null,
+      exit: null,
+      exitChanged: false,
+      warning: null,
+    });
+
+    const open = normalizeAccountBrowser({
+      open: true,
+      openedAt: "2026-11-24T06:10:00.000Z",
+      exit: {
+        ok: true,
+        mode: "custom",
+        effectiveMode: "proxy",
+        proxyId: "px1",
+        proxyName: "01",
+        region: "HK",
+        type: "http",
+        displayUrl: "http://198.51.100.1:8080",
+        providerProxy: null,
+        matchedStore: true,
+        username: "secret-user",
+        password: "secret-password",
+      },
+      exitChanged: true,
+      warning: { code: "navigation_failed", status: 502, message: "timeout" },
+    });
+    expect(open).toEqual({
+      open: true,
+      openedAt: "2026-11-24T06:10:00.000Z",
+      exit: {
+        ok: true,
+        mode: "custom",
+        effectiveMode: "proxy",
+        proxyId: "px1",
+        proxyName: "01",
+        region: "HK",
+        type: "http",
+        displayUrl: "http://198.51.100.1:8080",
+        providerProxy: null,
+        matchedStore: true,
+      },
+      exitChanged: true,
+      warning: { code: "navigation_failed", status: 502, message: "timeout" },
+    });
+    expect(Object.keys(open.exit)).not.toContain("username");
+    expect(Object.keys(open.exit)).not.toContain("password");
+  });
+
+  test("accountView attaches normalized browser state", () => {
+    expect(accountView({}).browser).toEqual({
+      open: false,
+      openedAt: null,
+      exit: null,
+      exitChanged: false,
+      warning: null,
+    });
+    const view = accountView({
+      provider: "workbuddy",
+      key: "wb#1",
+      browser: {
+        open: true,
+        openedAt: "2026-11-24T06:12:00.000Z",
+        exit: { ok: true, mode: "direct", effectiveMode: "direct", proxyId: null, proxyName: "", region: "", type: null, displayUrl: null, providerProxy: null, matchedStore: false },
+        exitChanged: false,
+      },
+    });
+    expect(view.browser.open).toBe(true);
+    expect(view.browser.exit.effectiveMode).toBe("direct");
+    expect(view.browser.exitChanged).toBe(false);
+  });
+
+  test("formatBrowserExit formats direct, stored proxy, inherit, and external custom exits cleanly", () => {
+    const labels = { custom: "Custom exit", inherit: "Follow provider ({exit})" };
+    expect(formatBrowserExit(null, "Direct", labels)).toBe("Direct");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "direct", effectiveMode: "direct", proxyId: null, proxyName: "", region: "", displayUrl: null, providerProxy: null, matchedStore: false },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Direct");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "inherit", effectiveMode: "direct", proxyId: null, proxyName: "", region: "", displayUrl: null, providerProxy: null, matchedStore: false },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Follow provider (Direct)");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "inherit", effectiveMode: "proxy", proxyId: "px1", proxyName: "01", region: "HK", displayUrl: "http://127.0.0.1:7890", providerProxy: "http://127.0.0.1:7890", matchedStore: true },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Follow provider (HK · 01)");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "inherit", effectiveMode: "proxy", proxyId: null, proxyName: "", region: "", displayUrl: null, providerProxy: "http://127.0.0.1:7890", matchedStore: false },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Follow provider (http://127.0.0.1:7890)");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "custom", effectiveMode: "proxy", proxyId: "px2", proxyName: "02", region: "SG", displayUrl: "socks5://10.0.0.2:1080", providerProxy: null, matchedStore: true },
+        "Direct",
+        labels,
+      ),
+    ).toBe("SG · 02");
+    // External custom URL must never collapse to "Direct".
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "custom", effectiveMode: "proxy", proxyId: null, proxyName: "", region: "", displayUrl: "socks5://203.0.113.5:1080", providerProxy: null, matchedStore: false },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Custom exit · socks5://203.0.113.5:1080");
+    expect(
+      formatBrowserExit(
+        { ok: true, mode: "custom", effectiveMode: "proxy", proxyId: null, proxyName: "", region: "", displayUrl: null, providerProxy: null, matchedStore: false },
+        "Direct",
+        labels,
+      ),
+    ).toBe("Custom exit");
+  });
+
+  test("browserStateSummary produces closed, open, direct, and exitChanged summaries", () => {
+    const labels = {
+      direct: "Direct",
+      custom: "Custom exit",
+      inherit: "Follow provider ({exit})",
+      openWithExit: "Browser open · {exit}",
+      closed: "Fingerprint browser: closed",
+      exitChanged: "Exit changed; close and reopen the browser to apply.",
+    };
+    expect(browserStateSummary(null, labels)).toEqual({
+      open: false,
+      exitChanged: false,
+      exitLabel: "",
+      statusText: "Fingerprint browser: closed",
+      noticeText: "",
+      tone: "none",
+    });
+
+    expect(
+      browserStateSummary(
+        {
+          open: true,
+          openedAt: "2026-11-24T06:00:00.000Z",
+          exit: { ok: true, mode: "direct", effectiveMode: "direct", proxyId: null, proxyName: "", region: "", displayUrl: null, providerProxy: null, matchedStore: false },
+          exitChanged: false,
+        },
+        labels,
+      ),
+    ).toEqual({
+      open: true,
+      exitChanged: false,
+      exitLabel: "Direct",
+      statusText: "Browser open · Direct",
+      noticeText: "",
+      tone: "good",
+    });
+
+    expect(
+      browserStateSummary(
+        {
+          open: true,
+          openedAt: "2026-11-24T06:00:00.000Z",
+          exit: { ok: true, mode: "custom", effectiveMode: "proxy", proxyId: "px1", proxyName: "01", region: "HK", displayUrl: "http://198.51.100.1:8080", providerProxy: null, matchedStore: true },
+          exitChanged: true,
+        },
+        labels,
+      ),
+    ).toEqual({
+      open: true,
+      exitChanged: true,
+      exitLabel: "HK · 01",
+      statusText: "Browser open · HK · 01",
+      noticeText: "Exit changed; close and reopen the browser to apply.",
+      tone: "warn",
+    });
   });
 });

@@ -55,6 +55,10 @@ test("the accounts tab and panel ship every control", () => {
   expect(html).toContain('id="account-detail-exit-hint"');
   expect(html).toContain('id="account-detail-exit-status"');
   expect(html).toContain('id="account-detail-exit-save"');
+  expect(html).toContain('id="account-detail-browser"');
+  expect(html).toContain('id="account-detail-browser-box"');
+  expect(html).toContain('id="account-detail-browser-status"');
+  expect(html).toContain('id="account-detail-browser-notice"');
   expect(html).toContain('id="toasts"');
 });
 
@@ -102,9 +106,14 @@ test("the page only reads real endpoints and never invents a verdict", () => {
     'body: { proxyId }',
     "accountCheckPath(context.provider, context.key)",
     "accountExitPath(",
+    "accountBrowserPath(",
     'byId("account-detail-exit-save").addEventListener',
+    'byId("account-detail-browser").addEventListener',
     "loadAccountExit",
     "saveAccountExit",
+    "loadAccountBrowser",
+    "toggleAccountBrowser",
+    "renderDetailBrowser",
     "${accountCheckPath(context.provider, context.key)}/cancel",
     "ACCOUNT_CHECK_POLL_MS = 800",
     "serverErrorText(error)",
@@ -184,6 +193,18 @@ test("every new string exists in all four language tables", () => {
     "checkErrorCheckBusy", "checkErrorInternal", "checkErrorUnknown",
     "errorInvalidNote", "toastNoteSaved", "toastCheckDone",
     "toastCheckCancelled", "toastRefreshed", "accountExitCustom",
+    "accountBrowserOpen", "accountBrowserClose", "accountBrowserOpening",
+    "accountBrowserClosing", "accountBrowserOpenTitle", "accountBrowserCloseTitle",
+    "accountBrowserNoFingerprintTitle", "accountBrowserStatusOpen",
+    "accountBrowserClosed", "accountBrowserExitChanged",
+    "toastBrowserOpened", "toastBrowserClosed",
+    "browserErrorIdentityMissing", "browserErrorExecutableMissing",
+    "browserErrorAlreadyOpen", "errorAccountBrowserOpen",
+    "browserErrorSignInRunning", "browserErrorRenewalRunning",
+    "browserErrorProvidersInvalid", "browserErrorProvidersUnreadable",
+    "browserErrorInvalidExitUrl", "browserErrorExitMissing",
+    "browserErrorExitUnknown", "browserErrorLaunchFailed",
+    "browserErrorLaunchTimeout", "browserErrorInvalidUrl",
   ];
   for (const key of keys) {
     const count = (app.match(new RegExp(`\\b${key}:`, "g")) || []).length;
@@ -284,4 +305,11 @@ test("the detail picker keeps the user's mode across probe redraws", () => {
   // Detail probes write into their own shallow copy, never the global list the
   // sign-in dialog still uses.
   expect(app).toContain("detailExitProxies = proxies.map((proxy) => ({ ...proxy }));");
+});
+
+test("account browser status and exitChanged styles ship in style.css", () => {
+  expect(css).toContain(".account-browser-line");
+  expect(css).toContain(".account-browser-notice");
+  expect(css).toContain(".account-browser-box");
+  expect(css).toContain(".account-browser-status.is-warn");
 });
