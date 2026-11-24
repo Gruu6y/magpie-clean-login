@@ -19,6 +19,7 @@ import {
   offView,
 } from "../lib/renew-hosting.mjs";
 import { accountDir, writeAccountMeta } from "../lib/account-identity.mjs";
+import { createSignInFlow } from "../lib/signin-flow.mjs";
 
 const PROVIDER = "workbuddy";
 const KEY = "workbuddy";
@@ -1087,5 +1088,200 @@ test("hosted renewal follows live providers.json exit changes (stored node, exte
     });
   } finally {
     cleanup(ctx);
+  }
+});
+
+test("runNow rejects with 409 browser_open when the account's fingerprint browser is open", async () => {
+  let open = true;
+  const ctx = await setup({
+    accountBrowser: {
+      isOpen: (provider, key) => open && provider === PROVIDER && key === KEY,
+    },
+  });
+  try {
+    await ctx.hosting.enable(PROVIDER, KEY);
+    await expect(ctx.hosting.runNow(PROVIDER, KEY)).rejects.toMatchObject({
+      code: "browser_open",
+      status: 409,
+    });
+    expect(ctx.signIn.calls).toHaveLength(0);
+
+    // Once the browser closes, manual runNow proceeds normally.
+    open = false;
+    const started = await ctx.hosting.runNow(PROVIDER, KEY);
+    expect(started.ok).toBe(true);
+    for (let i = 0; i < 100 && ctx.hosting.running(); i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(ctx.signIn.calls).toHaveLength(1);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("tick skips a due account whose fingerprint browser is open without failing or blocking other due accounts", async () => {
+  const KEY_A = "workbuddy";
+  const KEY_B = "workbuddy#second";
+  const tmp = mkdtempSync(join(tmpdir(), "cl-hosting-browser-skip-"));
+  const dataDir = join(tmp, "data");
+  const env = { MAGPIE_CLEAN_LOGIN_DATA: dataDir, MAGPIE_CONFIG_DIR: join(tmp, "config") };
+  const signIn = fakeSignIn();
+  const openAccounts = new Set([`${PROVIDER}\u0000${KEY_A}`]);
+
+  try {
+    for (const [key, accountId, uid] of [
+      [KEY_A, "acct-a", "u-a"],
+      [KEY_B, "acct-b", "u-b"],
+    ]) {
+      const dir = accountDir(env, PROVIDER, key);
+      await writeAccountMeta(dir, {
+        version: 1,
+        provider: PROVIDER,
+        key,
+        accountId,
+        uid,
+        signedInAt: "2026-11-08T10:00:00.000Z",
+        lastLogin: { at: "2026-11-08T10:00:00.000Z", proxyId: null },
+      });
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "identity.json"), JSON.stringify({ fingerprint: { os: "linux" } }));
+    }
+
+    const expiries = {
+      [KEY_A]: BASE - 5 * 60 * 1000,
+      [KEY_B]: BASE - 5 * 60 * 1000,
+    };
+    const hosting = createRenewHosting({
+      dataDir,
+      env,
+      signIn,
+      store: { async get() { return null; } },
+      accountBrowser: {
+        isOpen: (provider, key) => openAccounts.has(`${provider}\u0000${key}`),
+      },
+      now: () => BASE,
+      readKeys: () => new Set([KEY_A, KEY_B]),
+      readEntries: () => ({ [KEY_A]: { type: "oauth" }, [KEY_B]: { type: "oauth" } }),
+      readExpiries: () => ({ ...expiries }),
+    });
+
+    await hosting.enable(PROVIDER, KEY_A);
+    await hosting.enable(PROVIDER, KEY_B);
+
+    // First tick: KEY_A is first and due, but its browser is open -> skipped cleanly
+    // so KEY_B still runs in the same pass.
+    const first = await hosting.tick();
+    expect(first).toEqual({ ran: true, provider: PROVIDER, key: KEY_B });
+    expect(signIn.calls).toHaveLength(1);
+    expect(signIn.calls[0].account).toEqual({ key: KEY_B });
+
+    // KEY_A stayed watching with zero failures, zero history, and no pause.
+    const viewA = await hosting.viewOf(PROVIDER, KEY_A);
+    expect(viewA.enabled).toBe(true);
+    expect(viewA.state).toBe("watching");
+    expect(viewA.failStreak).toBe(0);
+    expect(viewA.pausedReason).toBeNull();
+    expect(viewA.lastOutcome).toBeNull();
+    expect(viewA.history).toEqual([]);
+
+    // Mark KEY_B renewed far in the future; second tick sees only KEY_A due
+    // with browser still open -> skips cleanly without failing.
+    expiries[KEY_B] = BASE + 24 * 60 * 60 * 1000;
+    const second = await hosting.tick();
+    expect(second).toEqual({ ran: false });
+    expect(signIn.calls).toHaveLength(1);
+    expect((await hosting.viewOf(PROVIDER, KEY_A)).failStreak).toBe(0);
+    expect((await hosting.viewOf(PROVIDER, KEY_A)).enabled).toBe(true);
+
+    // Once KEY_A's browser closes, the next tick renews KEY_A cleanly.
+    openAccounts.delete(`${PROVIDER}\u0000${KEY_A}`);
+    const third = await hosting.tick();
+    expect(third).toEqual({ ran: true, provider: PROVIDER, key: KEY_A });
+    expect(signIn.calls).toHaveLength(2);
+    expect(signIn.calls[1].account).toEqual({ key: KEY_A });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("createSignInFlow.activeAccount reports the active account while non-terminal and null when idle or terminal", async () => {
+  const tmp = mkdtempSync(join(tmpdir(), "cl-signin-active-account-"));
+  const dataDir = join(tmp, "data");
+  const env = { MAGPIE_CLEAN_LOGIN_DATA: dataDir, MAGPIE_CONFIG_DIR: join(tmp, "config") };
+  const dir = accountDir(env, PROVIDER, KEY);
+
+  try {
+    await writeAccountMeta(dir, {
+      version: 1,
+      provider: PROVIDER,
+      key: KEY,
+      accountId: "acct-1",
+      uid: "u-1",
+      signedInAt: "2026-11-08T10:00:00.000Z",
+    });
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "identity.json"), JSON.stringify({ fingerprint: { os: "linux" } }));
+
+    let resolveCallback = null;
+    let signalCallbackArmed = null;
+    let callbackArmed = new Promise((resolve) => {
+      signalCallbackArmed = resolve;
+    });
+    const resetCallbackLatch = () => {
+      resolveCallback = null;
+      callbackArmed = new Promise((resolve) => {
+        signalCallbackArmed = resolve;
+      });
+    };
+    const flow = createSignInFlow({
+      env,
+      loadProvider: async () => ({
+        methods: [
+          {
+            label: "Browser",
+            type: "oauth",
+            authorize: async () => ({
+              url: "https://example.test/login",
+              instructions: "Sign in in the browser",
+              callback: () =>
+                new Promise((resolve) => {
+                  resolveCallback = resolve;
+                  signalCallbackArmed?.();
+                }),
+            }),
+          },
+        ],
+      }),
+      resolveExecutable: async () => "/fake/camoufox",
+      launchBrowser: async () => ({ pid: 1234, close: async () => {} }),
+      readKeys: () => new Set([KEY]),
+      readEntries: () => ({}),
+      client: { auth: { set: async () => ({}) } },
+    });
+
+    // Idle -> null.
+    expect(flow.activeAccount()).toBeNull();
+
+    // Non-terminal re-login bound to an existing account key -> { provider, key }.
+    await flow.startSignIn({ provider: PROVIDER, account: { key: KEY } });
+    expect(flow.status().state).toBe("waiting-login");
+    expect(flow.activeAccount()).toEqual({ provider: PROVIDER, key: KEY });
+
+    // Terminal after cancel -> null.
+    await flow.cancel();
+    expect(flow.status().state).toBe("cancelled");
+    expect(flow.activeAccount()).toBeNull();
+
+    // Re-run and let it complete to "done" -> null once terminal.
+    resetCallbackLatch();
+    await flow.startSignIn({ provider: PROVIDER, account: { key: KEY } });
+    expect(flow.activeAccount()).toEqual({ provider: PROVIDER, key: KEY });
+    await callbackArmed;
+    resolveCallback?.({ type: "success", access: "tok", refresh: "ref", accountId: "acct-1", uid: "u-1" });
+    await flow.whenSettled();
+    expect(flow.status().state).toBe("done");
+    expect(flow.activeAccount()).toBeNull();
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
 });

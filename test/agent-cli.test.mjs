@@ -550,6 +550,66 @@ test("accounts import, exit, note, delete, prune and hosting map to the account 
   });
 });
 
+test("accounts browser status, open [--target] and close map to the browser routes", async () => {
+  const fake = fakeFetch({});
+  const r = runner(fake);
+  const args = ["--token", TOKEN];
+  const slotKey = "workbuddy#ab12";
+  const encoded = encodeURIComponent(slotKey);
+
+  await r.run(["accounts", "browser", "workbuddy", slotKey, ...args]);
+  await r.run(["accounts", "browser", "open", "workbuddy", slotKey, ...args]);
+  await r.run([
+    "accounts",
+    "browser",
+    "open",
+    "workbuddy",
+    slotKey,
+    "--target",
+    "https://example.com/app",
+    ...args,
+  ]);
+  await r.run(["accounts", "browser", "close", "workbuddy", slotKey, ...args]);
+
+  expect(fake.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+    `GET /api/accounts/workbuddy/${encoded}/browser`,
+    `POST /api/accounts/workbuddy/${encoded}/browser`,
+    `POST /api/accounts/workbuddy/${encoded}/browser`,
+    `DELETE /api/accounts/workbuddy/${encoded}/browser`,
+  ]);
+  expect(fake.calls[1].body).toEqual({});
+  expect(fake.calls[2].body).toEqual({ url: "https://example.com/app" });
+
+  // Missing key, bare --target without a value, and extra arguments are refused before any HTTP request.
+  const before = fake.calls.length;
+  await expect(r.run(["accounts", "browser", "workbuddy", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(r.run(["accounts", "browser", "open", "workbuddy", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(r.run(["accounts", "browser", "close", ...args])).rejects.toMatchObject({
+    code: "missing_argument",
+  });
+  await expect(
+    r.run(["accounts", "browser", "open", "workbuddy", slotKey, "--target"]),
+  ).rejects.toMatchObject({
+    code: "missing_value",
+  });
+  await expect(
+    r.run(["accounts", "browser", "open", "workbuddy", slotKey, "extra", ...args]),
+  ).rejects.toMatchObject({
+    code: "unexpected_arg",
+  });
+  expect(fake.calls).toHaveLength(before);
+
+  const help = usage();
+  expect(help).toContain("accounts browser <provider> <key>");
+  expect(help).toContain("accounts browser open <provider> <key> [--target URL]");
+  expect(help).toContain("accounts browser close <provider> <key>");
+  expect(help).toContain("--target URL");
+});
+
 test("assets list, add, get, update and delete map to the asset routes", async () => {
   const fake = fakeFetch({ "/api/assets": { assets: [{ id: "a1", type: "google-mail" }] } });
   const r = runner(fake);

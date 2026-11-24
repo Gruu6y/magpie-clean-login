@@ -90,6 +90,7 @@ test("GET /api/accounts lists the ledger fields and the signed-in flag", async (
     lastCheck: null,
     checks: [],
     fingerprint: { id: null, pinnedAt: null },
+    browser: { open: false, openedAt: null, exit: null, exitChanged: false },
   };
   expect(body.accounts).toEqual([
     {
@@ -1053,6 +1054,414 @@ describe("account exit routes", () => {
       expect(await del.json()).toEqual({ ok: true });
       expect(removed).toEqual([{ provider: "workbuddy", key: "workbuddy#retired" }]);
       expect(cleared).toEqual([{ provider: "workbuddy", accountId: "retired-acct" }]);
+    } finally {
+      await isoService?.close();
+      rmSync(isoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("account browser routes and mutexes", () => {
+  test("GET/POST/DELETE /api/accounts/:provider/:key/browser lifecycle, exitChanged, mutexes, credential boundary and closeAll", async () => {
+    const isoRoot = mkdtempSync(join(tmpdir(), "clean-login-account-browser-routes-"));
+    const isoConfig = join(isoRoot, "magpie-config");
+    const isoData = join(isoRoot, "data");
+    const isoEnv = {
+      ...process.env,
+      NODE_ENV: "test",
+      MAGPIE_CONFIG_DIR: isoConfig,
+      MAGPIE_CLEAN_LOGIN_DATA: isoData,
+    };
+
+    const launchCalls = [];
+    const checkCalls = [];
+    let isoService;
+
+    try {
+      await mkdir(isoConfig, { recursive: true });
+      const expiresAt = Date.now() + 3600_000;
+      await writeFile(
+        join(isoConfig, "plugin-auth.json"),
+        JSON.stringify({
+          workbuddy: {
+            type: "oauth",
+            access: "ACCESS_SECRET_TOKEN",
+            accountId: "alpha@example.com",
+            expires: expiresAt,
+          },
+        }),
+      );
+
+      const alphaDir = accountDir(isoEnv, "workbuddy", "workbuddy");
+      const retiredBrowserDir = accountDir(isoEnv, "workbuddy", "workbuddy#retired");
+      const noPinDir = accountDir(isoEnv, "workbuddy", "workbuddy#nopin");
+
+      await writeAccountMeta(alphaDir, {
+        version: 1,
+        provider: "workbuddy",
+        key: "workbuddy",
+        accountId: "alpha@example.com",
+        uid: "u-alpha",
+        signedInAt: "2026-11-03T10:00:00.000Z",
+        lastLogin: { at: "2026-11-03T10:00:00.000Z", proxyId: null },
+      });
+      await writeFile(join(alphaDir, "identity.json"), JSON.stringify({ fingerprint: { os: "linux", seed: 1 } }));
+
+      await writeAccountMeta(retiredBrowserDir, {
+        version: 1,
+        provider: "workbuddy",
+        key: "workbuddy#retired",
+        accountId: "retired@example.com",
+        uid: "u-retired",
+        signedInAt: "2026-11-02T10:00:00.000Z",
+        lastLogin: { at: "2026-11-02T10:00:00.000Z", proxyId: null },
+      });
+      await writeFile(
+        join(retiredBrowserDir, "identity.json"),
+        JSON.stringify({ fingerprint: { os: "linux", seed: 2 } }),
+      );
+
+      await writeAccountMeta(noPinDir, {
+        version: 1,
+        provider: "workbuddy",
+        key: "workbuddy#nopin",
+        accountId: "nopin@example.com",
+        uid: "u-nopin",
+        signedInAt: "2026-11-01T10:00:00.000Z",
+        lastLogin: { at: "2026-11-01T10:00:00.000Z", proxyId: null },
+      });
+
+      const fakeLauncher = async (opts) => {
+        let resolveClosed;
+        const closed = new Promise((resolve) => {
+          resolveClosed = resolve;
+        });
+        let closedFlag = false;
+        const call = { opts, closeCount: 0, resolveClosed };
+        launchCalls.push(call);
+        return {
+          pid: 5000 + launchCalls.length,
+          warning: null,
+          closed,
+          async close() {
+            if (closedFlag) return;
+            closedFlag = true;
+            call.closeCount += 1;
+            resolveClosed();
+          },
+        };
+      };
+
+      isoService = await startServer({
+        port: 0,
+        env: isoEnv,
+        dataDir: isoData,
+        pluginScanner: {
+          get: () => ({ available: false, providers: [], scanned: false, stale: false, scanning: false, error: null }),
+          warm: () => {},
+        },
+        environment: {
+          status: async () => ({
+            state: "ready",
+            ready: true,
+            installed: true,
+            modelInstalled: true,
+            executablePath: "/fake/camoufox-bin",
+          }),
+          job: () => null,
+        },
+        identityCheck: {
+          status: () => ({ job: { provider: "", key: "", state: "idle" }, browserOpen: false }),
+          async start(args) {
+            checkCalls.push(args);
+            return { provider: args.provider, key: args.key, state: "launching" };
+          },
+          async cancel() {
+            return { cancelled: false, job: { state: "idle" } };
+          },
+          async close() {},
+        },
+        accountBrowserLauncher: fakeLauncher,
+      });
+      await isoService.prune();
+
+      const html = await (await fetch(`http://127.0.0.1:${isoService.port}/`)).text();
+      const isoToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(html)?.[1];
+      const req = (method, path, body, { withToken = true } = {}) => {
+        const headers = {};
+        if (withToken) headers[TOKEN_HEADER] = isoToken;
+        if (body !== undefined) headers["content-type"] = "application/json";
+        return fetch(`http://127.0.0.1:${isoService.port}${path}`, {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      };
+
+      // Create two credentialed stored proxies and bind alpha to Proxy A in providers.json.
+      const createdA = await (
+        await req("POST", "/api/proxies", {
+          name: "BrowserExitA",
+          type: "http",
+          host: "198.51.100.51",
+          port: 8080,
+          username: "browserSecretUserA",
+          password: "browserSecretPassA",
+        })
+      ).json();
+      const createdB = await (
+        await req("POST", "/api/proxies", {
+          name: "BrowserExitB",
+          type: "http",
+          host: "198.51.100.52",
+          port: 8081,
+          username: "browserSecretUserB",
+          password: "browserSecretPassB",
+        })
+      ).json();
+      const proxyAId = createdA.proxy.id;
+      const proxyBId = createdB.proxy.id;
+      const rawUrlA = "http://browserSecretUserA:browserSecretPassA@198.51.100.51:8080";
+      await writeFile(
+        join(isoConfig, "providers.json"),
+        `${JSON.stringify(
+          {
+            providers: [
+              {
+                id: "workbuddy",
+                proxy: "",
+                accountProxies: {
+                  "alpha@example.com": rawUrlA,
+                  "retired@example.com": "direct",
+                },
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      // Token gate, 404, 405 checks.
+      expect((await req("GET", "/api/accounts/workbuddy/workbuddy/browser", undefined, { withToken: false })).status).toBe(403);
+      expect((await req("GET", "/api/accounts/workbuddy/missing/browser")).status).toBe(404);
+      expect((await req("DELETE", "/api/accounts/workbuddy/missing/browser")).status).toBe(404);
+      expect((await req("POST", "/api/accounts/workbuddy/missing/browser", {})).status).toBe(404);
+      const wrongMethod = await req("PUT", "/api/accounts/workbuddy/workbuddy/browser", {});
+      expect(wrongMethod.status).toBe(405);
+      expect(wrongMethod.headers.get("allow")).toBe("GET, POST, DELETE");
+
+      // Missing pinned identity -> 409 identity_missing.
+      const noPinOpen = await req("POST", "/api/accounts/workbuddy/workbuddy%23nopin/browser", {});
+      expect(noPinOpen.status).toBe(409);
+      expect((await noPinOpen.json()).error).toBe("identity_missing");
+
+      // Invalid URL scheme -> 400 invalid_url.
+      const badUrl = await req("POST", "/api/accounts/workbuddy/workbuddy/browser", {
+        url: "javascript:alert(1)",
+      });
+      expect(badUrl.status).toBe(400);
+      expect((await badUrl.json()).error).toBe("invalid_url");
+
+      // Initial GET status -> closed.
+      const beforeOpen = await req("GET", "/api/accounts/workbuddy/workbuddy/browser");
+      expect(beforeOpen.status).toBe(200);
+      expect(await beforeOpen.json()).toEqual({
+        ok: true,
+        browser: { open: false, openedAt: null, exit: null, exitChanged: false },
+      });
+
+      // POST open with empty body opens about:blank with pinned identity & Proxy A.
+      const openedRes = await req("POST", "/api/accounts/workbuddy/workbuddy/browser");
+      expect(openedRes.status).toBe(200);
+      const openedBody = await openedRes.json();
+      expect(openedBody.ok).toBe(true);
+      expect(openedBody.browser.open).toBe(true);
+      expect(openedBody.browser.exitChanged).toBe(false);
+      expect(openedBody.browser.exit).toMatchObject({
+        ok: true,
+        mode: "custom",
+        effectiveMode: "proxy",
+        proxyId: proxyAId,
+        proxyName: "BrowserExitA",
+      });
+      expect(launchCalls).toHaveLength(1);
+      expect(launchCalls[0].opts.url).toBe("about:blank");
+      expect(launchCalls[0].opts.purpose).toBe("account");
+      expect(launchCalls[0].opts.headless).toBe(false);
+
+      // Double-open -> 409 browser_already_open.
+      const dupOpen = await req("POST", "/api/accounts/workbuddy/workbuddy/browser", {});
+      expect(dupOpen.status).toBe(409);
+      expect((await dupOpen.json()).error).toBe("browser_already_open");
+
+      // GET /api/accounts includes browser state; /api/agent includes compact open browser only for open account.
+      const accountsOpenBody = await (await req("GET", "/api/accounts")).json();
+      const alphaRow = accountsOpenBody.accounts.find((a) => a.key === "workbuddy");
+      const retiredRow = accountsOpenBody.accounts.find((a) => a.key === "workbuddy#retired");
+      expect(alphaRow.browser.open).toBe(true);
+      expect(alphaRow.browser.exitChanged).toBe(false);
+      expect(retiredRow.browser).toEqual({ open: false, openedAt: null, exit: null, exitChanged: false });
+
+      const agentOpenBody = await (await req("GET", "/api/agent")).json();
+      const agentAlpha = agentOpenBody.state.accounts.find((a) => a.key === "workbuddy");
+      const agentRetired = agentOpenBody.state.accounts.find((a) => a.key === "workbuddy#retired");
+      expect(agentAlpha.browser).toEqual({
+        open: true,
+        openedAt: openedBody.browser.openedAt,
+        exitChanged: false,
+      });
+      expect("browser" in agentRetired).toBe(false);
+
+      // Concurrency mutexes while alpha's browser is open:
+      // 1) POST /api/signin for alpha (continue & rotate & single) -> 409 browser_open.
+      const signinContinue = await req("POST", "/api/signin", {
+        provider: "workbuddy",
+        account: { key: "workbuddy" },
+      });
+      expect(signinContinue.status).toBe(409);
+      expect((await signinContinue.json()).error).toBe("browser_open");
+
+      const signinRotate = await req("POST", "/api/signin", {
+        provider: "workbuddy",
+        account: { key: "workbuddy", rotate: true },
+      });
+      expect(signinRotate.status).toBe(409);
+      expect((await signinRotate.json()).error).toBe("browser_open");
+
+      const signinSingle = await req("POST", "/api/signin", {
+        provider: "workbuddy",
+        single: true,
+      });
+      expect(signinSingle.status).toBe(409);
+      expect((await signinSingle.json()).error).toBe("browser_open");
+
+      // 2) POST /api/accounts/workbuddy/workbuddy/hosting/run -> 409 browser_open.
+      await isoService.renewHosting.enable("workbuddy", "workbuddy");
+      const hostingRun = await req("POST", "/api/accounts/workbuddy/workbuddy/hosting/run", {});
+      expect(hostingRun.status).toBe(409);
+      expect((await hostingRun.json()).error).toBe("browser_open");
+
+      // 3) POST /api/accounts/workbuddy/workbuddy/check is NOT blocked (uses check-profile/).
+      const checkRes = await req("POST", "/api/accounts/workbuddy/workbuddy/check", {});
+      expect(checkRes.status).toBe(202);
+      expect(checkCalls).toHaveLength(1);
+
+      // 4) PATCH /exit to Proxy B while browser is open -> immediately shows exitChanged: true!
+      const patchedExitRes = await req("PATCH", "/api/accounts/workbuddy/workbuddy/exit", {
+        mode: "custom",
+        proxyId: proxyBId,
+      });
+      expect(patchedExitRes.status).toBe(200);
+      const patchedExitBody = await patchedExitRes.json();
+      expect(patchedExitBody.account.browser.open).toBe(true);
+      expect(patchedExitBody.account.browser.exitChanged).toBe(true);
+      expect(patchedExitBody.account.browser.exit.proxyId).toBe(proxyAId);
+
+      // PATCH /accounts/:provider/:key (note) also returns updated browser status with exitChanged: true.
+      const patchedNoteBody = await (
+        await req("PATCH", "/api/accounts/workbuddy/workbuddy", { note: "still open" })
+      ).json();
+      expect(patchedNoteBody.account.browser.open).toBe(true);
+      expect(patchedNoteBody.account.browser.exitChanged).toBe(true);
+
+      const statusAfterExitChange = await (
+        await req("GET", "/api/accounts/workbuddy/workbuddy/browser")
+      ).json();
+      expect(statusAfterExitChange.browser.exitChanged).toBe(true);
+
+      // Open retired account's browser simultaneously (with explicit https URL) and verify DELETE mutex.
+      const retiredOpenRes = await req("POST", "/api/accounts/workbuddy/workbuddy%23retired/browser", {
+        url: "https://example.com/account",
+      });
+      expect(retiredOpenRes.status).toBe(200);
+      expect(launchCalls[1].opts.url).toBe("https://example.com/account");
+
+      const deleteBlocked = await req("DELETE", "/api/accounts/workbuddy/workbuddy%23retired");
+      expect(deleteBlocked.status).toBe(409);
+      expect((await deleteBlocked.json()).error).toBe("browser_open");
+      expect(existsSync(retiredBrowserDir)).toBe(true);
+
+      // DELETE /browser closes alpha; second DELETE reports closed: false cleanly.
+      const closedAlpha = await (await req("DELETE", "/api/accounts/workbuddy/workbuddy/browser")).json();
+      expect(closedAlpha).toEqual({
+        ok: true,
+        closed: true,
+        browser: { open: false, openedAt: null, exit: null, exitChanged: false },
+      });
+      expect(launchCalls[0].closeCount).toBe(1);
+      const closedAlphaAgain = await (await req("DELETE", "/api/accounts/workbuddy/workbuddy/browser")).json();
+      expect(closedAlphaAgain).toEqual({
+        ok: true,
+        closed: false,
+        browser: { open: false, openedAt: null, exit: null, exitChanged: false },
+      });
+
+      // Credential boundary: zero usernames, passwords, raw credential URLs, or filesystem paths in any payload.
+      for (const payload of [
+        openedBody,
+        accountsOpenBody,
+        agentOpenBody,
+        patchedExitBody,
+        patchedNoteBody,
+        statusAfterExitChange,
+        closedAlpha,
+      ]) {
+        const text = JSON.stringify(payload);
+        expect(text).not.toContain("browserSecretUserA");
+        expect(text).not.toContain("browserSecretPassA");
+        expect(text).not.toContain("browserSecretUserB");
+        expect(text).not.toContain("browserSecretPassB");
+        expect(text).not.toContain("ACCESS_SECRET_TOKEN");
+        expect(text).not.toContain(rawUrlA);
+        expect(text).not.toContain(isoRoot);
+      }
+
+      // Retired account's browser is still open; closing the server must call closeAll() and close its handle.
+      expect(launchCalls[1].closeCount).toBe(0);
+      await isoService.close();
+      isoService = null;
+      expect(launchCalls[1].closeCount).toBe(1);
+    } finally {
+      await isoService?.close();
+      rmSync(isoRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("server.close invokes injected accountBrowser.closeAll()", async () => {
+    const isoRoot = mkdtempSync(join(tmpdir(), "clean-login-browser-closeall-"));
+    const isoData = join(isoRoot, "data");
+    let closeAllCalls = 0;
+    let isoService;
+    try {
+      isoService = await startServer({
+        port: 0,
+        dataDir: isoData,
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          MAGPIE_CONFIG_DIR: join(isoRoot, "config"),
+          MAGPIE_CLEAN_LOGIN_DATA: isoData,
+        },
+        pluginScanner: {
+          get: () => ({ available: false, providers: [], scanned: false, stale: false, scanning: false, error: null }),
+          warm: () => {},
+        },
+        accountBrowser: {
+          isOpen: () => false,
+          listOpen: () => [],
+          status: async () => ({ open: false, openedAt: null, exit: null, exitChanged: false }),
+          open: async () => ({ open: true, openedAt: "2026-11-24T00:00:00.000Z", exit: null, exitChanged: false }),
+          close: async () => ({ closed: false, browser: { open: false, openedAt: null, exit: null, exitChanged: false } }),
+          closeAll: async () => {
+            closeAllCalls += 1;
+          },
+        },
+      });
+      expect(isoService.accountBrowser).toBeDefined();
+      await isoService.close();
+      isoService = null;
+      expect(closeAllCalls).toBe(1);
     } finally {
       await isoService?.close();
       rmSync(isoRoot, { recursive: true, force: true });
