@@ -990,13 +990,23 @@ test("hosted renewal follows live providers.json exit changes (stored node, exte
     mkdirSync(ctx.env.MAGPIE_CONFIG_DIR, { recursive: true });
     writeFileSync(providersPath, `${JSON.stringify({ providers: [{ id: PROVIDER, ...wb }] }, null, 2)}\n`, "utf8");
   };
+  let expectedRuns = 0;
   const runAndWait = async () => {
+    expectedRuns += 1;
     await ctx.hosting.runNow(PROVIDER, KEY);
-    for (let i = 0; i < 50; i += 1) {
-      if (!(await ctx.hosting.snapshot()).running) return;
+    for (let i = 0; i < 200; i += 1) {
+      const snap = await ctx.hosting.snapshot();
+      let persistedRuns = 0;
+      try {
+        const disk = JSON.parse(readFileSync(ctx.file, "utf8"));
+        persistedRuns = disk?.accounts?.[0]?.history?.length ?? 0;
+      } catch {
+        persistedRuns = 0;
+      }
+      if (!snap.running && persistedRuns >= expectedRuns) return;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
-    throw new Error("renew-hosting did not settle");
+    throw new Error(`renew-hosting did not persist run #${expectedRuns}`);
   };
 
   try {
