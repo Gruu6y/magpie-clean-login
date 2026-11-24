@@ -60,7 +60,9 @@ import {
 } from "./account-state.js";
 import {
   EXPIRING_SOON_MS,
+  accountBrowserPath,
   accountView,
+  browserStateSummary,
   countAccountsByProxy,
   filterAccounts,
   formatCheckSummary,
@@ -69,6 +71,7 @@ import {
   hostingStateLabel,
   hostingTone,
   isHostingPaused,
+  normalizeAccountBrowser,
   normalizeHosting,
   sortAccounts,
 } from "./account-view.js";
@@ -692,6 +695,32 @@ const messages = {
     accountDetailMethod: "Sign-in method",
     accountDetailExpiresAt: "Token expires",
     signInEgressWarning: "Warning: {detail}",
+    accountBrowserOpen: "Open browser",
+    accountBrowserClose: "Close browser",
+    accountBrowserOpening: "Opening…",
+    accountBrowserClosing: "Closing…",
+    accountBrowserOpenTitle: "Open this account's fingerprint browser with its current exit.",
+    accountBrowserCloseTitle: "Close this account's open fingerprint browser.",
+    accountBrowserNoFingerprintTitle: "This account has no pinned fingerprint yet. Sign in through Clean Login once first.",
+    accountBrowserStatusOpen: "Browser open · {exit}",
+    accountBrowserClosed: "Fingerprint browser: closed",
+    accountBrowserExitChanged: "Exit changed; close and reopen the browser to apply.",
+    toastBrowserOpened: "Fingerprint browser opened.",
+    toastBrowserClosed: "Fingerprint browser closed.",
+    browserErrorIdentityMissing: "This account has no pinned fingerprint yet. Sign in through Clean Login once first.",
+    browserErrorExecutableMissing: "The isolated browser is not prepared yet. Prepare the login browser first.",
+    browserErrorAlreadyOpen: "This account's fingerprint browser is already open.",
+    errorAccountBrowserOpen: "Close this account's fingerprint browser before continuing.",
+    browserErrorSignInRunning: "A sign-in flow is currently running for this account. Finish or cancel it first.",
+    browserErrorRenewalRunning: "Hosted renewal is currently running for this account. Wait for it to finish.",
+    browserErrorProvidersInvalid: "magpie's providers.json is invalid, so this account's exit could not be resolved.",
+    browserErrorProvidersUnreadable: "Could not read magpie's providers.json to resolve this account's exit.",
+    browserErrorInvalidExitUrl: "This account's configured exit URL is invalid. Fix the exit in account details first.",
+    browserErrorExitMissing: "This account's configured exit is no longer in the proxy list. Choose another exit in account details.",
+    browserErrorExitUnknown: "Could not determine which exit this account should use. Check its exit setting in account details.",
+    browserErrorLaunchFailed: "The fingerprint browser failed to start. The browser directory may be busy or damaged.",
+    browserErrorLaunchTimeout: "The fingerprint browser took too long to start.",
+    browserErrorInvalidUrl: "The requested page address is not allowed.",
   },
   "zh-Hans": {
     title: "干净登录",
@@ -1278,6 +1307,32 @@ const messages = {
     accountDetailMethod: "登录方式",
     accountDetailExpiresAt: "凭证过期时间",
     signInEgressWarning: "提示：{detail}",
+    accountBrowserOpen: "打开浏览器",
+    accountBrowserClose: "关闭浏览器",
+    accountBrowserOpening: "打开中…",
+    accountBrowserClosing: "关闭中…",
+    accountBrowserOpenTitle: "用这个账号的固定指纹和当前出口打开隔离浏览器。",
+    accountBrowserCloseTitle: "关闭这个账号已打开的指纹浏览器。",
+    accountBrowserNoFingerprintTitle: "这个账号还没有固定指纹，请先通过干净登录登录一次。",
+    accountBrowserStatusOpen: "浏览器已打开 · {exit}",
+    accountBrowserClosed: "指纹浏览器：未打开",
+    accountBrowserExitChanged: "出口已变更，关闭并重新打开浏览器后生效。",
+    toastBrowserOpened: "已打开指纹浏览器。",
+    toastBrowserClosed: "已关闭指纹浏览器。",
+    browserErrorIdentityMissing: "这个账号还没有固定指纹，请先通过干净登录登录一次。",
+    browserErrorExecutableMissing: "隔离浏览器尚未准备好，请先准备登录浏览器。",
+    browserErrorAlreadyOpen: "这个账号的指纹浏览器已经打开了。",
+    errorAccountBrowserOpen: "请先关闭这个账号的指纹浏览器后再操作。",
+    browserErrorSignInRunning: "这个账号正在进行登录流程，请先完成或取消登录。",
+    browserErrorRenewalRunning: "这个账号正在执行托管续期，请等待续期完成。",
+    browserErrorProvidersInvalid: "magpie 的 providers.json 格式无效，无法解析这个账号的出口。",
+    browserErrorProvidersUnreadable: "无法读取 magpie 的 providers.json，暂时不能解析这个账号的出口。",
+    browserErrorInvalidExitUrl: "这个账号配置的出口地址无效，请先在账号详情里修正出口。",
+    browserErrorExitMissing: "这个账号绑定的出口已不在代理列表里，请先在账号详情里重新选择出口。",
+    browserErrorExitUnknown: "无法确定这个账号应使用的出口，请在账号详情里检查出口设置。",
+    browserErrorLaunchFailed: "指纹浏览器启动失败，可能是安装目录被占用或文件缺失。",
+    browserErrorLaunchTimeout: "指纹浏览器启动超时。",
+    browserErrorInvalidUrl: "不允许打开这个页面地址。",
   },
   "zh-Hant": {
     title: "乾淨登入",
@@ -1864,6 +1919,32 @@ const messages = {
     accountDetailMethod: "登入方式",
     accountDetailExpiresAt: "憑證過期時間",
     signInEgressWarning: "提示：{detail}",
+    accountBrowserOpen: "開啟瀏覽器",
+    accountBrowserClose: "關閉瀏覽器",
+    accountBrowserOpening: "開啟中…",
+    accountBrowserClosing: "關閉中…",
+    accountBrowserOpenTitle: "用這個帳號的固定指紋和目前出口開啟隔離瀏覽器。",
+    accountBrowserCloseTitle: "關閉這個帳號已開啟的指紋瀏覽器。",
+    accountBrowserNoFingerprintTitle: "這個帳號還沒有固定指紋，請先透過乾淨登入登入一次。",
+    accountBrowserStatusOpen: "瀏覽器已開啟 · {exit}",
+    accountBrowserClosed: "指紋瀏覽器：未開啟",
+    accountBrowserExitChanged: "出口已變更，關閉並重新開啟瀏覽器後生效。",
+    toastBrowserOpened: "已開啟指紋瀏覽器。",
+    toastBrowserClosed: "已關閉指紋瀏覽器。",
+    browserErrorIdentityMissing: "這個帳號還沒有固定指紋，請先透過乾淨登入登入一次。",
+    browserErrorExecutableMissing: "隔離瀏覽器尚未準備好，請先準備登入瀏覽器。",
+    browserErrorAlreadyOpen: "這個帳號的指紋瀏覽器已經開啟了。",
+    errorAccountBrowserOpen: "請先關閉這個帳號的指紋瀏覽器後再操作。",
+    browserErrorSignInRunning: "這個帳號正在進行登入流程，請先完成或取消登入。",
+    browserErrorRenewalRunning: "這個帳號正在執行託管續期，請等待續期完成。",
+    browserErrorProvidersInvalid: "magpie 的 providers.json 格式無效，無法解析這個帳號的出口。",
+    browserErrorProvidersUnreadable: "無法讀取 magpie 的 providers.json，暫時不能解析這個帳號的出口。",
+    browserErrorInvalidExitUrl: "這個帳號設定的出口網址無效，請先在帳號詳情裡修正出口。",
+    browserErrorExitMissing: "這個帳號綁定的出口已不在代理清單裡，請先在帳號詳情裡重新選擇出口。",
+    browserErrorExitUnknown: "無法確定這個帳號應使用的出口，請在帳號詳情裡檢查出口設定。",
+    browserErrorLaunchFailed: "指紋瀏覽器啟動失敗，可能是安裝目錄被佔用或檔案缺失。",
+    browserErrorLaunchTimeout: "指紋瀏覽器啟動逾時。",
+    browserErrorInvalidUrl: "不允許開啟這個頁面位址。",
   },
   ja: {
     title: "クリーンログイン",
@@ -2450,6 +2531,32 @@ const messages = {
     accountDetailMethod: "ログイン方式",
     accountDetailExpiresAt: "有効期限",
     signInEgressWarning: "注意：{detail}",
+    accountBrowserOpen: "ブラウザーを開く",
+    accountBrowserClose: "ブラウザーを閉じる",
+    accountBrowserOpening: "起動中…",
+    accountBrowserClosing: "終了中…",
+    accountBrowserOpenTitle: "このアカウントの固定フィンガープリントと現在の出口で分離ブラウザーを開きます。",
+    accountBrowserCloseTitle: "このアカウントで開いているフィンガープリントブラウザーを閉じます。",
+    accountBrowserNoFingerprintTitle: "このアカウントには固定フィンガープリントがまだありません。先にクリーンログインで一度ログインしてください。",
+    accountBrowserStatusOpen: "ブラウザー起動中 · {exit}",
+    accountBrowserClosed: "フィンガープリントブラウザー：閉じています",
+    accountBrowserExitChanged: "出口が変更されました。反映するにはブラウザーを閉じて開き直してください。",
+    toastBrowserOpened: "フィンガープリントブラウザーを開きました。",
+    toastBrowserClosed: "フィンガープリントブラウザーを閉じました。",
+    browserErrorIdentityMissing: "このアカウントには固定フィンガープリントがまだありません。先にクリーンログインで一度ログインしてください。",
+    browserErrorExecutableMissing: "分離ブラウザーがまだ準備されていません。先にログイン用ブラウザーを準備してください。",
+    browserErrorAlreadyOpen: "このアカウントのフィンガープリントブラウザーはすでに開いています。",
+    errorAccountBrowserOpen: "続行する前に、このアカウントのフィンガープリントブラウザーを閉じてください。",
+    browserErrorSignInRunning: "このアカウントのログイン処理が進行中です。先に完了するか中止してください。",
+    browserErrorRenewalRunning: "このアカウントの自動更新が実行中です。完了するまでお待ちください。",
+    browserErrorProvidersInvalid: "magpie の providers.json が不正なため、このアカウントの出口を解決できませんでした。",
+    browserErrorProvidersUnreadable: "magpie の providers.json を読み取れず、このアカウントの出口を解決できませんでした。",
+    browserErrorInvalidExitUrl: "このアカウントに設定されている出口 URL が無効です。先にアカウント詳細で出口を修正してください。",
+    browserErrorExitMissing: "このアカウントに設定された出口はプロキシ一覧に見つかりません。アカウント詳細で別の出口を選んでください。",
+    browserErrorExitUnknown: "このアカウントが使用する出口を特定できませんでした。アカウント詳細で出口設定を確認してください。",
+    browserErrorLaunchFailed: "フィンガープリントブラウザーを起動できませんでした。インストール先が使用中か、ファイルが不足している可能性があります。",
+    browserErrorLaunchTimeout: "フィンガープリントブラウザーの起動がタイムアウトしました。",
+    browserErrorInvalidUrl: "指定されたページアドレスは許可されていません。",
   },
 };
 
@@ -2631,6 +2738,11 @@ let detailExitController = null;
 // is static markup, so without this a value left by the previous dialog would
 // look like a fresh user choice when the next account opens.
 let detailExitRenderedFor = null;
+// Per-account pending browser action ("opening" | "closing") keyed by
+// `${provider}\u0000${key}` so concurrent opens/closes on different accounts
+// stay independent while preventing double clicks on the same account.
+const accountBrowserBusy = new Map();
+const detailBrowserGuard = createRequestGuard();
 // The hosting dialog polls only while it is open, and only for the one account
 // it was opened for. Nothing polls on the user's behalf in the background.
 let accountHostingContext = null;
@@ -2643,6 +2755,7 @@ const NOTE_MAX_LENGTH = 200;
 
 const errorKeys = {
   signed_in: "errorAccountSignedIn",
+  browser_open: "errorAccountBrowserOpen",
   auth_unreadable: "errorAccountAuthUnreadable",
   retired_missing: "errorAccountRetiredMissing",
   identity_mismatch: "errorAccountMismatch",
@@ -2697,6 +2810,7 @@ function apiErrorText(error) {
 const accountErrorKeys = {
   not_found: "errorAccountNotFound",
   signed_in: "errorAccountSignedIn",
+  browser_open: "errorAccountBrowserOpen",
   auth_unreadable: "errorAccountAuthUnreadable",
   invalid_account: "errorAccountInvalid",
   retired_missing: "errorAccountRetiredMissing",
@@ -2705,6 +2819,29 @@ const accountErrorKeys = {
 
 function accountErrorText(error) {
   return text[accountErrorKeys[error?.code]] || serverErrorText(error);
+}
+
+const accountBrowserErrorKeys = {
+  not_found: "errorAccountNotFound",
+  identity_missing: "browserErrorIdentityMissing",
+  executable_missing: "browserErrorExecutableMissing",
+  browser_missing: "browserErrorExecutableMissing",
+  browser_already_open: "browserErrorAlreadyOpen",
+  browser_open: "errorAccountBrowserOpen",
+  signin_running: "browserErrorSignInRunning",
+  renewal_running: "browserErrorRenewalRunning",
+  providers_invalid: "browserErrorProvidersInvalid",
+  providers_unreadable: "browserErrorProvidersUnreadable",
+  invalid_exit_url: "browserErrorInvalidExitUrl",
+  exit_missing: "browserErrorExitMissing",
+  exit_unknown: "browserErrorExitUnknown",
+  launch_failed: "browserErrorLaunchFailed",
+  launch_timeout: "browserErrorLaunchTimeout",
+  invalid_url: "browserErrorInvalidUrl",
+};
+
+function accountBrowserErrorText(error) {
+  return text[accountBrowserErrorKeys[error?.code]] || serverErrorText(error);
 }
 
 // The asset routes report their own codes. `not_found` means an asset row, not
@@ -2912,6 +3049,7 @@ function applyText() {
   byId("account-detail-note-hint").textContent = text.accountDetailNoteHint;
   byId("account-detail-history-title").textContent = text.accountDetailHistoryTitle;
   byId("account-detail-dismiss").textContent = text.accountDetailDismiss;
+  byId("account-detail-browser").textContent = text.accountBrowserOpen;
   byId("account-detail-check").textContent = text.accountCheckStart;
   byId("account-detail-note-save").textContent = text.accountDetailNoteSave;
   byId("account-detail-exit-label").textContent = text.accountDetailExitLabel;
@@ -4506,6 +4644,13 @@ async function loadAccountIdentities() {
   } catch (error) {
     accountIdentitiesError = serverErrorText(error);
   } finally {
+    if (accountDetailContext) {
+      const updated = findAccountRecord(accountDetailContext.provider, accountDetailContext.key);
+      if (updated) {
+        accountDetailContext.account = updated;
+        renderDetailBrowser();
+      }
+    }
     renderAccounts();
     // The counts order the main list, so the cards are laid out again once the
     // identities arrive. The split does not depend on them: no card moves
@@ -6688,6 +6833,19 @@ function accountRow(account) {
     expiryNode.textContent = expiry.label;
     statusCell.append(expiryNode);
   }
+  const browserSummary = browserStateSummary(view.browser, accountBrowserLabels());
+  if (browserSummary.open) {
+    const browserLine = document.createElement("small");
+    browserLine.className = `account-browser-line is-${browserSummary.tone}`;
+    browserLine.textContent = browserSummary.statusText;
+    statusCell.append(browserLine);
+    if (browserSummary.noticeText) {
+      const browserNotice = document.createElement("small");
+      browserNotice.className = "account-browser-notice";
+      browserNotice.textContent = browserSummary.noticeText;
+      statusCell.append(browserNotice);
+    }
+  }
 
   const actions = accountCell("proxy-actions account-cell-actions", text.accountColActions);
   const busy = Boolean(accountCheckContext?.active);
@@ -6711,6 +6869,27 @@ function accountRow(account) {
     rotate.title = text.accountRotateTitle;
     actions.append(rotate);
   }
+  const browserPending = accountBrowserPendingState(view.provider, view.key);
+  const browserOpen = view.browser.open;
+  const hasFingerprint = Boolean(view.fingerprint.id);
+  const browserLabel =
+    browserPending === "opening" ? text.accountBrowserOpening
+    : browserPending === "closing" ? text.accountBrowserClosing
+    : browserOpen ? text.accountBrowserClose
+    : text.accountBrowserOpen;
+  const browserButton = miniButton(browserLabel, () => {
+    void toggleAccountBrowser(account);
+  });
+  browserButton.dataset.accountBrowserAction = browserOpen ? "close" : "open";
+  if (browserOpen) browserButton.classList.add("is-active");
+  browserButton.disabled = Boolean(browserPending) || (!browserOpen && !hasFingerprint);
+  browserButton.title =
+    browserPending === "opening" ? text.accountBrowserOpening
+    : browserPending === "closing" ? text.accountBrowserClosing
+    : !browserOpen && !hasFingerprint ? text.accountBrowserNoFingerprintTitle
+    : browserOpen ? text.accountBrowserCloseTitle
+    : text.accountBrowserOpenTitle;
+  actions.append(browserButton);
   const checkButton = miniButton(text.accountCheck, () => openAccountCheck(account));
   checkButton.disabled = busy;
   if (busy) checkButton.title = text.accountCheckBusy;
@@ -7347,6 +7526,219 @@ async function loadAccountExit(context) {
   }
 }
 
+// --- account browser controls ---------------------------------------------
+
+function accountBrowserKey(provider, key) {
+  return `${String(provider ?? "")}\u0000${String(key ?? "")}`;
+}
+
+function accountBrowserPendingState(provider, key) {
+  return accountBrowserBusy.get(accountBrowserKey(provider, key)) || "";
+}
+
+function accountBrowserLabels() {
+  return {
+    direct: text.accountExitDirect,
+    custom: text.accountExitCustom,
+    inherit: text.accountDetailExitInherit,
+    openWithExit: text.accountBrowserStatusOpen,
+    closed: text.accountBrowserClosed,
+    exitChanged: text.accountBrowserExitChanged,
+  };
+}
+
+function findAccountRecord(provider, key) {
+  return accountIdentities.find(
+    (item) => item?.provider === provider && item?.key === key,
+  ) || null;
+}
+
+function isAccountDetailFor(provider, key) {
+  return Boolean(
+    accountDetailContext &&
+    accountDetailContext.provider === provider &&
+    accountDetailContext.key === key,
+  );
+}
+
+function updateAccountBrowserRecord(provider, key, browser) {
+  const normalized = normalizeAccountBrowser(browser);
+  const index = accountIdentities.findIndex(
+    (item) => item?.provider === provider && item?.key === key,
+  );
+  if (index >= 0) {
+    accountIdentities[index] = { ...accountIdentities[index], browser: normalized };
+  }
+  if (isAccountDetailFor(provider, key)) {
+    accountDetailContext.account = {
+      ...(accountDetailContext.account || {}),
+      browser: normalized,
+    };
+  }
+}
+
+async function refreshAccountBrowserState(provider, key) {
+  const busyKey = accountBrowserKey(provider, key);
+  if (accountBrowserBusy.has(busyKey)) return;
+  try {
+    const data = await api(accountBrowserPath(provider, key));
+    if (accountBrowserBusy.has(busyKey)) return;
+    if (data?.browser) {
+      updateAccountBrowserRecord(provider, key, data.browser);
+      if (isAccountDetailFor(provider, key)) renderDetailBrowser();
+      renderAccounts();
+    }
+  } catch {
+    // Keep the current display if the background status check fails.
+  }
+}
+
+async function toggleAccountBrowser(account, { fromDetail = false } = {}) {
+  const latest = findAccountRecord(account?.provider, account?.key) || account;
+  const view = accountDisplay(latest);
+  const provider = view.provider;
+  const key = view.key;
+  if (!provider || !key) return;
+  const busyKey = accountBrowserKey(provider, key);
+  if (accountBrowserBusy.has(busyKey)) return;
+  const closing = view.browser.open;
+  if (!closing && !view.fingerprint.id) {
+    const message = text.browserErrorIdentityMissing;
+    if (fromDetail && isAccountDetailFor(provider, key)) setDetailError(message);
+    else accountIdentitiesError = message;
+    toast(message);
+    renderAccounts();
+    return;
+  }
+  accountBrowserBusy.set(busyKey, closing ? "closing" : "opening");
+  if (isAccountDetailFor(provider, key)) {
+    detailBrowserGuard.cancel();
+    setDetailError("");
+    renderDetailBrowser();
+  }
+  if (!fromDetail) {
+    accountIdentitiesError = "";
+    accountsNotice = "";
+  }
+  renderAccounts();
+  let syncOpenAfter = false;
+  try {
+    if (closing) {
+      const data = await api(accountBrowserPath(provider, key), { method: "DELETE" });
+      updateAccountBrowserRecord(
+        provider,
+        key,
+        data?.browser ?? { open: false, openedAt: null, exit: null, exitChanged: false },
+      );
+      toast(text.toastBrowserClosed);
+    } else {
+      const data = await api(accountBrowserPath(provider, key), { method: "POST", body: {} });
+      updateAccountBrowserRecord(
+        provider,
+        key,
+        data?.browser ?? { open: true, openedAt: null, exit: null, exitChanged: false },
+      );
+      toast(text.toastBrowserOpened);
+    }
+  } catch (error) {
+    const message = accountBrowserErrorText(error);
+    if (fromDetail && isAccountDetailFor(provider, key)) setDetailError(message);
+    else accountIdentitiesError = message;
+    toast(message);
+    if (error?.code === "browser_already_open") syncOpenAfter = true;
+  } finally {
+    accountBrowserBusy.delete(busyKey);
+    if (isAccountDetailFor(provider, key)) renderDetailBrowser();
+    renderAccounts();
+  }
+  if (syncOpenAfter) {
+    void refreshAccountBrowserState(provider, key);
+  }
+}
+
+function renderDetailBrowser() {
+  const button = byId("account-detail-browser");
+  const status = byId("account-detail-browser-status");
+  const notice = byId("account-detail-browser-notice");
+  const context = accountDetailContext;
+  if (!context) {
+    button.textContent = text.accountBrowserOpen;
+    button.disabled = false;
+    button.title = "";
+    status.textContent = "";
+    status.hidden = true;
+    status.className = "setup-note account-browser-status";
+    notice.textContent = "";
+    notice.hidden = true;
+    return;
+  }
+  const latest = findAccountRecord(context.provider, context.key) || context.account;
+  const view = accountDisplay(latest);
+  const pending = accountBrowserPendingState(view.provider, view.key);
+  const open = view.browser.open;
+  const hasFingerprint = Boolean(view.fingerprint.id);
+  const summary = browserStateSummary(view.browser, accountBrowserLabels());
+
+  button.textContent =
+    pending === "opening" ? text.accountBrowserOpening
+    : pending === "closing" ? text.accountBrowserClosing
+    : open ? text.accountBrowserClose
+    : text.accountBrowserOpen;
+  button.disabled = Boolean(pending) || (!open && !hasFingerprint);
+  button.title =
+    pending === "opening" ? text.accountBrowserOpening
+    : pending === "closing" ? text.accountBrowserClosing
+    : !open && !hasFingerprint ? text.accountBrowserNoFingerprintTitle
+    : open ? text.accountBrowserCloseTitle
+    : text.accountBrowserOpenTitle;
+
+  if (summary.open) {
+    status.textContent = summary.statusText;
+    status.className = `setup-note account-browser-status is-${summary.tone}`;
+    status.hidden = false;
+  } else if (!hasFingerprint) {
+    status.textContent = text.accountBrowserNoFingerprintTitle;
+    status.className = "setup-note account-browser-status";
+    status.hidden = false;
+  } else {
+    status.textContent = text.accountBrowserClosed;
+    status.className = "setup-note account-browser-status";
+    status.hidden = false;
+  }
+
+  if (summary.open && summary.noticeText) {
+    notice.textContent = summary.noticeText;
+    notice.hidden = false;
+  } else {
+    notice.textContent = "";
+    notice.hidden = true;
+  }
+}
+
+async function loadAccountBrowser(context) {
+  const token = detailBrowserGuard.begin();
+  let data;
+  try {
+    data = await api(accountBrowserPath(context.provider, context.key));
+  } catch {
+    return;
+  }
+  if (!detailBrowserGuard.isCurrent(token) || accountDetailContext !== context) return;
+  if (accountBrowserBusy.has(accountBrowserKey(context.provider, context.key))) return;
+  if (data?.browser) {
+    updateAccountBrowserRecord(context.provider, context.key, data.browser);
+    renderDetailBrowser();
+    renderAccounts();
+  }
+}
+
+function toggleBrowserFromDetail() {
+  const context = accountDetailContext;
+  if (!context) return;
+  const account = findAccountRecord(context.provider, context.key) || context.account;
+  void toggleAccountBrowser(account, { fromDetail: true });
+}
+
 function openAccountDetail(account) {
   const dialog = byId("account-detail-dialog");
   const view = accountDisplay(account);
@@ -7354,12 +7746,14 @@ function openAccountDetail(account) {
   byId("account-detail-title").textContent = view.name;
   byId("account-detail-copy").textContent = `${view.providerLabel} · ${view.key}`;
   renderDetailFacts(view);
+  renderDetailBrowser();
   byId("account-detail-note").value = view.note;
   setDetailError("");
   setDetailStatus(view.signedIn ? text.accountDetailSigninHint : text.accountDetailRetiredHint);
   renderDetailHistory(view.checks);
   if (!dialog.open) dialog.showModal();
   void loadAccountExit(accountDetailContext);
+  void loadAccountBrowser(accountDetailContext);
 }
 
 function closeAccountDetail() {
@@ -7369,6 +7763,7 @@ function closeAccountDetail() {
 
 function cleanupAccountDetail() {
   detailExitProxyGuard.cancel();
+  detailBrowserGuard.cancel();
   if (detailExitController) {
     detailExitController.abort();
     detailExitController = null;
@@ -7382,6 +7777,7 @@ function cleanupAccountDetail() {
   const status = byId("account-detail-exit-status");
   status.textContent = "";
   status.hidden = true;
+  renderDetailBrowser();
   setDetailError("");
 }
 
@@ -7406,6 +7802,7 @@ const HOSTING_REASON_KEYS = {
   no_browser_method: "accountHostingReasonNoBrowserMethod",
   method_not_found: "accountHostingReasonMethodNotFound",
   unavailable: "accountHostingReasonUnavailable",
+  browser_open: "errorAccountBrowserOpen",
 };
 
 // A known reason gets the page's own wording; an unknown one still shows the
@@ -7716,12 +8113,14 @@ async function saveAccountNote() {
     // Only the row the service returned is applied; never a locally invented
     // account object. The PATCH response is the source of truth for the note.
     if (data?.account) {
+      detailBrowserGuard.cancel();
       const index = accountIdentities.findIndex(
         (item) => item?.provider === context.provider && item?.key === context.key,
       );
       if (index >= 0) accountIdentities[index] = data.account;
       context.account = data.account;
       renderDetailFacts(accountDisplay(data.account));
+      renderDetailBrowser();
       renderDetailHistory(accountView(data.account).checks);
     }
     setDetailStatus(text.accountDetailSaved);
@@ -7763,6 +8162,7 @@ async function saveAccountExit() {
     if (accountDetailContext !== context) return;
     accountDetailExit = data?.exit ?? accountDetailExit;
     if (data?.account) {
+      detailBrowserGuard.cancel();
       const index = accountIdentities.findIndex(
         (item) => item?.provider === context.provider && item?.key === context.key,
       );
@@ -7774,6 +8174,7 @@ async function saveAccountExit() {
     // Redraw after the shared identity list carries the new exit: the sign-in
     // dialog and this picker must agree on which nodes are already assigned.
     renderDetailExit();
+    renderDetailBrowser();
     if (data?.account) renderAccounts();
     const status = byId("account-detail-exit-status");
     status.textContent = text.accountDetailExitSaved;
@@ -8385,6 +8786,7 @@ document.addEventListener("keydown", (nativeEvent) => {
 });
 byId("account-detail-close").addEventListener("click", closeAccountDetail);
 byId("account-detail-dismiss").addEventListener("click", closeAccountDetail);
+byId("account-detail-browser").addEventListener("click", toggleBrowserFromDetail);
 byId("account-detail-check").addEventListener("click", openCheckFromDetail);
 byId("account-detail-note-save").addEventListener("click", saveAccountNote);
 byId("account-detail-exit-save").addEventListener("click", saveAccountExit);

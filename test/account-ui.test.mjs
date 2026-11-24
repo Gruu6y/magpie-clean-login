@@ -295,3 +295,57 @@ test("the detail picker keeps the user's mode across probe redraws", () => {
   // A detail probe mutates only its own shallow copy of the node list.
   expect(app).toContain("detailExitProxies = proxies.map((proxy) => ({ ...proxy }));");
 });
+
+test("account rows and detail dialog wire fingerprint browser open/close, exitChanged, and all error codes", () => {
+  // Detail dialog exposes the browser button and status/notice region.
+  const detail = /<dialog id="account-detail-dialog"[\s\S]*?<\/dialog>/.exec(html)?.[0] || "";
+  expect(detail).toContain('id="account-detail-browser"');
+  expect(detail).toContain('id="account-detail-browser-box"');
+  expect(detail).toContain('id="account-detail-browser-status"');
+  expect(detail).toContain('id="account-detail-browser-notice"');
+
+  // Row and detail dialog call real GET/POST/DELETE /api/accounts/:provider/:key/browser routes.
+  expect(app).toContain("accountBrowserPath(provider, key)");
+  expect(app).toContain('api(accountBrowserPath(provider, key), { method: "POST", body: {} })');
+  expect(app).toContain('api(accountBrowserPath(provider, key), { method: "DELETE" })');
+  expect(app).toContain("api(accountBrowserPath(context.provider, context.key))");
+  expect(app).toContain('byId("account-detail-browser").addEventListener("click", toggleBrowserFromDetail)');
+
+  // Per-account loading/disabled state and no-fingerprint guard.
+  expect(app).toContain("const accountBrowserBusy = new Map();");
+  expect(app).toContain("(!browserOpen && !hasFingerprint)");
+  expect(app).toContain("(!open && !hasFingerprint)");
+  expect(app).toContain("browserStateSummary(view.browser, accountBrowserLabels())");
+
+  // Opening detail refreshes browser state; saving exit immediately redraws browser status/exitChanged.
+  const openDetail = /function openAccountDetail\(account\)[\s\S]*?\n}\n/.exec(app)?.[0] || "";
+  expect(openDetail).toContain("renderDetailBrowser();");
+  expect(openDetail).toContain("void loadAccountBrowser(accountDetailContext);");
+  const saveExit = /async function saveAccountExit\(\)[\s\S]*?\n}\n/.exec(app)?.[0] || "";
+  expect(saveExit).toContain("renderDetailBrowser();");
+  expect(saveExit.indexOf("accountIdentities[index] = data.account")).toBeLessThan(
+    saveExit.indexOf("renderDetailBrowser();"),
+  );
+
+  // All 13 backend error codes are mapped in accountBrowserErrorKeys, and browser_open
+  // is also mapped in shared error/account/hosting error tables.
+  const browserErrorsBlock = /const accountBrowserErrorKeys = \{[\s\S]*?\};/.exec(app)?.[0] || "";
+  for (const code of [
+    "identity_missing",
+    "executable_missing",
+    "browser_already_open",
+    "browser_open",
+    "signin_running",
+    "renewal_running",
+    "providers_invalid",
+    "providers_unreadable",
+    "invalid_exit_url",
+    "exit_missing",
+    "exit_unknown",
+    "launch_failed",
+    "launch_timeout",
+  ]) {
+    expect(browserErrorsBlock).toContain(`${code}:`);
+  }
+  expect(app).toContain('browser_open: "errorAccountBrowserOpen"');
+});

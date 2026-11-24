@@ -1278,6 +1278,8 @@ main { flex: 1; }
 .mini-button:disabled { opacity: 0.45; cursor: not-allowed; }
 .mini-button.primary { color: var(--red); font-weight: 620; }
 .mini-button.primary:hover { background: color-mix(in srgb, var(--red) 11%, transparent); color: var(--red); }
+.mini-button.is-active { color: var(--green); font-weight: 600; }
+.mini-button.is-active:hover { background: color-mix(in srgb, var(--green) 11%, transparent); color: var(--green); }
 
 /* --- dialogs ------------------------------------------------------------ */
 
@@ -2030,6 +2032,37 @@ main { flex: 1; }
 
 .account-expiry-badge.is-soon { color: var(--amber); }
 .account-expiry-badge.is-expired { color: var(--red); }
+
+.account-browser-line {
+  display: block;
+  margin-top: 3px;
+  font: 500 10px/1.5 var(--mono);
+  letter-spacing: 0.04em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--faint);
+}
+.account-browser-line.is-good { color: var(--green); }
+.account-browser-line.is-warn { color: var(--amber); }
+
+.account-browser-notice {
+  display: block;
+  margin-top: 2px;
+  font: 500 10.5px/1.45 var(--mono);
+  color: var(--amber);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.account-browser-box {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-2);
+}
+.account-browser-status.is-good { color: var(--green); }
+.account-browser-status.is-warn { color: var(--amber); }
 
 @media (max-width: 780px) {
   .providers-category-field { width: 100%; }
