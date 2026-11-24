@@ -1767,3 +1767,149 @@ test("launchSignInBrowser forwards purpose='account' and normalized about:blank 
   expect(timeoutErr.message.toLowerCase()).not.toContain("sign-in");
   expect(timeoutErr.message.toLowerCase()).not.toContain("login browser");
 });
+
+test("purpose='account' omits local paths and raw error details from executable, runtime, and launch errors", async () => {
+  const dir = await tempDir();
+  const missingExe = join(dir, "missing-camoufox-secret-path.exe");
+  const profileDir = join(dir, "secret-profile-dir");
+
+  // 1. assertExecutable omits executablePath when purpose="account".
+  let exeErr;
+  try {
+    await launchSignInBrowser({
+      executablePath: missingExe,
+      url: "about:blank",
+      profileDir,
+      purpose: "account",
+      deps: {
+        checkExecutable: async () => false,
+        fork: () => {
+          throw new Error("must not fork");
+        },
+      },
+    });
+  } catch (caught) {
+    exeErr = caught;
+  }
+  expect(exeErr).toBeInstanceOf(SignInBrowserError);
+  expect(exeErr.code).toBe("executable_missing");
+  expect(exeErr.status).toBe(503);
+  expect(exeErr.message).not.toContain(missingExe);
+  expect(exeErr.message).not.toContain(dir);
+
+  // Backward compatibility: default signin mode keeps its existing message shape.
+  let signinExeErr;
+  try {
+    await launchSignInBrowser({
+      executablePath: missingExe,
+      url: "https://x/signin",
+      profileDir,
+      deps: {
+        checkExecutable: async () => false,
+        fork: () => {
+          throw new Error("must not fork");
+        },
+      },
+    });
+  } catch (caught) {
+    signinExeErr = caught;
+  }
+  expect(signinExeErr.message).toContain(missingExe);
+
+  // 2. openSignInBrowser omits raw Playwright/Camoufox errors containing profileDir or proxy credentials.
+  let launchErr;
+  try {
+    await openSignInBrowser({
+      executablePath: missingExe,
+      url: "about:blank",
+      profileDir,
+      identity: {},
+      purpose: "account",
+      deps: {
+        checkExecutable: async () => true,
+        loadCamoufox: async () => ({
+          async launchOptions() {
+            return {};
+          },
+          async NewBrowser() {
+            throw new Error(
+              `Failed to launch ${missingExe} with user_data_dir=${profileDir} proxy=http://u:pw-secret@1.2.3.4:8080`,
+            );
+          },
+        }),
+        loadPlaywright: async () => ({ firefox: {} }),
+      },
+    });
+  } catch (caught) {
+    launchErr = caught;
+  }
+  expect(launchErr).toBeInstanceOf(SignInBrowserError);
+  expect(launchErr.code).toBe("launch_failed");
+  expect(launchErr.status).toBe(502);
+  expect(launchErr.message).not.toContain(missingExe);
+  expect(launchErr.message).not.toContain(profileDir);
+  expect(launchErr.message).not.toContain("pw-secret");
+
+  // 3. openSignInBrowser omits raw runtime errors in account mode.
+  let runtimeErr;
+  try {
+    await openSignInBrowser({
+      executablePath: missingExe,
+      url: "about:blank",
+      profileDir,
+      identity: {},
+      purpose: "account",
+      deps: {
+        checkExecutable: async () => true,
+        loadCamoufox: async () => {
+          throw new Error(`Cannot load ${dir}/camoufox/index.js`);
+        },
+      },
+    });
+  } catch (caught) {
+    runtimeErr = caught;
+  }
+  expect(runtimeErr).toBeInstanceOf(SignInBrowserError);
+  expect(runtimeErr.code).toBe("runtime_missing");
+  expect(runtimeErr.status).toBe(503);
+  expect(runtimeErr.message).not.toContain(dir);
+
+  // 4. launchSignInBrowser strips raw host IPC/error messages in account mode.
+  const exe = join(dir, "camoufox.exe");
+  await writeFile(exe, "exe");
+  const child = new EventEmitter();
+  child.pid = 88;
+  child.kill = () => {};
+  child.send = () => {};
+  child.unref = () => {};
+  child.channel = { unref: () => {} };
+  let hostIpcErr;
+  try {
+    await launchSignInBrowser({
+      executablePath: exe,
+      url: "about:blank",
+      profileDir,
+      purpose: "account",
+      deps: {
+        fork: () => {
+          queueMicrotask(() =>
+            child.emit("message", {
+              type: "error",
+              code: "launch_failed",
+              status: 502,
+              message: `EACCES mkdir ${profileDir} http://u:pw-ipc@1.2.3.4:8080`,
+            }),
+          );
+          return child;
+        },
+      },
+    });
+  } catch (caught) {
+    hostIpcErr = caught;
+  }
+  expect(hostIpcErr).toBeInstanceOf(SignInBrowserError);
+  expect(hostIpcErr.code).toBe("launch_failed");
+  expect(hostIpcErr.status).toBe(502);
+  expect(hostIpcErr.message).not.toContain(profileDir);
+  expect(hostIpcErr.message).not.toContain("pw-ipc");
+});
