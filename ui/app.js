@@ -2826,6 +2826,7 @@ const accountBrowserErrorKeys = {
   identity_missing: "browserErrorIdentityMissing",
   executable_missing: "browserErrorExecutableMissing",
   browser_missing: "browserErrorExecutableMissing",
+  runtime_missing: "browserErrorExecutableMissing",
   browser_already_open: "browserErrorAlreadyOpen",
   browser_open: "errorAccountBrowserOpen",
   signin_running: "browserErrorSignInRunning",

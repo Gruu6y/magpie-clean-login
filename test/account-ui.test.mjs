@@ -327,12 +327,13 @@ test("account rows and detail dialog wire fingerprint browser open/close, exitCh
     saveExit.indexOf("renderDetailBrowser();"),
   );
 
-  // All 13 backend error codes are mapped in accountBrowserErrorKeys, and browser_open
+  // All backend error codes are mapped in accountBrowserErrorKeys, and browser_open
   // is also mapped in shared error/account/hosting error tables.
   const browserErrorsBlock = /const accountBrowserErrorKeys = \{[\s\S]*?\};/.exec(app)?.[0] || "";
   for (const code of [
     "identity_missing",
     "executable_missing",
+    "runtime_missing",
     "browser_already_open",
     "browser_open",
     "signin_running",
