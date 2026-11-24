@@ -183,7 +183,7 @@ test("every new string exists in all four language tables", () => {
     "checkErrorProxyNotFound", "checkErrorAccountNotFound",
     "checkErrorCheckBusy", "checkErrorInternal", "checkErrorUnknown",
     "errorInvalidNote", "toastNoteSaved", "toastCheckDone",
-    "toastCheckCancelled", "toastRefreshed",
+    "toastCheckCancelled", "toastRefreshed", "accountExitCustom",
   ];
   for (const key of keys) {
     const count = (app.match(new RegExp(`\\b${key}:`, "g")) || []).length;
@@ -226,9 +226,12 @@ test("the detail save updates the shared identity list before redrawing the pick
 });
 
 test("the list exit cell prefers the current exit and the detail picker reuses the sign-in list", () => {
-  // The last-login cell shows the exit the account is set to use now; only a
-  // missing current exit falls back to the exit of the last login.
-  expect(app).toContain("formatExit(view.exit ?? view.lastLogin, text.accountExitDirect)");
+  // The last-login cell and hosting facts both show the exit the account is set
+  // to use now; only a missing current exit falls back to the last login's exit.
+  expect(
+    (app.match(/formatExit\(view\.exit \?\? view\.lastLogin, text\.accountExitDirect, accountExitLabels\(\)\)/g) || [])
+      .length,
+  ).toBe(2);
   // The detail dropdown draws its nodes in the sign-in order and through the
   // sign-in option formatter, so live latency and verdicts match that picker.
   expect(app).toContain("orderSignInProxies(\n    detailExitProxies,\n    accountIdentities,\n    accountDetailContext?.provider,\n  )");

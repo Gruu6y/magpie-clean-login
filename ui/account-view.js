@@ -145,20 +145,53 @@ export function hostingTone(hosting) {
   return "none";
 }
 
-export function formatExit(login, directText = "直连") {
-  if (!login || typeof login !== "object") return directText;
-  if (login.proxyId === null) return directText;
+function formatNamedExit(login, directText) {
   const region = typeof login.region === "string" ? login.region.trim() : "";
   const name = typeof login.proxyName === "string"
     ? login.proxyName.trim()
     : typeof login.name === "string" ? login.name.trim() : "";
-  if (!region && !name) return directText;
+  if (!region && !name) return "";
   if (name === "直连" || name === directText) return directText;
   if (region && name) {
     if (name.includes(region)) return name;
     return `${region} · ${name}`;
   }
-  return name || region || directText;
+  return name || region;
+}
+
+export function formatExit(login, directText = "直连", labels = {}) {
+  if (!login || typeof login !== "object") return directText;
+  const customText =
+    typeof labels?.custom === "string" && labels.custom.trim()
+      ? labels.custom.trim()
+      : "自定义出口";
+  const inheritTemplate =
+    typeof labels?.inherit === "string" && labels.inherit.trim()
+      ? labels.inherit.trim()
+      : "跟随供应商（{exit}）";
+  const displayUrl = typeof login.displayUrl === "string" ? login.displayUrl.trim() : "";
+  const named = formatNamedExit(login, directText);
+
+  if (login.mode === "inherit") {
+    const target =
+      login.proxyId !== null && named
+        ? named
+        : displayUrl
+          ? displayUrl
+          : login.custom
+            ? customText
+            : directText;
+    return inheritTemplate.includes("{exit}")
+      ? inheritTemplate.replace("{exit}", target)
+      : `${inheritTemplate} · ${target}`;
+  }
+
+  if (login.custom) {
+    return displayUrl ? `${customText} · ${displayUrl}` : customText;
+  }
+
+  if (login.proxyId === null) return directText;
+  return named || directText;
 }
 
 // The check job's exposure/summary as display lines. `labels.exposure` is a

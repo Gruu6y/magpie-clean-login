@@ -234,3 +234,27 @@ test("orderSignInProxies demotes error proxies below used nodes and formatSignIn
     formatSignInProxyOption({ id: "p1", name: "HK", host: "127.0.0.1", port: 7890, status: "ok", latency: 41, score: 88.4 }, { statusOk: "Available" }),
   ).toBe("HK · 127.0.0.1:7890 · 41 ms · 88");
 });
+
+test("magpie switches to external custom, direct, or inherit release the old stored node in usedSignInProxies", () => {
+  const staleLogin = login("used", "R0-1|香港-NF|BGP静态");
+  const accounts = [
+    {
+      provider: "zcode",
+      exit: { at: null, proxyId: null, proxyName: "", region: "", type: "http", custom: true, displayUrl: "http://198.51.100.9:8080" },
+      lastLogin: staleLogin,
+    },
+    {
+      provider: "zcode",
+      exit: { at: null, proxyId: null, proxyName: "", region: "", type: null },
+      lastLogin: staleLogin,
+    },
+    {
+      provider: "zcode",
+      exit: { at: null, proxyId: null, proxyName: "", region: "", type: null, mode: "inherit" },
+      lastLogin: staleLogin,
+    },
+  ];
+  const used = usedSignInProxies(accounts, "zcode");
+  expect(used.ids.has("used")).toBe(false);
+  expect(used.names.size).toBe(0);
+});

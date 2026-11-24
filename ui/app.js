@@ -428,6 +428,7 @@ const messages = {
     accountFingerprintPinned: "Pinned {time}",
     accountFingerprintNone: "No pinned fingerprint",
     accountExitDirect: "Direct",
+    accountExitCustom: "Custom exit",
     accountLastLoginAt: "{time} · {exit}",
     accountCheckExposure: "{count} places may expose you",
     accountRelogin: "Sign in again",
@@ -1013,6 +1014,7 @@ const messages = {
     accountFingerprintPinned: "固定于 {time}",
     accountFingerprintNone: "没有固定指纹",
     accountExitDirect: "直连",
+    accountExitCustom: "自定义出口",
     accountLastLoginAt: "{time} · {exit}",
     accountCheckExposure: "{count} 处可能暴露你",
     accountRelogin: "重新登录",
@@ -1598,6 +1600,7 @@ const messages = {
     accountFingerprintPinned: "固定於 {time}",
     accountFingerprintNone: "沒有固定指紋",
     accountExitDirect: "直連",
+    accountExitCustom: "自訂出口",
     accountLastLoginAt: "{time} · {exit}",
     accountCheckExposure: "{count} 處可能暴露你",
     accountRelogin: "重新登入",
@@ -2183,6 +2186,7 @@ const messages = {
     accountFingerprintPinned: "{time} に固定",
     accountFingerprintNone: "固定された指紋がありません",
     accountExitDirect: "直接接続",
+    accountExitCustom: "カスタム出口",
     accountLastLoginAt: "{time} · {exit}",
     accountCheckExposure: "{count} 箇所で情報が漏れる可能性",
     accountRelogin: "再ログイン",
@@ -6557,6 +6561,13 @@ function accountForList(account) {
 // clear the flag, so it only ever told people their own working account looked
 // suspicious.
 
+function accountExitLabels() {
+  return {
+    custom: text.accountExitCustom,
+    inherit: text.accountDetailExitInherit,
+  };
+}
+
 function gradeTone(grade) {
   if (grade === "A" || grade === "B") return "good";
   if (grade === "C") return "warn";
@@ -6623,7 +6634,10 @@ function accountRow(account) {
   // there is no current setting does it fall back to the last login's exit.
   lastLogin.textContent = text.accountLastLoginAt
     .replace("{time}", formatTime(view.lastLogin?.at || view.signedInAt))
-    .replace("{exit}", formatExit(view.exit ?? view.lastLogin, text.accountExitDirect));
+    .replace(
+      "{exit}",
+      formatExit(view.exit ?? view.lastLogin, text.accountExitDirect, accountExitLabels()),
+    );
 
   const checkCell = accountCell("proxy-score-cell account-cell-check", text.accountColCheck);
   if (accountRunningFor(view.provider, view.key)) {
@@ -7450,7 +7464,10 @@ function renderHostingFacts(view, inspect) {
         ? text.accountHostingNextNone
         : text.accountHostingNextOff],
     [text.accountHostingLastLabel, last],
-    [text.accountHostingExitLabel, formatExit(view.lastLogin, text.accountExitDirect)],
+    [
+      text.accountHostingExitLabel,
+      formatExit(view.exit ?? view.lastLogin, text.accountExitDirect, accountExitLabels()),
+    ],
     [text.accountHostingFingerprintLabel, view.fingerprint.id || text.accountFingerprintNone],
   ]) {
     const wrap = document.createElement("div");

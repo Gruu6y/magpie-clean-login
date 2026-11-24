@@ -822,8 +822,8 @@ test("PATCH /api/proxies/:id calls syncProxyUpdate only when connection or passw
       accountProxySync: {
         backfill: async () => ({ changed: [] }),
         syncSignIn: async () => ({}),
-        syncProxyUpdate: async (proxy) => {
-          updates.push({ id: proxy.id, name: proxy.name, port: proxy.port, hasPassword: Boolean(proxy.password) });
+        syncProxyUpdate: async ({ proxyId, previousUrl } = {}) => {
+          updates.push({ proxyId, previousUrl });
           return { changed: [] };
         },
         clearAccountProxy: async () => ({}),
@@ -864,9 +864,131 @@ test("PATCH /api/proxies/:id calls syncProxyUpdate only when connection or passw
     });
     expect(pwRes.status).toBe(200);
     expect(updates).toHaveLength(1);
-    expect(updates[0]).toMatchObject({ id: proxy.id, hasPassword: false });
+    expect(updates[0]).toEqual({
+      proxyId: proxy.id,
+      previousUrl: `http://u1:p1@127.0.0.1:${okProxy.port}`,
+    });
   } finally {
     await syncService?.close();
     rmSync(syncRoot, { recursive: true, force: true });
+  }
+});
+
+test("PATCH /api/proxies/:id truly syncs updated port and password into providers.json via real accountProxySync", async () => {
+  const realRoot = mkdtempSync(join(tmpdir(), "clean-login-proxy-sync-real-"));
+  const realConfig = join(realRoot, "magpie-config");
+  const realData = join(realRoot, "data");
+  let realService;
+  try {
+    const { mkdir } = await import("node:fs/promises");
+    const { startServer } = await import("../lib/server.mjs");
+    const { accountDir, writeAccountMeta } = await import("../lib/account-identity.mjs");
+    await mkdir(realConfig, { recursive: true });
+    await mkdir(realData, { recursive: true });
+
+    const realEnv = {
+      ...process.env,
+      NODE_ENV: "test",
+      MAGPIE_CONFIG_DIR: realConfig,
+      MAGPIE_CLEAN_LOGIN_DATA: realData,
+    };
+
+    const providersPath = join(realConfig, "providers.json");
+    const oldUrl = `http://olduser:oldpass@127.0.0.1:${okProxy.port}`;
+    writeFileSync(
+      providersPath,
+      `${JSON.stringify(
+        {
+          providers: [
+            {
+              id: "workbuddy",
+              proxy: "http://127.0.0.1:9999",
+              accountProxies: {
+                // Bound directly in magpie without clean-login ledger proxyId
+                "magpie-only@example.com": oldUrl,
+                "direct-acct@example.com": "direct",
+              },
+            },
+          ],
+          groups: [],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    await writeAccountMeta(accountDir(realEnv, "workbuddy", "workbuddy#cl"), {
+      version: 1,
+      provider: "workbuddy",
+      key: "workbuddy#cl",
+      accountId: "cl-bound@example.com",
+      uid: "u-cl",
+      signedInAt: "2026-11-03T10:00:00.000Z",
+    });
+
+    // No fake accountProxySync injected: exercises the real server -> createAccountProxySync wiring.
+    realService = await startServer({
+      port: 0,
+      dataDir: realData,
+      env: realEnv,
+      pluginScanner: { get: () => ({ available: false, providers: [] }), warm: () => {} },
+    });
+
+    const base = `http://127.0.0.1:${realService.port}`;
+    const pageHtml = await (await fetch(`${base}/`)).text();
+    const realToken = /name="clean-login-token" content="([0-9a-f]+)"/.exec(pageHtml)?.[1];
+    const headers = { "x-clean-login-token": realToken, "content-type": "application/json" };
+
+    const createdRes = await fetch(`${base}/api/proxies`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: "Real Sync Node",
+        type: "http",
+        host: "127.0.0.1",
+        port: okProxy.port,
+        username: "olduser",
+        password: "oldpass",
+      }),
+    });
+    expect(createdRes.status).toBe(201);
+    const { proxy } = await createdRes.json();
+
+    // Bind cl-bound@example.com through clean-login PATCH /exit.
+    const bindRes = await fetch(
+      `${base}/api/accounts/workbuddy/${encodeURIComponent("workbuddy#cl")}/exit`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ mode: "custom", proxyId: proxy.id }),
+      },
+    );
+    expect(bindRes.status).toBe(200);
+
+    // Update proxy port + password via PATCH /api/proxies/:id.
+    const newPort = okProxy.port + 1;
+    const patchRes = await fetch(`${base}/api/proxies/${proxy.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ port: newPort, password: "new:secret@pw" }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patchBody = await patchRes.json();
+    expect(JSON.stringify(patchBody)).not.toContain("new:secret@pw");
+
+    const updatedDoc = JSON.parse(readFileSync(providersPath, "utf8"));
+    const wb = updatedDoc.providers.find((p) => p.id === "workbuddy");
+    const expectedNewUrl = `http://olduser:new%3Asecret%40pw@127.0.0.1:${newPort}`;
+    // Both clean-login-bound and magpie-only-bound accounts updated; direct & inherit untouched.
+    expect(wb.accountProxies).toEqual({
+      "cl-bound@example.com": expectedNewUrl,
+      "magpie-only@example.com": expectedNewUrl,
+      "direct-acct@example.com": "direct",
+    });
+    expect(wb.proxy).toBe("http://127.0.0.1:9999");
+  } finally {
+    await realService?.close();
+    rmSync(realRoot, { recursive: true, force: true });
   }
 });
