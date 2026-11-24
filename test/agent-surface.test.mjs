@@ -394,3 +394,61 @@ test("AGENT_COMMANDS advertises proxies import and proxy test --provider", () =>
   const testCmd = AGENT_COMMANDS.find((entry) => entry.command === "proxy test");
   expect(testCmd.args).toContain("--provider");
 });
+
+test("compactAccount omits closed browser and projects open browser without leaking credentials", () => {
+  const closed = compactAccount({
+    provider: "workbuddy",
+    key: "wb-closed",
+    signedIn: true,
+    browser: { open: false, openedAt: null, exit: null, exitChanged: false },
+  });
+  expect("browser" in closed).toBe(false);
+
+  const open = compactAccount({
+    provider: "workbuddy",
+    key: "wb-open",
+    signedIn: true,
+    browser: {
+      open: true,
+      openedAt: "2026-11-24T06:00:00.000Z",
+      exitChanged: true,
+      exit: {
+        ok: true,
+        mode: "custom",
+        effectiveMode: "proxy",
+        proxyId: "px-1",
+        username: "leakedBrowserUser",
+        password: "leakedBrowserPass",
+      },
+      profileDir: "/secret/profile/path",
+    },
+  });
+  expect(open.browser).toEqual({
+    open: true,
+    openedAt: "2026-11-24T06:00:00.000Z",
+    exitChanged: true,
+  });
+  const serialized = JSON.stringify(open);
+  expect(serialized).not.toContain("leakedBrowserUser");
+  expect(serialized).not.toContain("leakedBrowserPass");
+  expect(serialized).not.toContain("/secret/profile/path");
+});
+
+test("AGENT_COMMANDS advertises accounts browser subcommands", () => {
+  const statusCmd = AGENT_COMMANDS.find((entry) => entry.command === "accounts browser");
+  expect(statusCmd).toMatchObject({
+    command: "accounts browser",
+    http: "GET /api/accounts/:provider/:key/browser",
+  });
+  const openCmd = AGENT_COMMANDS.find((entry) => entry.command === "accounts browser open");
+  expect(openCmd).toMatchObject({
+    command: "accounts browser open",
+    http: "POST /api/accounts/:provider/:key/browser",
+  });
+  expect(openCmd.args).toContain("--target");
+  const closeCmd = AGENT_COMMANDS.find((entry) => entry.command === "accounts browser close");
+  expect(closeCmd).toMatchObject({
+    command: "accounts browser close",
+    http: "DELETE /api/accounts/:provider/:key/browser",
+  });
+});
