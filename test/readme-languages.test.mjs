@@ -45,14 +45,20 @@ test("the default README is Chinese and the English one is one click away", () =
   expect(en).toContain("## Quick start");
 });
 
-test("both READMEs keep the same title, badges and screenshots", () => {
+const SCREENSHOTS = ["providers", "proxies", "accounts", "hosting", "guide"];
+
+test("both READMEs keep the same title, badges and localized screenshots", () => {
   for (const markdown of [zh, en]) {
     expect(markdown.startsWith("# Magpie Clean Login · 干净登录\n")).toBe(true);
+    expect(markdown).toContain("img.shields.io/npm/v/@gruu6y/page-clean-login");
     expect(markdown).toContain("img.shields.io/github/v/tag/Gruu6y/magpie-clean-login");
     expect(markdown).toContain("actions/workflows/ci.yml/badge.svg");
-    for (const shot of ["providers", "proxies", "accounts", "guide"]) {
-      expect(markdown).toContain(`assets/screenshot-${shot}.png`);
-    }
+  }
+  for (const shot of SCREENSHOTS) {
+    expect(zh).toContain(`assets/screenshot-${shot}.png`);
+    expect(en).toContain(`assets/screenshot-${shot}-en.png`);
+    // English readers should see English UI captures, never the Chinese ones.
+    expect(en).not.toContain(`assets/screenshot-${shot}.png`);
   }
 });
 
@@ -73,8 +79,9 @@ test("both READMEs disclose that the screenshot records are demo data", () => {
     expect(markdown).toContain("scripts/shoot-readme-screenshots.mjs");
   }
   expect(existsSync(join(root, "scripts/shoot-readme-screenshots.mjs"))).toBe(true);
-  for (const shot of ["providers", "proxies", "accounts", "guide"]) {
+  for (const shot of SCREENSHOTS) {
     expect(existsSync(join(root, "assets", `screenshot-${shot}.png`)), `screenshot-${shot}.png`).toBe(true);
+    expect(existsSync(join(root, "assets", `screenshot-${shot}-en.png`)), `screenshot-${shot}-en.png`).toBe(true);
   }
 });
 
