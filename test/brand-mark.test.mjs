@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -61,5 +62,22 @@ describe("the editorial nameplate mark", () => {
     expect(svg).toMatch(/<rect width="128" height="128" fill="#/);
     expect(svg).not.toContain("currentColor");
     expect(svg).not.toContain("<image");
+  });
+
+  test("the marketplace icon URL carries a content-hash ?v= to bust magpie's icon cache", () => {
+    // Magpie caches magpie.icon permanently in plugin-icons.json keyed by
+    // sha256(url)[:16], so updating assets/icon.svg without changing ?v=
+    // leaves existing users stuck on the old cached logo.
+    const hash = createHash("sha256")
+      .update(read("assets/icon.svg").replace(/\r\n/g, "\n"), "utf8")
+      .digest("hex")
+      .slice(0, 8);
+    const url = new URL(pkg.magpie.icon);
+    expect(url.protocol).toBe("https:");
+    expect(url.hash).toBe("");
+    expect(url.origin + url.pathname).toBe(
+      "https://raw.githubusercontent.com/Gruu6y/magpie-clean-login/main/assets/icon.svg",
+    );
+    expect(url.searchParams.get("v")).toBe(hash);
   });
 });
