@@ -1,6 +1,6 @@
 {
   "name": "@gruu6y/page-clean-login",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "干净登录:通过领先的指纹浏览器,在插件页面接管magpie的凭据登录与续期,缓解封号焦虑",
   "license": "MIT",
   "publishConfig": {
