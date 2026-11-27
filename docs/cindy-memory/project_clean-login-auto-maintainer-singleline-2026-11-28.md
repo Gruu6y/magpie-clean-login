@@ -4,7 +4,7 @@ description: >-
   AGY 退出 clean-login GitHub 巡检（仅巡检，插件开发需求仍可能找 AGY）；Cindy GitHub App Webhook 自动化接管全量 Issue/Comment/外部 PR 审计，
   agent:cindy/agent:agy 路由与零 LLM 打标废弃，notify.mjs 微信通知链路暂维持现状
 type: project
-updatedAt: '2026-11-27T16:43:45Z'
+updatedAt: '2026-11-27T16:56:16Z'
 ---
 
 ## 来源与背景
@@ -20,8 +20,16 @@ AGY 交接消息（2026-11-28，主人经 AGY 转达）：clean-login 的 GitHub
 - 微信通知 bot 链路**暂时不动**：Cindy 复用 AGY 侧车的 `notify.mjs`（`C:/Users/Administrator/.gemini/config/sidecars/clean-login-maintainer/notify.mjs`）发异常/审计告警，标题必须以 `Cindy：` 开头、正文第一行注明来源；待主人后续决定去留。原微信双向指令通道随 AGY 退出失效。
 - 防循环标记统一为 `<!-- cl-cindy-maintainer -->`；历史 `<!-- cl-auto-maintainer -->` 仅作忽略用。
 
+## AGY 退出确认（2026-11-28，主人转达 AGY）
+
+AGY 侧已确认完成巡检退出，Cindy 单线接管无重复处理风险：
+
+1. GitHub 仓库 Webhook **#715332111**（`qhl.tailafb0fb.ts.net/github-webhook`）已停用，`active: false`。
+2. 本地 `clean-login-maintainer` 侧车的 `webhookEnabled` 与 `cindyRoutingEnabled` 均设为 `false` 并重启验证；`/github-webhook` 请求直接忽略，不再派发任何巡检任务或处理 `agent:agy`。
+3. 微信 `notify.mjs` / `/internal/notify` 通知链路保持现状，供 Cindy 异常时复用。
+
 ## 待办 / 边界
 
-- AGY 侧应停掉 GitHub Webhook 分流与任务派发，避免重复处理（交接消息约定 Cindy 切好后通知主人即可停）。
+- AGY 侧停掉 GitHub Webhook 分流与任务派发已完成（见上节确认）；无遗留巡检任务或 `agent:agy` 消费。
 - 巡检继续遵守仓库 `AGENTS.md`：从最新 `main` 开 `cindy-default/<topic>`、不直推 `main`、全量 `bun test`、tmpdir 隔离、不碰真实 `~/.config/magpie/`、贡献 PR 不改 `version`、每个 PR 自判 CLI 同步。
 - 合并仍由 Cindy 自己执行：低/中风险自研 PR 用 `scripts/merge-release.mjs`，`Stopped` 绝不绕过；高风险停在 `agent:ready-to-merge` 交主人。Tier 4 外部 PR 绝不合并。
