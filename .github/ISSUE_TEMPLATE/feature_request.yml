@@ -37,7 +37,7 @@ body:
     id: route_scope
     attributes:
       label: 预计改动范围 / 风险区域
-      description: 用于自动维护侧车在不调用 LLM 的情况下做执行器分流。拿不准请保留默认的「核心功能 / 复杂改动 / 不确定」。
+      description: 帮助自动维护执行器评估改动范围与风险等级。拿不准请保留默认的「核心功能 / 复杂改动 / 不确定」。
       options:
         - 核心功能 / 复杂改动 / 跨平台 / 不确定（登录、代理、凭据、浏览器、API、CLI、CI、发布等）
         - 纯文档 / README / Issue 模板修改

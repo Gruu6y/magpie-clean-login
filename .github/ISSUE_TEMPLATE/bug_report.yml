@@ -55,7 +55,7 @@ body:
     id: acceptance
     attributes:
       label: 验收条件
-      description: 期望修复后达到的可验证结果。选择「单个非核心文件小 Bug」路由时必须填写。
+      description: 期望修复后达到的可验证结果。报告「单个非核心文件小 Bug」时必须填写。
       placeholder: 例如：再次执行第 2 步时页面正常打开，终端无报错输出。
     validations:
       required: false
@@ -64,7 +64,7 @@ body:
     id: route_scope
     attributes:
       label: 预计改动范围 / 风险区域
-      description: 用于自动维护侧车在不调用 LLM 的情况下做执行器分流。拿不准请保留默认的「核心功能 / 复杂改动 / 不确定」。
+      description: 帮助自动维护执行器评估改动范围与风险等级。拿不准请保留默认的「核心功能 / 复杂改动 / 不确定」。
       options:
         - 核心功能 / 复杂改动 / 跨平台 / 不确定（登录、代理、凭据、浏览器、API、CLI、CI、发布等）
         - 纯文档 / README / Issue 模板修改
